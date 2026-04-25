@@ -3350,11 +3350,11 @@ Return ONLY valid JSON:
               </div>
 
               {/* The scoring grid */}
-              <div style={{ border:`1px solid ${DS.canvasBdr}`, borderRadius:9, overflow:"hidden" }}>
-
+              <div style={{ overflowX:"auto", borderRadius:9, border:`1px solid ${DS.canvasBdr}` }}>
+              <div style={{ minWidth: 240 + strategies.length * 180 + 90 }}>
                 {/* Column headers */}
                 <div style={{ display:"grid",
-                  gridTemplateColumns:`240px repeat(${strategies.length}, 1fr) 90px`,
+                  gridTemplateColumns:`240px repeat(${strategies.length}, minmax(160px, 1fr)) 90px`,
                   background:DS.ink }}>
                   <div style={{ padding:"11px 16px", fontSize:10, fontWeight:700,
                     color:"#5a6175", letterSpacing:.8, textTransform:"uppercase" }}>
@@ -3389,7 +3389,7 @@ Return ONLY valid JSON:
                   return (
                     <div key={crit.id}
                       style={{ display:"grid",
-                        gridTemplateColumns:`240px repeat(${strategies.length}, 1fr) 90px`,
+                        gridTemplateColumns:`240px repeat(${strategies.length}, minmax(160px, 1fr)) 90px`,
                         background: ci%2===0 ? DS.canvas : DS.canvasAlt,
                         borderTop:`1px solid ${DS.canvasBdr}` }}>
 
@@ -3475,7 +3475,7 @@ Return ONLY valid JSON:
 
                 {/* Totals footer */}
                 <div style={{ display:"grid",
-                  gridTemplateColumns:`240px repeat(${strategies.length}, 1fr) 90px`,
+                  gridTemplateColumns:`240px repeat(${strategies.length}, minmax(160px, 1fr)) 90px`,
                   background:DS.ink, borderTop:`2px solid ${DS.border}` }}>
                   <div style={{ padding:"14px 16px" }}>
                     <div style={{ fontSize:10, fontWeight:700, color:"#5a6175",
@@ -3518,6 +3518,7 @@ Return ONLY valid JSON:
                     <span style={{ fontSize:11, color:"#5a6175", fontWeight:700 }}>{maxPossible}</span>
                   </div>
                 </div>
+              </div>
               </div>
 
               {/* Scoring guide */}
