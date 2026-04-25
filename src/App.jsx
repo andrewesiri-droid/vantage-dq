@@ -9058,17 +9058,19 @@ export default function App() {
                   </div>
                 )}
                 {!navCollapsed && (
-                  <button
+                  <span
+                    role="button"
                     onClick={e => {
                       e.stopPropagation();
                       setCustomTabs(tabs => tabs.filter(t=>t.id!==tab.id));
                       if (module === tab.id) setModule("problem");
                     }}
                     style={{ background:"none", border:"none", cursor:"pointer",
-                      color:DS.textTer, fontSize:12, padding:"2px 4px",
-                      borderRadius:3, lineHeight:1, flexShrink:0 }}>
+                      color:DS.textTer, fontSize:14, padding:"2px 5px",
+                      borderRadius:3, lineHeight:1, flexShrink:0,
+                      display:"flex", alignItems:"center" }}>
                     ×
-                  </button>
+                  </span>
                 )}
               </button>
             );
