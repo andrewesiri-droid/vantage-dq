@@ -5315,7 +5315,7 @@ Return ONLY valid JSON:
   "nextSteps": [
     {"action": "specific next action", "owner": "role", "deadline": "timeframe", "dependency": "what it depends on"}
   ]
-}`,
+}`),
     (r) => {
       if (!r.error) {
         setExecutivePack(r);
