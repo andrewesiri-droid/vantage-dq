@@ -6280,9 +6280,8 @@ function QuickStartScreen({ onComplete, onSkip }) {
     const rawText = getInputText();
     if (!rawText.trim() || rawText.trim().length < 40) return;
     // Truncate very large inputs to prevent token overflow
-    const text = rawText.length > 3000 ? rawText.slice(0, 3000) + "
-
-[Input truncated for analysis]" : rawText;
+    const truncNote = " [Input truncated]";
+    const text = rawText.length > 3000 ? rawText.slice(0, 3000) + truncNote : rawText;
     setPhase("analysing");
     setAnalysisProgress([]);
 
