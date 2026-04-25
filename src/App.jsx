@@ -3019,6 +3019,7 @@ function ModuleQualitativeAssessment({
 }) {
   const [view, setView]           = useState("matrix");  // matrix | radar | brief
   const [generating, setGenerating] = useState(false);
+  const [assessing, setAssessing]   = useState(false);
   const [brief, setBrief]         = useState(null);
   const [activeStrat, setActiveStrat] = useState(null);
   const [weightsOpen, setWeightsOpen] = useState(false);
@@ -3048,6 +3049,75 @@ function ModuleQualitativeAssessment({
   const scoredCount = strategies.reduce((sum, s) =>
     sum + criteria.filter(c => getScore(s.id, c.id) > 0).length, 0);
   const totalCells  = strategies.length * criteria.length;
+
+  // ── AI INITIAL ASSESSMENT ────────────────────────────────────────────────────
+  const aiAssess = () => {
+    setAssessing(true);
+    const stratDescs = strategies.map(s => {
+      const path = decisions.filter(d=>d.tier==="focus").map(d => {
+        const idx = s.selections?.[d.id];
+        return idx !== undefined ? `${d.label}: ${d.choices[idx]}` : `${d.label}: ?`;
+      }).join(", ");
+      return `${DS.sNames[s.colorIdx]||s.name} — ${s.description||"No description"}. Choices: ${path}`;
+    }).join("
+");
+
+    const critDescs = criteria.map(c =>
+      `${c.label} [${c.type}, weight:${c.weight}]: ${c.description||""}`
+    ).join("
+");
+
+    aiCall(`You are a senior Decision Quality analyst performing an initial qualitative assessment.
+
+Decision: "${problem.decisionStatement}"
+Context: "${problem.context}"
+Success criteria: "${problem.successCriteria}"
+
+Strategies being evaluated:
+${stratDescs}
+
+Decision criteria:
+${critDescs}
+
+Score each strategy against each criterion from 1-5:
+1 = Very poor fit  2 = Weak  3 = Adequate  4 = Strong  5 = Excellent fit
+
+Be analytical and differentiated — strategies should score differently on different criteria.
+Consider how each strategy's specific choices perform against each criterion.
+
+Return ONLY valid JSON:
+{
+  "scores": [
+    {"strategyName": "exact strategy name", "criterionLabel": "exact criterion label", "score": 4, "rationale": "one sentence why"}
+  ],
+  "overallInsight": "2 sentences on what the scoring reveals about the trade-offs"
+}`,
+    (r) => {
+      if (r.error) {
+        onAIMsg({ role:"ai", text:"Assessment failed: " + r.error });
+        setAssessing(false);
+        return;
+      }
+      if (r.scores?.length) {
+        const newScores = { ...scores };
+        r.scores.forEach(item => {
+          const strat = strategies.find(s =>
+            (DS.sNames[s.colorIdx]||s.name).toLowerCase() === item.strategyName?.toLowerCase() ||
+            s.name?.toLowerCase() === item.strategyName?.toLowerCase()
+          );
+          const crit = criteria.find(c =>
+            c.label.toLowerCase() === item.criterionLabel?.toLowerCase()
+          );
+          if (strat && crit && item.score >= 1 && item.score <= 5) {
+            newScores[scoreKey(strat.id, crit.id)] = item.score;
+          }
+        });
+        onScores(newScores);
+        onAIMsg({ role:"ai", text: r.overallInsight || `Initial assessment complete — ${r.scores.length} scores generated.` });
+      }
+      setAssessing(false);
+    });
+  };
 
   // ── AI GENERATE BRIEF ────────────────────────────────────────────────────────
   const generateBrief = () => {
@@ -3167,6 +3237,11 @@ Return ONLY valid JSON:
         <Btn variant="secondary" size="sm" icon="filter"
           onClick={() => setWeightsOpen(w => !w)}>
           {weightsOpen ? "Hide Weights" : "Edit Weights"}
+        </Btn>
+        <Btn variant="secondary" size="sm" icon="spark"
+          onClick={aiAssess}
+          disabled={aiBusy || assessing || strategies.length === 0 || criteria.length === 0}>
+          {assessing ? "Assessing…" : "AI Initial Assessment"}
         </Btn>
         <Btn variant="primary" size="sm" icon="spark"
           onClick={generateBrief}
