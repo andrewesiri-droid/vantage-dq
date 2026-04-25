@@ -5852,6 +5852,10 @@ Return ONLY JSON:
     { key:"watch",    label:"Watch",           sublabel:"Lower impact · Uncontrollable", color:DS.success, bg:"#f0fdf4", items: items.filter(i=>quadrant(i).key==="watch") },
   ];
 
+  // Canvas dimensions - computed each render based on node positions
+  const CANVAS_W = Math.max(900, items.reduce((m,i)=>Math.max(m,(i.x||0)+220),900));
+  const CANVAS_H = Math.max(600, items.reduce((m,i)=>Math.max(m,(i.y||0)+140),600));
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
       <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
