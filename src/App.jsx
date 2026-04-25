@@ -2510,12 +2510,14 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
   const [compareSelected, setCompareSelected] = useState({});
   const [activeS, setActiveS] = useState(strategies[0]?.id || null);
   
-  // Keep activeS in sync when strategies change (no infinite loop)
+  // Keep activeS in sync when strategies change
+  const strategyIds = strategies.map(s=>s.id).join(",");
   useEffect(() => {
-    if (strategies.length === 0) return;
-    if (!activeS) { setActiveS(strategies[0].id); return; }
-    if (!strategies.find(s=>s.id===activeS)) setActiveS(strategies[0].id);
-  }, [strategies.length, strategies.map(s=>s.id).join(",")]);
+    if (strategies.length === 0) { setActiveS(null); return; }
+    if (!activeS || !strategies.find(s=>s.id===activeS)) {
+      setActiveS(strategies[0].id);
+    }
+  }, [strategyIds]); // eslint-disable-line
   const [suggesting, setSuggesting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState(null);
@@ -7147,7 +7149,9 @@ function QuickStartScreen({ onComplete, onSkip }) {
     const schemaStr = '{"projectName":"string","executiveSummary":"string","decisionStatement":"How should we...","context":"string","background":"string","trigger":"string","scopeIn":"string","scopeOut":"string","timeHorizon":"string","deadline":"string","owner":"string","constraints":"string","assumptions":"string","successCriteria":"string","issues":[{"text":"string","category":"uncertainty-external","severity":"High","source":"string"}],"decisions":[{"label":"string","choices":["A","B","C"],"tier":"focus","rationale":"string"}],"criteria":[{"label":"string","type":"financial","weight":"high","description":"string"}],"strategies":[{"name":"string","description":"string","rationale":"string"}],"weakestLink":"string","recommendedFirstStep":"string"}';
 
     const prompt =
-      "You are a Decision Quality expert. Read this decision brief and extract a structured analysis." +
+      "You are a Decision Quality expert. Read this decision brief and SYNTHESISE a structured analysis." +
+      " Do NOT copy text verbatim from the input. Reframe, synthesise and improve all fields." +
+      " The decisionStatement must be a genuine open question (How should we...), never a copied sentence." +
       " Return ONLY a JSON object matching this schema exactly. No other text." +
       " Schema: " + schemaStr +
       " Brief: " + text;
