@@ -2451,7 +2451,7 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
     const used = strategies.map(s=>s.colorIdx);
     const colorIdx = [0,1,2,3,4,5].find(i=>!used.includes(i)) ?? strategies.length%6;
     const ns = { id:uid("s"), colorIdx, name:DS.sNames[colorIdx]||`S${strategies.length+1}`,
-      description:"", selections:{}, rationale:{} };
+      description:"", objective:"", selections:{}, rationale:{} };
     onChange([...strategies, ns]);
     setActiveS(ns.id);
   };
@@ -2798,16 +2798,72 @@ Return ONLY JSON:
                         );
                       })}
 
-                      {/* Summary row */}
-                      <tr style={{ borderTop:`2px solid ${DS.canvasBdr}`,
-                        background:DS.canvasAlt }}>
+                      {/* Objective row */}
+                      <tr style={{ borderTop:`1px solid ${DS.canvasBdr}`, background:DS.canvasAlt }}>
                         <td style={{ padding:"12px 16px", position:"sticky", left:0,
-                          background:DS.canvasAlt, borderRight:`1px solid ${DS.canvasBdr}`,
-                          zIndex:1 }}>
+                          background:DS.canvasAlt, borderRight:`1px solid ${DS.canvasBdr}`, zIndex:1 }}>
                           <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
-                            letterSpacing:.6, textTransform:"uppercase" }}>
-                            Completeness
-                          </div>
+                            letterSpacing:.6, textTransform:"uppercase", marginBottom:2 }}>Objective</div>
+                          <div style={{ fontSize:10, color:DS.inkDis }}>What this strategy aims to achieve</div>
+                        </td>
+                        {strategies.map(s=>{
+                          const col = DS.s[s.colorIdx];
+                          return (
+                            <td key={s.id} style={{ padding:"10px 12px", borderLeft:`1px solid ${DS.canvasBdr}`,
+                              verticalAlign:"top" }}>
+                              <textarea
+                                value={s.objective||""}
+                                onChange={e=>updStrategy(s.id,"objective",e.target.value)}
+                                placeholder="e.g. Maximise speed to market while managing capital risk..."
+                                rows={2}
+                                style={{ width:"100%", padding:"7px 9px", fontSize:11,
+                                  fontFamily:"inherit", background:DS.canvas,
+                                  border:`1px solid ${DS.canvasBdr}`, borderRadius:5,
+                                  color:DS.ink, outline:"none", resize:"vertical",
+                                  lineHeight:1.5, boxSizing:"border-box" }}
+                                onFocus={e=>e.target.style.borderColor=col.fill}
+                                onBlur={e=>e.target.style.borderColor=DS.canvasBdr}/>
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Rationale row */}
+                      <tr style={{ borderTop:`1px solid ${DS.canvasBdr}`, background:DS.canvasAlt }}>
+                        <td style={{ padding:"12px 16px", position:"sticky", left:0,
+                          background:DS.canvasAlt, borderRight:`1px solid ${DS.canvasBdr}`, zIndex:1 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                            letterSpacing:.6, textTransform:"uppercase", marginBottom:2 }}>Rationale</div>
+                          <div style={{ fontSize:10, color:DS.inkDis }}>Why these choices form a coherent path</div>
+                        </td>
+                        {strategies.map(s=>{
+                          const col = DS.s[s.colorIdx];
+                          return (
+                            <td key={s.id} style={{ padding:"10px 12px", borderLeft:`1px solid ${DS.canvasBdr}`,
+                              verticalAlign:"top" }}>
+                              <textarea
+                                value={s.description||""}
+                                onChange={e=>updStrategy(s.id,"description",e.target.value)}
+                                placeholder="e.g. This strategy bets on partnership to reduce capital outlay while..."
+                                rows={3}
+                                style={{ width:"100%", padding:"7px 9px", fontSize:11,
+                                  fontFamily:"inherit", background:DS.canvas,
+                                  border:`1px solid ${DS.canvasBdr}`, borderRadius:5,
+                                  color:DS.ink, outline:"none", resize:"vertical",
+                                  lineHeight:1.5, boxSizing:"border-box" }}
+                                onFocus={e=>e.target.style.borderColor=col.fill}
+                                onBlur={e=>e.target.style.borderColor=DS.canvasBdr}/>
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Completeness row */}
+                      <tr style={{ borderTop:`2px solid ${DS.canvasBdr}`, background:DS.canvasAlt }}>
+                        <td style={{ padding:"12px 16px", position:"sticky", left:0,
+                          background:DS.canvasAlt, borderRight:`1px solid ${DS.canvasBdr}`, zIndex:1 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                            letterSpacing:.6, textTransform:"uppercase" }}>Completeness</div>
                         </td>
                         {strategies.map(s=>{
                           const col = DS.s[s.colorIdx];
@@ -3247,6 +3303,114 @@ Return ONLY JSON:
           </div>
         )}
       </div>
+
+      {tab==="brief" && (
+        <div style={{ flex:1, overflowY:"auto", padding:"28px 36px" }}>
+          <div style={{ maxWidth:800, margin:"0 auto" }}>
+            <div style={{ marginBottom:24, paddingBottom:16, borderBottom:`2px solid ${DS.ink}` }}>
+              <div style={{ fontSize:9, fontWeight:700, color:DS.inkTer, letterSpacing:1.5,
+                textTransform:"uppercase", marginBottom:6 }}>Decision Hierarchy Brief</div>
+              <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:22,
+                fontWeight:700, color:DS.ink, marginBottom:8, lineHeight:1.25 }}>
+                {decisions.filter(d=>d.tier==="focus")[0]
+                  ? "Decision Structure — " + (decisions.filter(d=>d.tier==="focus").length) + " Focus Decisions"
+                  : "Decision Structure"}
+              </div>
+            </div>
+
+            {H_TIERS.filter(t=>t.key!=="criteria").map(tier => {
+              const tierDecs = decisions.filter(d=>d.tier===tier.key);
+              if (tierDecs.length===0) return null;
+              return (
+                <div key={tier.key} style={{ marginBottom:28 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                    <div style={{ width:32, height:32, borderRadius:7,
+                      background:tier.soft, border:`1.5px solid ${tier.line}`,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize:16 }}>{tier.icon}</div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, color:tier.color }}>{tier.label}</div>
+                      <div style={{ fontSize:11, color:DS.inkTer }}>{tier.desc}</div>
+                    </div>
+                    <span style={{ marginLeft:"auto", fontSize:11, color:DS.inkSub,
+                      fontWeight:600 }}>{tierDecs.length} decision{tierDecs.length!==1?"s":""}</span>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                    {tierDecs.map(d=>(
+                      <div key={d.id} style={{ padding:"14px 18px", borderRadius:8,
+                        background:tier.soft, border:`1px solid ${tier.line}` }}>
+                        <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:DS.ink,
+                              marginBottom:6 }}>{d.label}</div>
+                            <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:d.owner||d.rationale?8:0 }}>
+                              {d.choices.map((c,ci)=>(
+                                <span key={ci} style={{ fontSize:11, padding:"2px 8px",
+                                  borderRadius:4, background:"rgba(255,255,255,.7)",
+                                  border:`1px solid ${tier.line}`, color:tier.color,
+                                  fontWeight:600 }}>{c}</span>
+                              ))}
+                            </div>
+                            {(d.owner||d.rationale) && (
+                              <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
+                                {d.owner && <span style={{ fontSize:11, color:DS.inkTer }}>Owner: {d.owner}</span>}
+                                {d.rationale && <span style={{ fontSize:11, color:DS.inkSub,
+                                  fontStyle:"italic" }}>{d.rationale}</span>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Criteria summary */}
+            {criteria.length > 0 && (
+              <div style={{ marginBottom:28 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                  <div style={{ width:32, height:32, borderRadius:7,
+                    background:"#ecfdf5", border:"1.5px solid #a7f3d0",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:16 }}>◫</div>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#059669" }}>Decision Criteria</div>
+                    <div style={{ fontSize:11, color:DS.inkTer }}>How strategies will be judged</div>
+                  </div>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  {criteria.map(c=>(
+                    <div key={c.id} style={{ padding:"12px 14px", borderRadius:7,
+                      background:"#ecfdf5", border:"1px solid #a7f3d0",
+                      display:"flex", gap:10 }}>
+                      <div style={{ width:4, borderRadius:2, flexShrink:0, alignSelf:"stretch",
+                        background:c.weight==="high"?"#dc2626":c.weight==="medium"?"#d97706":"#059669" }}/>
+                      <div>
+                        <div style={{ fontSize:12, fontWeight:700, color:DS.ink,
+                          marginBottom:3 }}>{c.label}</div>
+                        <div style={{ fontSize:10, color:DS.inkSub }}>{c.description}</div>
+                        <div style={{ marginTop:4, display:"flex", gap:5 }}>
+                          <Badge variant={c.type==="financial"?"green":c.type==="strategic"?"blue":"default"} size="xs">{c.type}</Badge>
+                          <Badge variant={c.weight==="high"?"danger":c.weight==="medium"?"warn":"default"} size="xs">{c.weight} weight</Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {decisions.length===0 && criteria.length===0 && (
+              <div style={{ padding:"48px", textAlign:"center", color:DS.inkTer, fontSize:13,
+                border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10 }}>
+                Add decisions to the hierarchy tiers to see the brief view.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3363,7 +3527,7 @@ function ScoreRow({ value, onChange, color }) {
 
 function ModuleQualitativeAssessment({
   strategies, decisions, criteria, problem,
-  scores, onScores, aiCall, aiBusy, onAIMsg,
+  scores, onScores, brief: briefProp, onBrief, aiCall, aiBusy, onAIMsg,
 }) {
   const [view, setView]           = useState("matrix");  // matrix | radar | brief
   const [generating, setGenerating] = useState(false);
@@ -3519,6 +3683,7 @@ Return ONLY valid JSON:
     (r) => {
       if (!r.error) {
         setBrief(r);
+        if (onBrief) onBrief(r);
         setView("brief");
         onAIMsg({ role:"ai", text:`Brief generated. Recommended strategy: ${r.recommendedStrategyName}. ${r.keyTradeoff}` });
       } else {
@@ -6095,11 +6260,12 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
       {/* ── FACILITATOR VIEW ── */}
       {wsView==="facilitor" && (
         <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:20 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:12, marginBottom:20 }}>
             {[
               { label:"Issues Raised", value:issues.length, color:DS.accent },
               { label:"Critical Issues", value:issues.filter(i=>i.severity==="Critical").length, color:DS.danger },
               { label:"Top Voted", value:sorted[0]?.votes||0, sub:sorted[0]?.text?.slice(0,30)||"—", color:DS.success },
+              { label:"Categories", value:new Set(issues.map(i=>i.category)).size, color:"#7c3aed", sub:"distinct types" },
             ].map((stat,i)=>(
               <div key={i} style={{ padding:"16px 18px", background:DS.chromeMid, borderRadius:9,
                 border:`1px solid ${DS.border}` }}>
@@ -6173,22 +6339,55 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
             </button>
           </div>
           <div style={{ flex:1, overflowY:"auto", padding:"20px 28px",
-            display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:12, alignContent:"start" }}>
+            display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:12, alignContent:"start" }}>
             {issues.slice().reverse().map(issue => {
               const cat = ISSUE_CATEGORIES?.find(c=>c.key===issue.category);
               return (
-                <div key={issue.id} style={{ padding:"16px 18px", borderRadius:9,
+                <div key={issue.id} style={{ padding:"14px 16px", borderRadius:9,
                   background:cat?.soft||DS.chromeMid,
                   border:`1px solid ${cat?.line||DS.border}`,
-                  borderLeft:`4px solid ${cat?.color||DS.accent}` }}>
-                  <div style={{ fontSize:13, color:DS.ink, lineHeight:1.5, marginBottom:8 }}>{issue.text}</div>
-                  {cat && <span style={{ fontSize:10, fontWeight:700, color:cat.color,
-                    padding:"2px 7px", borderRadius:3, background:cat.color+"22" }}>
-                    {cat.icon} {cat.label}
-                  </span>}
+                  borderLeft:`4px solid ${cat?.color||DS.accent}`,
+                  position:"relative" }}>
+                  <div style={{ fontSize:13, color:DS.ink, lineHeight:1.5, marginBottom:8,
+                    paddingRight:24 }}>{issue.text}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                    {cat && <span style={{ fontSize:10, fontWeight:700, color:cat.color,
+                      padding:"2px 7px", borderRadius:3, background:cat.color+"22" }}>
+                      {cat.icon} {cat.label}
+                    </span>}
+                    <span style={{ fontSize:10, color:DS.inkTer }}>▲ {issue.votes||0}</span>
+                  </div>
+                  {/* Moderator controls */}
+                  {!locked && (
+                    <div style={{ position:"absolute", top:8, right:8,
+                      display:"flex", gap:4 }}>
+                      <button
+                        onClick={()=>onIssues(prev=>prev.map(i=>i.id===issue.id
+                          ? {...i, severity:i.severity==="High"?"Critical":i.severity==="Medium"?"High":i.severity==="Low"?"Medium":"Low"}
+                          : i))}
+                        title="Escalate severity"
+                        style={{ width:20,height:20,borderRadius:3,background:"transparent",
+                          border:`1px solid ${DS.inkDis}`,cursor:"pointer",
+                          color:DS.inkTer,fontSize:10,display:"flex",
+                          alignItems:"center",justifyContent:"center" }}>↑</button>
+                      <button
+                        onClick={()=>onIssues(prev=>prev.filter(i=>i.id!==issue.id))}
+                        title="Remove issue"
+                        style={{ width:20,height:20,borderRadius:3,background:"transparent",
+                          border:`1px solid ${DS.danger}30`,cursor:"pointer",
+                          color:DS.danger,fontSize:12,display:"flex",
+                          alignItems:"center",justifyContent:"center" }}>×</button>
+                    </div>
+                  )}
                 </div>
               );
             })}
+            {issues.length===0 && (
+              <div style={{ gridColumn:"1/-1", padding:"48px", textAlign:"center",
+                color:DS.textTer, fontSize:13 }}>
+                No issues submitted yet. The session is open — start submitting.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -6600,7 +6799,21 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
   const [projects, setProjects] = useState(() => {
     try {
       const saved = localStorage.getItem("vantage_dq_projects_v1");
-      const existing = saved ? JSON.parse(saved) : [];
+      const sampleProjects = [
+        { id:"sample1", name:"APAC Market Entry", client:"Internal — Strategy", sector:"Technology / SaaS",
+          owner:"CSO", date:"2025-11-15", dqScores:{frame:72,alternatives:65,information:58,values:80,reasoning:70,commitment:45},
+          issueCount:18, strategyCount:3, decisionStatement:"How should we enter the APAC market?",
+          status:"Completed", overall:65 },
+        { id:"sample2", name:"ERP System Replacement", client:"Operations", sector:"Manufacturing",
+          owner:"CTO", date:"2025-09-28", dqScores:{frame:85,alternatives:70,information:90,values:75,reasoning:80,commitment:60},
+          issueCount:24, strategyCount:4, decisionStatement:"Which ERP platform should we migrate to?",
+          status:"Completed", overall:77 },
+        { id:"sample3", name:"Pricing Strategy Review", client:"Commercial", sector:"Consumer & Retail",
+          owner:"CMO", date:"2025-08-10", dqScores:{frame:60,alternatives:55,information:70,values:65,reasoning:50,commitment:40},
+          issueCount:11, strategyCount:2, decisionStatement:"How should we reprice our core product range?",
+          status:"Archived", overall:57 },
+      ];
+      const existing = saved ? JSON.parse(saved) : sampleProjects;
       // Add current project if not present
       const cur = {
         id: "current",
@@ -6618,22 +6831,33 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
     } catch { return []; }
   });
 
+  const [archiveSuccess, setArchiveSuccess] = useState(false);
+
   const saveCurrentProject = () => {
     const toSave = projects.filter(p=>p.id!=="current");
+    const overall = DQ_ELEMENTS.length > 0
+      ? Math.round(DQ_ELEMENTS.reduce((s,e)=>s+(dqScores[e.key]||0),0)/DQ_ELEMENTS.length) : 0;
     const newEntry = {
       id: uid("proj"),
-      name: currentProject.decisionStatement?.slice(0,50)||"Untitled",
-      owner: currentProject.owner||"—",
-      date: new Date().toISOString().slice(0,10),
+      name: currentProject.projectName || currentProject.decisionStatement?.slice(0,50) || "Untitled",
+      client: currentProject.client || "",
+      sector: currentProject.sector || "",
+      owner: currentProject.owner || "—",
+      facilitator: currentProject.facilitator || "",
+      date: currentProject.sessionDate || new Date().toISOString().slice(0,10),
+      archivedAt: new Date().toISOString(),
       dqScores: { ...dqScores },
       issueCount: issues.length,
       strategyCount: strategies.length,
+      decisionStatement: currentProject.decisionStatement?.slice(0,80) || "",
       status: "Archived",
-      overall: Math.round(DQ_ELEMENTS.reduce((s,e)=>s+(dqScores[e.key]||0),0)/DQ_ELEMENTS.length),
+      overall,
     };
     const updated = [projects.find(p=>p.id==="current"), newEntry, ...toSave].filter(Boolean);
     setProjects(updated);
-    localStorage.setItem("vantage_dq_projects_v1", JSON.stringify(updated.filter(p=>p.id!=="current")));
+    try { localStorage.setItem("vantage_dq_projects_v1", JSON.stringify(updated.filter(p=>p.id!=="current"))); } catch(e) {}
+    setArchiveSuccess(true);
+    setTimeout(()=>setArchiveSuccess(false), 3000);
   };
 
   const deleteProject = (id) => {
@@ -6677,7 +6901,9 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
             </div>
           </div>
           <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
-            <Btn variant="chrome" size="sm" onClick={saveCurrentProject}>Archive Current Project</Btn>
+            <Btn variant={archiveSuccess?"secondary":"chrome"} size="sm" onClick={saveCurrentProject}>
+              {archiveSuccess?"✓ Archived!":"Archive Current Project"}
+            </Btn>
             <button onClick={onClose}
               style={{ background:"none", border:"none", cursor:"pointer", color:DS.textSec, display:"flex" }}>
               <Svg path={ICONS.x} size={18} color={DS.textSec}/>
@@ -8099,6 +8325,66 @@ function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, aiBus
   );
 }
 
+/* ── CROSS-MODULE NUDGE SYSTEM ──────────────────────────────────────────── */
+function NudgeBar({ module, issues, decisions, criteria, strategies, assessmentScores, dqScores, onNavigate }) {
+  const nudges = [];
+  const focusDecs = decisions.filter(d=>d.tier==="focus");
+  const criticalIssues = issues.filter(i=>i.severity==="Critical"&&i.status==="Open");
+  const promotableIssues = issues.filter(i=>
+    (i.category==="focus-decision"||i.category==="given-decision"||i.category==="tactical-decision")
+    && !decisions.find(d=>d.sourceId===i.id)
+  );
+  const promotableCriteria = issues.filter(i=>
+    i.category==="decision-criteria" && !criteria.find(c=>c.sourceId===i.id)
+  );
+  const unscored = strategies.length > 0 && criteria.length > 0
+    ? strategies.filter(s=>criteria.every(c=>!assessmentScores[s.id+"__"+c.id])).length
+    : 0;
+  const dqScored = Object.values(dqScores).some(s=>s>0);
+
+  // Generate contextual nudges based on current module and data state
+  if (module==="problem" && issues.length===0)
+    nudges.push({ text:"Ready to surface issues? Move to Issue Raising.", target:"issues", icon:"◈", color:DS.accent });
+  if (module==="issues" && promotableIssues.length>0)
+    nudges.push({ text:promotableIssues.length+" decision-type issues ready to promote to hierarchy.", target:"hierarchy", icon:"◧", color:DS.warning });
+  if (module==="issues" && promotableCriteria.length>0)
+    nudges.push({ text:promotableCriteria.length+" criteria-type issues ready to promote.", target:"hierarchy", icon:"◫", color:DS.success });
+  if (module==="issues" && criticalIssues.length>0)
+    nudges.push({ text:criticalIssues.length+" critical issues unresolved. Address before building strategies.", target:"issues", icon:"⚡", color:DS.danger });
+  if (module==="hierarchy" && focusDecs.length===0)
+    nudges.push({ text:"No Focus decisions yet. At least 2 are needed to build meaningful strategies.", target:"hierarchy", icon:"⊕", color:DS.danger });
+  if (module==="hierarchy" && focusDecs.length>0 && strategies.length===0)
+    nudges.push({ text:focusDecs.length+" focus decisions ready. Build your strategies now.", target:"strategy", icon:"⊞", color:DS.accent });
+  if (module==="hierarchy" && criteria.length===0)
+    nudges.push({ text:"No decision criteria yet. Add criteria to enable qualitative assessment.", target:"hierarchy", icon:"◫", color:DS.warning });
+  if (module==="strategy" && strategies.length>0 && criteria.length>0 && unscored===strategies.length)
+    nudges.push({ text:"Strategies built. Run AI Initial Assessment to score them.", target:"assessment", icon:"◫", color:DS.accent });
+  if (module==="assessment" && Object.keys(assessmentScores).length>0 && !dqScored)
+    nudges.push({ text:"Assessment complete. Score the DQ elements to generate your full report.", target:"scorecard", icon:"◑", color:DS.accent });
+  if (module==="scorecard" && dqScored)
+    nudges.push({ text:"DQ scored. Generate the executive package in Export & Report.", target:"export", icon:"◉", color:DS.success });
+
+  if (nudges.length===0) return null;
+
+  return (
+    <div style={{ padding:"0 16px 10px", display:"flex", flexDirection:"column", gap:5 }}>
+      {nudges.slice(0,2).map((n,i)=>(
+        <button key={i} onClick={()=>onNavigate(n.target)}
+          style={{ display:"flex", alignItems:"flex-start", gap:8, padding:"8px 10px",
+            background:"transparent", border:`1px solid ${n.color}40`,
+            borderRadius:6, cursor:"pointer", fontFamily:"inherit", textAlign:"left",
+            transition:"all .12s", width:"100%" }}
+          onMouseEnter={e=>{ e.currentTarget.style.background=n.color+"12"; e.currentTarget.style.borderColor=n.color; }}
+          onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor=n.color+"40"; }}>
+          <span style={{ fontSize:12, flexShrink:0, marginTop:1 }}>{n.icon}</span>
+          <span style={{ fontSize:10, color:DS.textSec, lineHeight:1.5, flex:1 }}>{n.text}</span>
+          <Svg path={ICONS.chevR} size={11} color={DS.textTer}/>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ── MAIN APP ─────────────────────────────────────────────────────────────── */
 export default function App() {
   const [module, setModule]               = useState("problem");
@@ -8242,7 +8528,7 @@ export default function App() {
     issues:  { issues, onChange:setIssues, decisions, onDecisions:setDecisions, criteria, onCriteria:setCriteria, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
     hierarchy:{ decisions, criteria, onDecisions:setDecisions, onCriteria:setCriteria, issues, aiCall, aiBusy, onAIMsg:pushAIMsg },
     strategy: { decisions, strategies, onChange:setStrategies, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
-    assessment:{ strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    assessment:{ strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, brief, onBrief:setBriefState, aiCall, aiBusy, onAIMsg:pushAIMsg },
     scorecard: { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     export:    { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, aiCall, aiBusy, onAIMsg:pushAIMsg },
     influence: { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg },
@@ -8410,6 +8696,16 @@ export default function App() {
             );
           })}
 
+          {/* Cross-module nudges */}
+          {!navCollapsed && (
+            <NudgeBar
+              module={module}
+              issues={issues} decisions={decisions}
+              criteria={criteria} strategies={strategies}
+              assessmentScores={assessmentScores} dqScores={dqScores}
+              onNavigate={setModule}/>
+          )}
+
           {/* Phase 2 */}
           {!navCollapsed && (
             <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.5,
@@ -8447,21 +8743,78 @@ export default function App() {
           })}
         </nav>
 
-        {/* Progress footer */}
+        {/* Session summary + progress footer */}
         {!navCollapsed && (
-          <div style={{ padding:"12px 16px", borderTop:`1px solid ${DS.border}` }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
-              <span style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
-                textTransform:"uppercase", fontWeight:700 }}>Session Progress</span>
-              <span style={{ fontSize:10, color:DS.textSec, fontWeight:700 }}>{overall}%</span>
+          <div style={{ borderTop:`1px solid ${DS.border}` }}>
+            {/* Session snapshot */}
+            <div style={{ padding:"10px 16px", borderBottom:`1px solid ${DS.border}` }}>
+              <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
+                textTransform:"uppercase", fontWeight:700, marginBottom:8 }}>Session Snapshot</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                {/* Decision statement */}
+                {problem.decisionStatement && (
+                  <div style={{ fontSize:10, color:DS.textSec, lineHeight:1.4,
+                    fontStyle:"italic", borderLeft:`2px solid ${DS.accent}`,
+                    paddingLeft:7, marginBottom:2 }}>
+                    {problem.decisionStatement.slice(0,70)}{problem.decisionStatement.length>70?"…":""}
+                  </div>
+                )}
+                {/* Key stats grid */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5 }}>
+                  {[
+                    { label:"Issues", value:issues.length, alert:issues.filter(i=>i.severity==="Critical").length > 0,
+                      sub:issues.filter(i=>i.severity==="Critical").length > 0
+                        ? issues.filter(i=>i.severity==="Critical").length+" critical" : "none critical" },
+                    { label:"Focus Dec.", value:decisions.filter(d=>d.tier==="focus").length,
+                      alert:decisions.filter(d=>d.tier==="focus").length===0, sub:"in scope" },
+                    { label:"Strategies", value:strategies.length,
+                      alert:strategies.length===0, sub:"built" },
+                    { label:"Criteria", value:criteria.length,
+                      alert:criteria.length===0, sub:"defined" },
+                  ].map((stat,i)=>(
+                    <div key={i} style={{ padding:"6px 8px", borderRadius:5,
+                      background:stat.alert?DS.dangerSoft:DS.chromeMid,
+                      border:`1px solid ${stat.alert?DS.dangerLine:DS.border}` }}>
+                      <div style={{ fontSize:14, fontWeight:700, lineHeight:1,
+                        color:stat.alert?DS.danger:DS.textPri,
+                        fontFamily:"'Libre Baskerville',Georgia,serif" }}>
+                        {stat.value}
+                      </div>
+                      <div style={{ fontSize:8, color:stat.alert?DS.danger:DS.textTer,
+                        fontWeight:700, marginTop:2 }}>{stat.label}</div>
+                      <div style={{ fontSize:8, color:DS.textTer }}>{stat.sub}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Top voted issue */}
+                {issues.length > 0 && (() => {
+                  const top = [...issues].sort((a,b)=>(b.votes||0)-(a.votes||0))[0];
+                  return top ? (
+                    <div style={{ fontSize:9, color:DS.textTer, lineHeight:1.4,
+                      padding:"5px 7px", borderRadius:4, background:DS.chromeMid,
+                      border:`1px solid ${DS.border}` }}>
+                      <span style={{ color:DS.accent, fontWeight:700 }}>▲ Top issue: </span>
+                      {top.text.slice(0,55)}{top.text.length>55?"…":""}
+                    </div>
+                  ) : null;
+                })()}
+              </div>
             </div>
-            <div style={{ height:3, background:DS.chromeMid, borderRadius:2, overflow:"hidden" }}>
-              <div style={{ height:"100%", borderRadius:2, transition:"width .5s",
-                background:`linear-gradient(90deg, ${DS.accent}, #60a5fa)`,
-                width:`${overall}%` }}/>
-            </div>
-            <div style={{ fontSize:8, color:DS.textTer, marginTop:5 }}>
-              {issues.length} issues · {decisions.filter(d=>d.tier==="focus").length} focus · {strategies.length} strategies
+            {/* Progress bar */}
+            <div style={{ padding:"10px 16px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
+                <span style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
+                  textTransform:"uppercase", fontWeight:700 }}>Overall Progress</span>
+                <span style={{ fontSize:10, color:DS.textSec, fontWeight:700 }}>{overall}%</span>
+              </div>
+              <div style={{ height:4, background:DS.chromeMid, borderRadius:2, overflow:"hidden" }}>
+                <div style={{ height:"100%", borderRadius:2, transition:"width .5s",
+                  background:`linear-gradient(90deg, ${DS.accent}, #60a5fa)`,
+                  width:`${overall}%` }}/>
+              </div>
+              <div style={{ fontSize:8, color:DS.textTer, marginTop:5 }}>
+                {overall>=80?"Ready for executive review":overall>=50?"Good progress — keep building":"Early stage"}
+              </div>
             </div>
           </div>
         )}
