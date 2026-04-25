@@ -13,47 +13,94 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "No prompt provided" });
   }
 
-  const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 4000,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  const raw = await anthropicRes.text();
-
-  if (!anthropicRes.ok) {
-    return res.status(anthropicRes.status).json({ error: raw.slice(0, 200) });
-  }
-
-  let text = "";
   try {
-    const data = JSON.parse(raw);
-    text = (data.content || []).map(b => b.text || "").join("").trim();
-  } catch(e) {
-    return res.status(500).json({ error: "Failed to parse Anthropic response" });
-  }
+    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 4000,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
 
-  // Extract JSON from text using multiple strategies
-  const strategies = [
-    t => JSON.parse(t),
-    t => JSON.parse(t.replace(/^```json\s*/i,"").replace(/```\s*$/i,"").trim()),
-    t => { const m = t.match(/\{[\s\S]*\}/); return m ? JSON.parse(m[0]) : null; },
-  ];
+    const rawBody = await anthropicRes.text();
 
-  for (const fn of strategies) {
+    if (!anthropicRes.ok) {
+      console.error("Anthropic error:", rawBody.slice(0, 300));
+      return res.status(anthropicRes.status).json({ error: rawBody.slice(0, 200) });
+    }
+
+    let text = "";
     try {
-      const parsed = fn(text);
-      if (parsed) return res.status(200).json(parsed);
-    } catch(e) {}
-  }
+      const data = JSON.parse(rawBody);
+      text = (data.content || [])
+        .filter(b => b.type === "text")
+        .map(b => b.text || "")
+        .join("")
+        .trim();
+    } catch(e) {
+      console.error("Failed to parse Anthropic body:", e.message);
+      return res.status(500).json({ error: "Failed to parse Anthropic response body" });
+    }
 
-  return res.status(200).json({ _raw: text });
+    // Log first 500 chars for debugging
+    console.log("AI response preview:", text.slice(0, 500));
+
+    if (!text) {
+      return res.status(500).json({ error: "Empty response from AI" });
+    }
+
+    // Strategy 1: direct parse
+    try {
+      const parsed = JSON.parse(text);
+      console.log("Strategy 1 success");
+      return res.status(200).json(parsed);
+    } catch(e) {}
+
+    // Strategy 2: strip ```json ... ``` blocks
+    try {
+      const stripped = text
+        .replace(/^[\s\S]*?```json\s*/i, "")
+        .replace(/```[\s\S]*$/i, "")
+        .trim();
+      const parsed = JSON.parse(stripped);
+      console.log("Strategy 2 success");
+      return res.status(200).json(parsed);
+    } catch(e) {}
+
+    // Strategy 3: strip any ``` blocks
+    try {
+      const stripped = text
+        .replace(/```[a-z]*\n?/gi, "")
+        .trim();
+      const parsed = JSON.parse(stripped);
+      console.log("Strategy 3 success");
+      return res.status(200).json(parsed);
+    } catch(e) {}
+
+    // Strategy 4: find first { to last }
+    try {
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start !== -1 && end !== -1 && end > start) {
+        const extracted = text.slice(start, end + 1);
+        const parsed = JSON.parse(extracted);
+        console.log("Strategy 4 success");
+        return res.status(200).json(parsed);
+      }
+    } catch(e) {}
+
+    // Nothing worked — return raw so frontend can try
+    console.error("All parse strategies failed. Text preview:", text.slice(0, 300));
+    return res.status(200).json({ _raw: text });
+
+  } catch(err) {
+    console.error("Proxy error:", err);
+    return res.status(500).json({ error: String(err) });
+  }
 }

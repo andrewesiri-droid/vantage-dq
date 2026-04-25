@@ -6353,11 +6353,35 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
       // Parse raw if needed
       let finalResult = result;
       if (result._raw) {
-        try {
-          finalResult = JSON.parse(result._raw.replace(/```json|```/g,"").trim());
-        } catch(e) {
-          alert("Could not parse AI response. Please try again.");
+        const raw = result._raw;
+        // Try multiple parse strategies
+        let parsed = null;
+        
+        // Strategy 1: direct
+        try { parsed = JSON.parse(raw); } catch(e) {}
+        
+        // Strategy 2: strip markdown
+        if (!parsed) {
+          try { parsed = JSON.parse(raw.replace(/```json
+?/gi,"").replace(/```
+?/gi,"").trim()); } catch(e) {}
+        }
+        
+        // Strategy 3: extract { } block
+        if (!parsed) {
+          try {
+            const s = raw.indexOf("{"), e2 = raw.lastIndexOf("}");
+            if (s !== -1 && e2 > s) parsed = JSON.parse(raw.slice(s, e2+1));
+          } catch(e) {}
+        }
+        
+        if (parsed) {
+          finalResult = parsed;
+        } else {
+          // Cannot parse — go back to input
+          console.error("Parse failed. Raw:", raw.slice(0, 200));
           setPhase("input");
+          alert("The AI response could not be parsed. Please try again with a simpler input.");
           return;
         }
       }
