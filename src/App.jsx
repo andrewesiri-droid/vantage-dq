@@ -6598,6 +6598,8 @@ const loadVersions = () => {
 
 function VersionPanel({ currentData, onRestore, onClose }) {
   const [versions, setVersions]     = useState(loadVersions);
+  const [customTabs, setCustomTabs] = useState([]);
+  const [showTabPicker, setShowTabPicker] = useState(false);
   const [label, setLabel]           = useState("");
   const [confirmRestore, setConfirm] = useState(null);
 
@@ -8544,6 +8546,95 @@ function DQGateWarnings({ warnings }) {
   );
 }
 
+/* ── TAB PICKER MODAL ───────────────────────────────────────────────────── */
+const TAB_TYPE_OPTIONS = [
+  { type:"strategy", icon:"⊞", label:"Strategy Table", desc:"Build a parallel set of strategies for a sub-decision or scenario" },
+  { type:"assessment", icon:"◫", label:"Qualitative Assessment", desc:"Score a different set of strategies or criteria" },
+  { type:"compare", icon:"⊟", label:"Compare & Contrast", desc:"Side-by-side comparison of any two sets of strategies" },
+  { type:"issues", icon:"◈", label:"Issue Register", desc:"Capture issues for a specific workstream or stakeholder group" },
+  { type:"hierarchy", icon:"◧", label:"Decision Hierarchy", desc:"Structure decisions for a sub-problem or workstream" }
+];
+
+function TabPickerModal({ onAdd, onClose }) {
+  const [selected, setSelected] = useState(null);
+  const [label, setLabel] = useState("");
+
+  const handleAdd = () => {
+    if (!selected) return;
+    const opt = TAB_TYPE_OPTIONS.find(t=>t.type===selected);
+    const finalLabel = label.trim() || opt.label + " 2";
+    onAdd({ id: uid("tab"), type: selected, label: finalLabel, data: {} });
+    onClose();
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)",
+      display:"flex", alignItems:"center", justifyContent:"center", zIndex:9000 }}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ width:520, background:DS.canvas, borderRadius:14,
+        boxShadow:"0 24px 64px rgba(0,0,0,.25)", overflow:"hidden" }}>
+        <div style={{ padding:"20px 24px", borderBottom:"1px solid "+DS.canvasBdr }}>
+          <div style={{ fontSize:16, fontWeight:700, color:DS.ink, marginBottom:3 }}>
+            Add New Workspace Tab
+          </div>
+          <div style={{ fontSize:12, color:DS.inkTer }}>
+            Create a duplicate workspace for parallel analysis or scenario planning
+          </div>
+        </div>
+        <div style={{ padding:"16px 24px" }}>
+          <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+            letterSpacing:.6, textTransform:"uppercase", marginBottom:10 }}>
+            Choose workspace type
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:18 }}>
+            {TAB_TYPE_OPTIONS.map(opt => (
+              <button key={opt.type}
+                onClick={()=>{ setSelected(opt.type); setLabel(opt.label + " 2"); }}
+                style={{ display:"flex", alignItems:"center", gap:12,
+                  padding:"11px 14px", borderRadius:8, cursor:"pointer",
+                  fontFamily:"inherit", textAlign:"left",
+                  border:"1.5px solid "+(selected===opt.type?DS.accent:DS.canvasBdr),
+                  background:selected===opt.type?DS.accentSoft:"transparent",
+                  transition:"all .1s" }}>
+                <span style={{ fontSize:18, flexShrink:0 }}>{opt.icon}</span>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700,
+                    color:selected===opt.type?DS.accent:DS.ink }}>{opt.label}</div>
+                  <div style={{ fontSize:11, color:DS.inkTer }}>{opt.desc}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          {selected && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                letterSpacing:.6, textTransform:"uppercase", marginBottom:6 }}>
+                Tab name
+              </div>
+              <input value={label} onChange={e=>setLabel(e.target.value)}
+                style={{ width:"100%", padding:"9px 12px", fontSize:13,
+                  fontFamily:"inherit", background:DS.canvas,
+                  border:"1px solid "+DS.canvasBdr, borderRadius:7,
+                  color:DS.ink, outline:"none", boxSizing:"border-box" }}
+                onFocus={e=>e.target.style.borderColor=DS.accent}
+                onBlur={e=>e.target.style.borderColor=DS.canvasBdr}
+                placeholder="Name this workspace..."/>
+            </div>
+          )}
+        </div>
+        <div style={{ padding:"14px 24px", borderTop:"1px solid "+DS.canvasBdr,
+          display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
+          <Btn variant="primary" onClick={handleAdd}
+            disabled={!selected || !label.trim()}>
+            Add Tab →
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── CROSS-MODULE NUDGE SYSTEM ──────────────────────────────────────────── */
 function NudgeBar({ module, issues, decisions, criteria, strategies, assessmentScores, dqScores, onNavigate }) {
   const nudges = [];
@@ -8930,6 +9021,78 @@ export default function App() {
             );
           })}
 
+          {/* Custom tab items */}
+          {customTabs.length > 0 && !navCollapsed && (
+            <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.5,
+              textTransform:"uppercase", padding:"10px 16px 3px", fontWeight:700,
+              borderTop:"1px solid "+DS.border, marginTop:4 }}>
+              Custom Workspaces
+            </div>
+          )}
+          {customTabs.map(tab => {
+            const active = module === tab.id;
+            const opt = TAB_TYPE_OPTIONS?.find(t=>t.type===tab.type);
+            return (
+              <button key={tab.id}
+                onClick={() => setModule(tab.id)}
+                style={{ width:"100%", padding: navCollapsed?"10px 0":"7px 16px",
+                  background: active?DS.chromeMid:"transparent", border:"none",
+                  borderLeft:"3px solid "+(active?DS.accent:"transparent"),
+                  cursor:"pointer", display:"flex", alignItems:"center",
+                  gap:10, textAlign:"left", transition:"all .1s" }}>
+                <span style={{ fontSize:13, flexShrink:0, width:20,
+                  textAlign:"center", color:active?DS.accent:DS.textTer }}>
+                  {opt?.icon || "⊞"}
+                </span>
+                {!navCollapsed && (
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:11, fontWeight:600,
+                      color:active?DS.textPri:DS.textSec,
+                      whiteSpace:"nowrap", overflow:"hidden",
+                      textOverflow:"ellipsis" }}>
+                      {tab.label}
+                    </div>
+                    <div style={{ fontSize:9, color:DS.textTer }}>
+                      {opt?.label || tab.type}
+                    </div>
+                  </div>
+                )}
+                {!navCollapsed && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      setCustomTabs(tabs => tabs.filter(t=>t.id!==tab.id));
+                      if (module === tab.id) setModule("problem");
+                    }}
+                    style={{ background:"none", border:"none", cursor:"pointer",
+                      color:DS.textTer, fontSize:12, padding:"2px 4px",
+                      borderRadius:3, lineHeight:1, flexShrink:0 }}>
+                    ×
+                  </button>
+                )}
+              </button>
+            );
+          })}
+
+          {/* Add new tab button */}
+          <button onClick={() => setShowTabPicker(true)}
+            style={{ width:"100%", padding: navCollapsed?"10px 0":"7px 16px",
+              background:"transparent", border:"none",
+              borderLeft:"3px solid transparent",
+              cursor:"pointer", display:"flex", alignItems:"center",
+              gap:10, textAlign:"left", marginTop:4,
+              opacity:.7, transition:"opacity .1s" }}
+            onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+            onMouseLeave={e=>e.currentTarget.style.opacity=".7"}>
+            <span style={{ fontSize:16, flexShrink:0, width:20,
+              textAlign:"center", color:DS.accent }}>+</span>
+            {!navCollapsed && (
+              <div style={{ fontSize:11, fontWeight:600, color:DS.accent }}>
+                New Workspace
+              </div>
+            )}
+          </button>
+
           {/* Cross-module nudges */}
           {!navCollapsed && (
             <NudgeBar
@@ -9156,6 +9319,73 @@ export default function App() {
             {module==="scorecard"  && <ModuleDQScorecard          {...moduleProps.scorecard}/>}
             {module==="export"     && <ModuleExport               {...moduleProps.export}/>}
             {module==="influence"  && <ModuleInfluenceMap         {...moduleProps.influence}/>}
+
+            {/* Custom workspace tabs */}
+            {customTabs.map(tab => {
+              if (module !== tab.id) return null;
+              const updateTabData = (patch) =>
+                setCustomTabs(tabs => tabs.map(t =>
+                  t.id === tab.id ? { ...t, data: { ...t.data, ...patch } } : t
+                ));
+
+              if (tab.type === "strategy") return (
+                <ModuleStrategyTable key={tab.id}
+                  decisions={decisions}
+                  strategies={tab.data.strategies || []}
+                  onChange={strats => updateTabData({ strategies: strats })}
+                  problem={problem}
+                  aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
+              );
+              if (tab.type === "assessment") return (
+                <ModuleQualitativeAssessment key={tab.id}
+                  strategies={tab.data.strategies || strategies}
+                  decisions={decisions}
+                  criteria={tab.data.criteria || criteria}
+                  problem={problem}
+                  scores={tab.data.scores || {}}
+                  onScores={scores => updateTabData({ scores })}
+                  brief={tab.data.brief || null}
+                  onBrief={brief => updateTabData({ brief })}
+                  aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
+              );
+              if (tab.type === "compare") return (
+                <div key={tab.id} style={{ flex:1, overflow:"auto", padding:24 }}>
+                  <ModuleStrategyTable
+                    decisions={decisions}
+                    strategies={strategies}
+                    onChange={setStrategies}
+                    problem={problem}
+                    aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
+                </div>
+              );
+              if (tab.type === "issues") return (
+                <ModuleIssueRaising key={tab.id}
+                  issues={tab.data.issues || []}
+                  onChange={issues => updateTabData({ issues })}
+                  decisions={decisions}
+                  onDecisions={setDecisions}
+                  criteria={criteria}
+                  onCriteria={setCriteria}
+                  problem={problem}
+                  aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
+              );
+              if (tab.type === "hierarchy") return (
+                <ModuleDecisionHierarchy key={tab.id}
+                  decisions={tab.data.decisions || []}
+                  criteria={tab.data.criteria || []}
+                  onDecisions={decs => updateTabData({ decisions: decs })}
+                  onCriteria={crits => updateTabData({ criteria: crits })}
+                  issues={issues}
+                  aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
+              );
+              return (
+                <div key={tab.id} style={{ flex:1, display:"flex",
+                  alignItems:"center", justifyContent:"center",
+                  color:DS.inkTer, fontSize:13 }}>
+                  Workspace type "{tab.type}" — coming soon
+                </div>
+              );
+            })}
           </div>
 
           {/* Co-Pilot */}
@@ -9170,6 +9400,15 @@ export default function App() {
       </div>
 
       {/* ── OVERLAYS ── */}
+      {showTabPicker && (
+        <TabPickerModal
+          onAdd={tab => {
+            setCustomTabs(tabs => [...tabs, tab]);
+            setModule(tab.id);
+          }}
+          onClose={() => setShowTabPicker(false)}/>
+      )}
+
       {workshopOpen && (
         <WorkshopMode problem={problem} issues={issues} decisions={decisions}
           strategies={strategies} criteria={criteria}
