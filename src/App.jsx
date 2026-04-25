@@ -7136,57 +7136,44 @@ function QuickStartScreen({ onComplete, onSkip }) {
     setPhase("analysing");
     setAnalysisProgress([]);
 
-    const prompt = `You are a Decision Quality expert. Analyse this input and return a structured first draft.
-
-IMPORTANT: Return ONLY a single valid JSON object. No preamble, no explanation, no markdown. Start with { and end with }.
-
-INPUT:
-${text}
-
-Return ONLY valid JSON with this exact structure (no extra text, no markdown):
-{
-  "projectName": "short project name",
-  "executiveSummary": "2-3 sentence DQ summary",
-  "frame": {
-    "decisionStatement": "precise decision statement starting with How should we...",
-    "context": "business context",
-    "background": "relevant history",
-    "trigger": "what caused this decision now",
-    "symptoms": "observable symptoms",
-    "rootDecision": "underlying strategic choice",
-    "scopeIn": "what is in scope",
-    "scopeOut": "what is out of scope",
-    "timeHorizon": "time horizon",
-    "deadline": "decision deadline",
-    "owner": "decision owner",
-    "stakeholders": [{"name":"name","role":"role","influence":"High"}],
-    "constraints": "hard constraints",
-    "assumptions": "key assumptions",
-    "successCriteria": "what success looks like",
-    "failureConsequences": "consequences of poor decision",
-    "urgency": "High — Decide within weeks",
-    "importance": "Strategically significant",
-    "confidence": "high",
-    "confidenceNote": "based on information provided"
-  },
-  "issues": [
-    {"text":"specific issue","category":"uncertainty-external","severity":"High","hat":"Team / Internal","confidence":"high","source":"from input"}
-  ],
-  "decisions": [
-    {"label":"Decision label","choices":["Option A","Option B","Option C"],"tier":"focus","owner":"","rationale":"why this tier","confidence":"high"}
-  ],
-  "criteria": [
-    {"label":"criterion","type":"financial","weight":"high","description":"what it measures","confidence":"high"}
-  ],
-  "strategies": [
-    {"name":"Strategy name","description":"what this strategy does","rationale":"why coherent","keyTheme":"central logic","confidence":"high"}
-  ],
-  "dqObservations": ["Key observation about framing quality"],
-  "weakestLink": "which DQ element is weakest and why",
-  "recommendedFirstStep": "most important immediate action"
-}
-
-Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific to the actual content.`;
+    const prompt = dqPrompt(
+      "Analyse this decision brief and return a structured first draft as a single valid JSON object. " +
+      "No preamble, no markdown, no explanation. Start with { and end with }. " +
+      "INPUT: " + text + " " +
+      "Return this exact structure: " +
+      '{"projectName":"short name","executiveSummary":"2 sentences",' +
+      '"frame":{' +
+        '"decisionStatement":"How should we... (genuine question)",' +
+        '"context":"business context",' +
+        '"background":"relevant history",' +
+        '"trigger":"what caused this decision now",' +
+        '"symptoms":"observable issues",' +
+        '"rootDecision":"underlying strategic choice",' +
+        '"scopeIn":"what is in scope",' +
+        '"scopeOut":"what is out of scope",' +
+        '"timeHorizon":"timeframe",' +
+        '"deadline":"decision deadline",' +
+        '"owner":"decision owner",' +
+        '"stakeholders":[{"name":"name","role":"role","influence":"High"}],' +
+        '"constraints":"hard constraints",' +
+        '"assumptions":"key assumptions",' +
+        '"successCriteria":"definition of success",' +
+        '"failureConsequences":"cost of poor decision",' +
+        '"urgency":"High",' +
+        '"importance":"Strategically significant",' +
+        '"confidence":"high",' +
+        '"confidenceNote":"assessment basis"' +
+      '},' +
+      '"issues":[{"text":"issue","category":"uncertainty-external","severity":"High","hat":"Team","confidence":"high","source":"input"}],' +
+      '"decisions":[{"label":"decision label","choices":["Option A","Option B","Option C"],"tier":"focus","owner":"","rationale":"why","confidence":"high"}],' +
+      '"criteria":[{"label":"criterion","type":"financial","weight":"high","description":"what it measures","confidence":"high"}],' +
+      '"strategies":[{"name":"Strategy name","description":"what it does","rationale":"why coherent","keyTheme":"central logic","confidence":"high"}],' +
+      '"dqObservations":["observation"],' +
+      '"weakestLink":"which DQ element is weakest",' +
+      '"recommendedFirstStep":"most important next action"' +
+      '} ' +
+      "Generate 5-8 issues, 3-5 decisions, 3-5 criteria, 2-3 strategies. Be specific to the actual content provided."
+    );
 
     const progressTimer = setInterval(() => {
       setAnalysisProgress(p => {
@@ -7196,7 +7183,7 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
       });
     }, 950);
 
-    call(dqPrompt(prompt), (result) => {
+    call(prompt, (result) => {
       clearInterval(progressTimer);
       
       // Handle error

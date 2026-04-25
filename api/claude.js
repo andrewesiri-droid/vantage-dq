@@ -47,41 +47,42 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to parse Anthropic response" });
     }
 
-    console.log("AI response length:", text.length, "preview:", text.slice(0, 200));
+    console.log("Response length:", text.length, "First 100:", text.slice(0, 100));
 
-    if (!text) {
-      return res.status(500).json({ error: "Empty response from AI" });
-    }
+    if (!text) return res.status(500).json({ error: "Empty response from AI" });
 
     // Strategy 1: direct parse
-    try {
-      const parsed = JSON.parse(text);
-      return res.status(200).json(parsed);
-    } catch(e) {}
+    try { return res.status(200).json(JSON.parse(text)); } catch(e) {}
 
-    // Strategy 2: find first { to last }
+    // Strategy 2: extract first { ... } block
     try {
       const start = text.indexOf("{");
       const end = text.lastIndexOf("}");
-      if (start !== -1 && end !== -1 && end > start) {
-        const parsed = JSON.parse(text.slice(start, end + 1));
-        return res.status(200).json(parsed);
+      if (start !== -1 && end > start) {
+        return res.status(200).json(JSON.parse(text.slice(start, end + 1)));
       }
     } catch(e) {}
 
-    // Strategy 3: strip code fences and try again
+    // Strategy 3: strip markdown fences
     try {
-      const cleaned = text
-        .replace(/^[^{]*/s, "")  // remove everything before first {
-        .replace(/[^}]*$/s, "")  // remove everything after last }
-        .trim();
-      if (cleaned) {
-        const parsed = JSON.parse(cleaned);
-        return res.status(200).json(parsed);
+      const stripped = text.replace(/^```(?:json)?\s*/im, "").replace(/\s*```\s*$/im, "").trim();
+      return res.status(200).json(JSON.parse(stripped));
+    } catch(e) {}
+
+    // Strategy 4: fix common JSON issues - trailing commas, unescaped chars
+    try {
+      const fixed = text
+        .replace(/,\s*([}\]])/g, "$1")  // trailing commas
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ") // control chars
+        .replace(/\n/g, " ").replace(/\r/g, " "); // newlines in strings
+      const start = fixed.indexOf("{");
+      const end = fixed.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        return res.status(200).json(JSON.parse(fixed.slice(start, end + 1)));
       }
     } catch(e) {}
 
-    console.error("All strategies failed. Text:", text.slice(0, 500));
+    console.error("All parse strategies failed:", text.slice(0, 300));
     return res.status(200).json({ _raw: text });
 
   } catch(err) {
