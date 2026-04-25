@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 4000,
+        max_tokens: 8000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -44,12 +44,10 @@ export default async function handler(req, res) {
         .join("")
         .trim();
     } catch(e) {
-      console.error("Failed to parse Anthropic body:", e.message);
-      return res.status(500).json({ error: "Failed to parse Anthropic response body" });
+      return res.status(500).json({ error: "Failed to parse Anthropic response" });
     }
 
-    // Log first 500 chars for debugging
-    console.log("AI response preview:", text.slice(0, 500));
+    console.log("AI response length:", text.length, "preview:", text.slice(0, 200));
 
     if (!text) {
       return res.status(500).json({ error: "Empty response from AI" });
@@ -58,45 +56,32 @@ export default async function handler(req, res) {
     // Strategy 1: direct parse
     try {
       const parsed = JSON.parse(text);
-      console.log("Strategy 1 success");
       return res.status(200).json(parsed);
     } catch(e) {}
 
-    // Strategy 2: strip ```json ... ``` blocks
-    try {
-      const stripped = text
-        .replace(/^[\s\S]*?```json\s*/i, "")
-        .replace(/```[\s\S]*$/i, "")
-        .trim();
-      const parsed = JSON.parse(stripped);
-      console.log("Strategy 2 success");
-      return res.status(200).json(parsed);
-    } catch(e) {}
-
-    // Strategy 3: strip any ``` blocks
-    try {
-      const stripped = text
-        .replace(/```[a-z]*\n?/gi, "")
-        .trim();
-      const parsed = JSON.parse(stripped);
-      console.log("Strategy 3 success");
-      return res.status(200).json(parsed);
-    } catch(e) {}
-
-    // Strategy 4: find first { to last }
+    // Strategy 2: find first { to last }
     try {
       const start = text.indexOf("{");
       const end = text.lastIndexOf("}");
       if (start !== -1 && end !== -1 && end > start) {
-        const extracted = text.slice(start, end + 1);
-        const parsed = JSON.parse(extracted);
-        console.log("Strategy 4 success");
+        const parsed = JSON.parse(text.slice(start, end + 1));
         return res.status(200).json(parsed);
       }
     } catch(e) {}
 
-    // Nothing worked — return raw so frontend can try
-    console.error("All parse strategies failed. Text preview:", text.slice(0, 300));
+    // Strategy 3: strip code fences and try again
+    try {
+      const cleaned = text
+        .replace(/^[^{]*/s, "")  // remove everything before first {
+        .replace(/[^}]*$/s, "")  // remove everything after last }
+        .trim();
+      if (cleaned) {
+        const parsed = JSON.parse(cleaned);
+        return res.status(200).json(parsed);
+      }
+    } catch(e) {}
+
+    console.error("All strategies failed. Text:", text.slice(0, 500));
     return res.status(200).json({ _raw: text });
 
   } catch(err) {

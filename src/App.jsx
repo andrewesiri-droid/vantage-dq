@@ -6277,12 +6277,18 @@ function QuickStartScreen({ onComplete, onSkip }) {
   };
 
   const runAnalysis = async () => {
-    const text = getInputText();
-    if (!text.trim() || text.trim().length < 40) return;
+    const rawText = getInputText();
+    if (!rawText.trim() || rawText.trim().length < 40) return;
+    // Truncate very large inputs to prevent token overflow
+    const text = rawText.length > 3000 ? rawText.slice(0, 3000) + "
+
+[Input truncated for analysis]" : rawText;
     setPhase("analysing");
     setAnalysisProgress([]);
 
     const prompt = `You are a Decision Quality expert. Analyse this input and return a structured first draft.
+
+IMPORTANT: Return ONLY a single valid JSON object. No preamble, no explanation, no markdown. Start with { and end with }.
 
 INPUT:
 ${text}
