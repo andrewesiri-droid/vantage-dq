@@ -1240,7 +1240,7 @@ Use ALL of these DQ categories — at least one per category where relevant:
 - stakeholder-concern: concerns about specific stakeholders' alignment
 
 Return ONLY JSON:
-{"issues":[{"text":"specific issue","category":"category-key","severity":"Critical|High|Medium|Low"}]}`,
+{"issues":[{"text":"specific issue","category":"category-key","severity":"Critical|High|Medium|Low"}]}`),
     (r) => {
       if (r.issues) {
         const newOnes = r.issues.map(i=>({ id:uid("iss"), ...i, status:"Open", owner:"", votes:0 }));
@@ -1283,7 +1283,7 @@ Return ONLY JSON:
   "strategyTableSuggestions": [{"id":"issue_id","decisionLabel":"what to name this column","choices":["opt1","opt2","opt3"]}],
   "criteriaSuggestions": [{"id":"issue_id","criterionLabel":"criterion name","type":"financial|strategic|operational|risk","weight":"high|medium|low"}],
   "insight": "key observation about the issue landscape"
-}`,
+}`),
     (r) => {
       if (r.recategorisations?.length) {
         let updated = [...issues];
@@ -2064,7 +2064,7 @@ Return ONLY JSON:
   "newDecisions": [{"label":"new decision","choices":["A","B","C"],"tier":"focus|tactical","rationale":"why needed"}],
   "criteriaHints": [{"label":"criterion","type":"financial|strategic|operational|risk","weight":"high|medium|low"}],
   "insight": "key observation about the hierarchy structure"
-}`,
+}`),
     (r) => {
       let updated = [...decisions];
       r.assignments?.forEach(a => {
@@ -2091,7 +2091,7 @@ Return ONLY JSON:
 Context: "${issues.slice(0,3).map(i=>i.text).join("; ")}"
 
 Return ONLY JSON:
-{"criteria":[{"label":"criterion name","type":"financial|strategic|operational|risk|commercial","weight":"high|medium|low","description":"one sentence explaining what this measures"}]}`,
+{"criteria":[{"label":"criterion name","type":"financial|strategic|operational|risk|commercial","weight":"high|medium|low","description":"one sentence explaining what this measures"}]}`),
     (r) => {
       if (r.criteria) {
         const newCrits = r.criteria.map(c=>({ id:uid("cr"), ...c })).filter(nc=>!criteria.find(c=>c.label===nc.label));
@@ -2561,7 +2561,7 @@ Existing strategies: ${existing||"none"}
 Each new strategy must select exactly one option per column (0-indexed). Must be internally coherent and genuinely different from existing ones.
 
 Return ONLY JSON:
-{"strategies":[{"name":"Strategy name","description":"one sentence narrative","selections":[0,1,2,0],"rationale":"why this combination is coherent"}],"coherenceFlags":[{"strategy":"name","issue":"description"}],"insight":"key observation about strategy space"}`,
+{"strategies":[{"name":"Strategy name","description":"one sentence narrative","selections":[0,1,2,0],"rationale":"why this combination is coherent"}],"coherenceFlags":[{"strategy":"name","issue":"description"}],"insight":"key observation about strategy space"}`),
     (r) => {
       if (r.strategies) {
         const used = strategies.map(s=>s.colorIdx);
@@ -2593,7 +2593,7 @@ Decisions:\n${tableDesc}
 Strategies:\n${stratDesc}
 
 Return ONLY JSON:
-{"overall":"pass|warn|fail","completenessScores":[{"strategy":"name","score":0-100,"missing":["decision"]}],"coherenceIssues":[{"strategy":"name","issue":"description","severity":"critical|warning"}],"distinctiveness":"high|medium|low","distinctivenessNote":"explanation","recommendations":["rec 1","rec 2"]}`,
+{"overall":"pass|warn|fail","completenessScores":[{"strategy":"name","score":0-100,"missing":["decision"]}],"coherenceIssues":[{"strategy":"name","issue":"description","severity":"critical|warning"}],"distinctiveness":"high|medium|low","distinctivenessNote":"explanation","recommendations":["rec 1","rec 2"]}`),
     (r) => {
       setValidation(r);
       onAIMsg({ role:"ai", text:`Validation: ${r.overall}. Distinctiveness: ${r.distinctiveness}. ${r.recommendations?.[0]||""}` });
@@ -3754,7 +3754,7 @@ Return ONLY valid JSON:
     "score": 0,
     "note": "one sentence on decision readiness — is the team ready to commit?"
   }
-}`,
+}`),
     (r) => {
       if (!r.error) {
         setBrief(r);
@@ -4727,7 +4727,7 @@ Return ONLY valid JSON:
   "decidingNow": "yes|no|conditional",
   "conditionalNote": "if conditional — what condition must be met first (null if yes/no)",
   "facilitatorRecommendation": "What the facilitator recommends the team do in the next session"
-}`,
+}`),
     (r) => {
       if (!r.error) {
         setNarrative(r);
@@ -5740,7 +5740,7 @@ Return ONLY JSON:
   "type":"${UNCERTAINTY_TYPES.join('|')}",
   "impact":"Critical|High|Medium|Low",
   "control":"High Control|Some Control|Low Control|No Control"
-}]}`,
+}]}`),
     (r) => {
       if (r.uncertainties) {
         const newItems = r.uncertainties.map((u, i) => ({
@@ -5778,7 +5778,7 @@ Return ONLY JSON:
   "dealBreakers":[{"uncertainty":"label","strategy":"strategy name","scenario":"what bad resolution looks like"}],
   "resolutionSequence":["step 1","step 2","step 3"],
   "overallInsight":"2-sentence synthesis of the uncertainty landscape"
-}`,
+}`),
     (r) => {
       if (!r.error) {
         setDrivers(r);
@@ -6749,7 +6749,7 @@ Return ONLY JSON:
   }],
   "healthScore":0-100,
   "healthSummary":"one frank sentence on overall session coherence"
-}`,
+}`),
     (r) => {
       if (!r.error) {
         setInsights(r);
