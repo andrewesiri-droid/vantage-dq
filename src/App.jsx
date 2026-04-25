@@ -82,10 +82,17 @@ const useAI = () => {
         return;
       }
             const d = await r.json();
-      const raw = (d.text || "").trim();
-      if (!raw) { cb({ error: "Empty response from API." }); return; }
-      try { cb(JSON.parse(raw.replace(/```json|```/g,"").trim())); }
-      catch(e) { cb({ _raw: raw }); }
+      // Proxy returns parsed JSON directly, or { _raw: text } if not JSON
+      if (d._raw !== undefined) {
+        // Try to parse the raw text
+        try { cb(JSON.parse(d._raw.replace(/```json|```/g,"").trim())); }
+        catch(e) { cb({ _raw: d._raw }); }
+      } else if (d.error) {
+        cb({ error: d.error });
+      } else {
+        // Already parsed JSON object
+        cb(d);
+      }
     } catch(e) {
       const msg = String(e);
       setLastError(msg);

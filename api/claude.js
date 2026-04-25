@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1400,
+        max_tokens: 2000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -36,8 +36,24 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    const text = (data.content || []).map((b) => b.text || "").join("").trim();
-    return res.status(200).json({ text });
+    
+    // Extract text from response
+    const text = (data.content || [])
+      .filter(b => b.type === "text")
+      .map(b => b.text || "")
+      .join("")
+      .trim();
+
+    // Try to parse as JSON, return parsed object directly
+    try {
+      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      return res.status(200).json(parsed);
+    } catch (e) {
+      // Return raw text if not JSON
+      return res.status(200).json({ _raw: text });
+    }
+
   } catch (err) {
     console.error("Claude proxy error:", err);
     return res.status(500).json({ error: String(err) });
