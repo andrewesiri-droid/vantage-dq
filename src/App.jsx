@@ -2510,11 +2510,12 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
   const [compareSelected, setCompareSelected] = useState({});
   const [activeS, setActiveS] = useState(strategies[0]?.id || null);
   
-  // Keep activeS in sync when strategies change
+  // Keep activeS in sync when strategies change (no infinite loop)
   useEffect(() => {
-    if (!activeS && strategies.length > 0) setActiveS(strategies[0].id);
-    if (activeS && !strategies.find(s=>s.id===activeS) && strategies.length > 0) setActiveS(strategies[0].id);
-  }, [strategies]);
+    if (strategies.length === 0) return;
+    if (!activeS) { setActiveS(strategies[0].id); return; }
+    if (!strategies.find(s=>s.id===activeS)) setActiveS(strategies[0].id);
+  }, [strategies.length, strategies.map(s=>s.id).join(",")]);
   const [suggesting, setSuggesting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState(null);
