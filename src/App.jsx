@@ -2431,7 +2431,8 @@ const defaultStrategies = () => ([
 ]);
 
 function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, problem, onAIMsg }) {
-  const [mode, setMode] = useState("builder"); // builder | workshop | review
+  const [mode, setMode] = useState("builder"); // builder | compare | workshop | review
+  const [compareSelected, setCompareSelected] = useState({});
   const [activeS, setActiveS] = useState(strategies[0]?.id || null);
   
   // Keep activeS in sync when strategies change
@@ -2604,20 +2605,20 @@ Return ONLY JSON:
 
       <div style={{ flex:1, overflowY:"auto" }}>
 
-        {/* BUILDER MODE */}
+        {/* BUILDER MODE — proper table layout */}
         {mode==="builder" && (
-          <div style={{ padding:"20px 28px" }}>
+          <div style={{ flex:1, overflowX:"auto", overflowY:"auto" }}>
             {nowDecisions.length===0 ? (
               <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`,
-                borderRadius:10, color:DS.inkTer }}>
+                borderRadius:10, color:DS.inkTer, margin:28 }}>
                 <div style={{ fontSize:14, marginBottom:8 }}>No decisions in the Focus tier yet.</div>
-                <div style={{ fontSize:12 }}>Assign decisions to the Focus tier in the Decision Hierarchy module first.</div>
+                <div style={{ fontSize:12 }}>Add decisions in the Decision Hierarchy module and set them to Focus tier.</div>
               </div>
             ) : (
               <div>
                 {/* Validation banner */}
                 {validation && validation.coherenceFlags?.length > 0 && (
-                  <div style={{ marginBottom:16, padding:"12px 16px", background:DS.warnSoft,
+                  <div style={{ margin:"16px 28px 0", padding:"12px 16px", background:DS.warnSoft,
                     border:`1px solid ${DS.warnLine}`, borderRadius:8 }}>
                     <div style={{ fontSize:11, fontWeight:700, color:DS.warning, marginBottom:6, letterSpacing:.5, textTransform:"uppercase" }}>
                       ⚠ Coherence Flags
@@ -2627,140 +2628,484 @@ Return ONLY JSON:
                         <strong>{f.strategy}:</strong> {f.issue}
                       </div>
                     ))}
-                    {validation.insight && <div style={{ fontSize:12, color:DS.inkSub, marginTop:6, fontStyle:"italic" }}>{validation.insight}</div>}
                   </div>
                 )}
 
-                {/* The table */}
-                <div style={{ overflowX:"auto" }}>
-                  <div style={{ minWidth: nowDecisions.length*220 + 20 }}>
-                    {/* Column headers */}
-                    <div style={{ display:"grid", gridTemplateColumns:`repeat(${nowDecisions.length}, 1fr)`, gap:10, marginBottom:10 }}>
-                      {nowDecisions.map((d,di)=>(
-                        <div key={d.id} style={{ padding:"11px 14px", background:DS.chrome,
-                          borderRadius:7, border:`1px solid ${DS.border}` }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                            <span style={{ width:20,height:20,borderRadius:4,background:DS.chromeMid,
-                              display:"flex",alignItems:"center",justifyContent:"center",
-                              fontSize:10,color:DS.textTer,fontWeight:700,flexShrink:0 }}>{di+1}</span>
-                            <span style={{ fontSize:12,fontWeight:700,color:DS.textPri,flex:1,lineHeight:1.3 }}>{d.label}</span>
-                          </div>
-                        </div>
-                      ))}
+                {/* Active strategy instruction */}
+                {activeS && (() => {
+                  const s = strategies.find(st=>st.id===activeS);
+                  const col = s ? DS.s[s.colorIdx] : null;
+                  return col ? (
+                    <div style={{ margin:"12px 28px 0", padding:"9px 14px", background:col.soft,
+                      border:`1px solid ${col.line}`, borderRadius:7,
+                      fontSize:12, color:col.fill, fontWeight:600,
+                      display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ width:8,height:8,borderRadius:"50%",background:col.fill }}/>
+                      Editing: {s.name} — click any option cell to assign it to this strategy
                     </div>
+                  ) : null;
+                })()}
 
-                    {/* Choice rows */}
-                    {Array.from({ length: Math.max(...nowDecisions.map(d=>d.choices.length), 0) }).map((_,ri)=>(
-                      <div key={ri} style={{ display:"grid", gridTemplateColumns:`repeat(${nowDecisions.length}, 1fr)`,
-                        gap:10, marginBottom:8 }}>
-                        {nowDecisions.map(d=>{
-                          const choice = d.choices[ri];
-                          if(!choice) return <div key={d.id+ri}/>;
-
-                          // Which strategies have selected this cell?
-                          const hits = strategies.filter(s=>s.selections[d.id]===ri);
-                          const activeHit = hits.find(s=>s.id===activeS);
-                          const isSelectedByActive = !!activeHit;
-                          const isSelectedByOther = hits.length > 0 && !isSelectedByActive;
-                          const primaryCol = activeHit 
-                            ? DS.s[activeHit.colorIdx]
-                            : hits[0] ? DS.s[hits[0].colorIdx] : null;
-
+                {/* THE PROPER TABLE */}
+                <div style={{ margin:"16px 0 0", overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse",
+                    minWidth: 180 + strategies.length * 160 + nowDecisions.length * 0 }}>
+                    <thead>
+                      <tr>
+                        {/* Top-left corner cell */}
+                        <th style={{ width:200, padding:"11px 16px", background:DS.ink,
+                          textAlign:"left", fontSize:10, fontWeight:700,
+                          color:"#5a6175", letterSpacing:.8, textTransform:"uppercase",
+                          borderRight:`1px solid ${DS.border}`, position:"sticky", left:0, zIndex:2 }}>
+                          Decision
+                        </th>
+                        {strategies.map(s=>{
+                          const col = DS.s[s.colorIdx];
+                          const isActive = activeS===s.id;
                           return (
-                            <div key={d.id+ri} style={{ transition:"opacity .15s" }}>
-                              <div onClick={()=>{ if(activeS) selectCell(activeS,d.id,ri); }}
-                                style={{ padding:"10px 13px", borderRadius:7,
-                                  border:`1.5px solid ${isSelectedByActive ? primaryCol.fill : hits.length>0 ? DS.canvasBdr : DS.canvasBdr}`,
-                                  background: isSelectedByActive ? primaryCol.soft : DS.canvas,
-                                  cursor: activeS?"pointer":"default",
-                                  display:"flex", alignItems:"center", gap:8,
-                                  boxShadow: isSelectedByActive ? `0 0 0 3px ${primaryCol.line}40` : "0 1px 2px rgba(0,0,0,.04)",
-                                  transition:"all .12s", minHeight:46,
-                                  outline: isSelectedByActive ? `2px solid ${primaryCol.fill}` : "none" }}>
-                                {/* Active strategy dot */}
-                                {isSelectedByActive && (
-                                  <div style={{ width:8,height:8,borderRadius:"50%",
-                                    background:primaryCol.fill,flexShrink:0 }}/>
-                                )}
-                                <span style={{ fontSize:12, 
-                                  color: isSelectedByActive ? DS.ink : DS.inkSub,
-                                  fontWeight: isSelectedByActive ? 700 : 400,
-                                  flex:1, lineHeight:1.4 }}>{choice}</span>
-                                {/* All strategy dots - show ALL strategies that selected this cell */}
-                                {hits.length > 0 && (
-                                  <div style={{ display:"flex", gap:3, alignItems:"center" }}>
-                                    {hits.map(s=>(
-                                      <div key={s.id} 
-                                        title={s.name}
-                                        style={{ width: s.id===activeS?8:5, 
-                                          height: s.id===activeS?8:5, 
-                                          borderRadius:"50%",
-                                          background:DS.s[s.colorIdx].fill,
-                                          border: s.id===activeS?`1.5px solid white`:"none",
-                                          flexShrink:0 }}/>
-                                    ))}
-                                  </div>
-                                )}
+                            <th key={s.id}
+                              onClick={()=>setActiveS(isActive?null:s.id)}
+                              style={{ padding:"12px 14px", background:isActive?col.fill:DS.ink,
+                                textAlign:"center", cursor:"pointer", minWidth:160,
+                                borderLeft:`1px solid ${DS.border}`,
+                                transition:"background .15s" }}>
+                              <div style={{ display:"flex", alignItems:"center",
+                                justifyContent:"center", gap:7 }}>
+                                <div style={{ width:8,height:8,borderRadius:"50%",
+                                  background:isActive?"rgba(255,255,255,.6)":col.fill,
+                                  flexShrink:0 }}/>
+                                <span style={{ fontSize:12, fontWeight:700,
+                                  color:isActive?"#fff":col.fill }}>{s.name}</span>
+                                <span style={{ fontSize:10,
+                                  color:isActive?"rgba(255,255,255,.6)":"#5a6175" }}>
+                                  {completeness(s)}%
+                                </span>
                               </div>
-                            </div>
+                              {s.description && (
+                                <div style={{ fontSize:10, marginTop:3,
+                                  color:isActive?"rgba(255,255,255,.7)":"#4a5168",
+                                  fontStyle:"italic", lineHeight:1.3 }}>
+                                  {s.description.slice(0,50)}{s.description.length>50?"…":""}
+                                </div>
+                              )}
+                            </th>
                           );
                         })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nowDecisions.map((d, di)=>{
+                        const maxChoices = d.choices.length;
+                        return (
+                          <tr key={d.id} style={{ borderTop:`1px solid ${DS.canvasBdr}` }}>
+                            {/* Decision label - sticky left */}
+                            <td style={{ padding:"0", background:DS.canvasAlt,
+                              borderRight:`1px solid ${DS.canvasBdr}`,
+                              position:"sticky", left:0, zIndex:1,
+                              verticalAlign:"top", minWidth:200 }}>
+                              <div style={{ padding:"12px 16px" }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:8 }}>
+                                  <span style={{ width:20,height:20,borderRadius:4,
+                                    background:DS.accent,
+                                    display:"flex",alignItems:"center",justifyContent:"center",
+                                    fontSize:10,color:"#fff",fontWeight:700,flexShrink:0 }}>
+                                    {di+1}
+                                  </span>
+                                  <span style={{ fontSize:12,fontWeight:700,color:DS.ink,
+                                    flex:1,lineHeight:1.3 }}>{d.label}</span>
+                                </div>
+                                {/* All options listed */}
+                                <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                                  {d.choices.map((choice, ri)=>(
+                                    <div key={ri} style={{ fontSize:10, color:DS.inkTer,
+                                      padding:"2px 6px", borderRadius:3,
+                                      background:DS.canvas, border:`1px solid ${DS.canvasBdr}` }}>
+                                      {choice}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
 
-                {/* Strategy summary cards */}
-                <div style={{ marginTop:24 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:DS.inkTer, letterSpacing:.8,
-                    textTransform:"uppercase", marginBottom:12 }}>Strategy Summaries</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:12 }}>
-                    {strategies.map(s=>{
-                      const col = DS.s[s.colorIdx];
-                      const comp = completeness(s);
-                      const isActive = activeS===s.id;
-                      return (
-                        <div key={s.id} onClick={()=>setActiveS(isActive?null:s.id)}
-                          style={{ padding:"14px 16px", borderRadius:8, cursor:"pointer",
-                            border:`1.5px solid ${isActive?col.fill:DS.canvasBdr}`,
-                            background:isActive?col.soft:DS.canvas,
-                            boxShadow:isActive?`0 0 0 3px ${col.line}40`:"0 1px 3px rgba(0,0,0,.05)",
-                            transition:"all .15s" }}>
-                          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
-                            <div style={{ width:9,height:9,borderRadius:"50%",background:col.fill,flexShrink:0 }}/>
-                            <span style={{ fontWeight:700,fontSize:13,color:col.fill }}>{s.name}</span>
-                            <span style={{ marginLeft:"auto",fontSize:10,color:DS.inkTer }}>{comp}%</span>
-                          </div>
-                          {s.description && (
-                            <div style={{ fontSize:11,color:DS.inkSub,marginBottom:8,lineHeight:1.5,fontStyle:"italic" }}>
-                              {s.description}
-                            </div>
-                          )}
-                          <div style={{ display:"flex",flexWrap:"wrap",gap:4,marginBottom:10 }}>
-                            {nowDecisions.map(d=>{
-                              const idx=s.selections[d.id];
+                            {/* Strategy cells */}
+                            {strategies.map(s=>{
+                              const col = DS.s[s.colorIdx];
+                              const isActive = activeS===s.id;
+                              const selectedIdx = s.selections[d.id];
+                              const hasSelection = selectedIdx !== undefined;
+
                               return (
-                                <span key={d.id} style={{ fontSize:10,padding:"2px 7px",borderRadius:3,
-                                  background:idx!==undefined?col.soft:DS.canvasAlt,
-                                  color:idx!==undefined?col.fill:DS.inkTer,
-                                  border:`1px solid ${idx!==undefined?col.line:DS.canvasBdr}`,
-                                  fontWeight:idx!==undefined?600:400 }}>
-                                  {idx!==undefined?d.choices[idx]:`${d.label}: ?`}
-                                </span>
+                                <td key={s.id}
+                                  style={{ padding:"10px 12px", verticalAlign:"top",
+                                    background: hasSelection
+                                      ? isActive ? col.soft : col.soft+"80"
+                                      : DS.canvas,
+                                    borderLeft:`1px solid ${DS.canvasBdr}`,
+                                    transition:"background .12s" }}>
+                                  <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                                    {d.choices.map((choice, ri)=>{
+                                      const isChosen = selectedIdx===ri;
+                                      const otherStratsChose = strategies.filter(st=>st.id!==s.id&&st.selections[d.id]===ri);
+                                      return (
+                                        <div key={ri}
+                                          onClick={()=>{ if(activeS===s.id) selectCell(s.id,d.id,ri); else setActiveS(s.id); }}
+                                          style={{ padding:"8px 11px", borderRadius:6,
+                                            border:`1.5px solid ${isChosen ? col.fill : DS.canvasBdr}`,
+                                            background: isChosen ? col.soft : "transparent",
+                                            cursor:"pointer", display:"flex",
+                                            alignItems:"center", gap:7,
+                                            boxShadow:isChosen?`inset 0 0 0 1px ${col.fill}40`:"none",
+                                            transition:"all .12s",
+                                            opacity: !isActive && !isChosen ? 0.5 : 1 }}>
+                                          {/* Selected checkmark */}
+                                          <div style={{ width:16, height:16, borderRadius:4,
+                                            flexShrink:0, display:"flex",
+                                            alignItems:"center", justifyContent:"center",
+                                            background:isChosen?col.fill:"transparent",
+                                            border:`1.5px solid ${isChosen?col.fill:DS.canvasBdr}` }}>
+                                            {isChosen && (
+                                              <svg width="9" height="9" viewBox="0 0 12 12">
+                                                <polyline points="2,6 5,9 10,3"
+                                                  fill="none" stroke="#fff"
+                                                  strokeWidth="2" strokeLinecap="round"/>
+                                              </svg>
+                                            )}
+                                          </div>
+                                          <span style={{ fontSize:11,
+                                            fontWeight:isChosen?700:400,
+                                            color:isChosen?col.fill:DS.inkSub,
+                                            flex:1, lineHeight:1.3 }}>
+                                            {choice}
+                                          </span>
+                                          {/* Dots for other strategies that chose this */}
+                                          {otherStratsChose.length > 0 && (
+                                            <div style={{ display:"flex", gap:2 }}>
+                                              {otherStratsChose.map(os=>(
+                                                <div key={os.id} title={os.name}
+                                                  style={{ width:5,height:5,borderRadius:"50%",
+                                                    background:DS.s[os.colorIdx].fill }}/>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
                               );
                             })}
+                          </tr>
+                        );
+                      })}
+
+                      {/* Summary row */}
+                      <tr style={{ borderTop:`2px solid ${DS.canvasBdr}`,
+                        background:DS.canvasAlt }}>
+                        <td style={{ padding:"12px 16px", position:"sticky", left:0,
+                          background:DS.canvasAlt, borderRight:`1px solid ${DS.canvasBdr}`,
+                          zIndex:1 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                            letterSpacing:.6, textTransform:"uppercase" }}>
+                            Completeness
                           </div>
-                          <div style={{ height:4,background:DS.canvasAlt,borderRadius:2,overflow:"hidden" }}>
-                            <div style={{ width:`${comp}%`,height:"100%",background:col.fill,
-                              borderRadius:2,transition:"width .3s" }}/>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        </td>
+                        {strategies.map(s=>{
+                          const col = DS.s[s.colorIdx];
+                          const comp = completeness(s);
+                          return (
+                            <td key={s.id} style={{ padding:"12px 14px", textAlign:"center",
+                              borderLeft:`1px solid ${DS.canvasBdr}` }}>
+                              <div style={{ fontSize:18, fontWeight:700,
+                                fontFamily:"'Libre Baskerville',Georgia,serif",
+                                color:comp===100?DS.success:comp>50?DS.warning:col.fill,
+                                marginBottom:4 }}>{comp}%</div>
+                              <div style={{ height:4, background:DS.canvasBdr,
+                                borderRadius:2, overflow:"hidden", width:"80%", margin:"0 auto" }}>
+                                <div style={{ width:`${comp}%`, height:"100%",
+                                  background:comp===100?DS.success:col.fill,
+                                  borderRadius:2, transition:"width .4s" }}/>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* COMPARE MODE */}
+        {mode==="compare" && (
+          <div style={{ flex:1, overflowY:"auto", padding:"20px 28px" }}>
+            <div style={{ marginBottom:16, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+              <div style={{ fontSize:12, fontWeight:700, color:DS.inkTer,
+                letterSpacing:.5, textTransform:"uppercase" }}>
+                Select strategies to compare:
+              </div>
+              {strategies.map(s=>{
+                const col = DS.s[s.colorIdx];
+                const on = compareSelected[s.id] !== false;
+                return (
+                  <button key={s.id}
+                    onClick={()=>setCompareSelected(cs=>({...cs,[s.id]:!on}))}
+                    style={{ display:"flex", alignItems:"center", gap:7,
+                      padding:"6px 14px", borderRadius:6, cursor:"pointer",
+                      fontFamily:"inherit", fontWeight:700, fontSize:12,
+                      border:`2px solid ${on?col.fill:DS.canvasBdr}`,
+                      background:on?col.soft:"transparent",
+                      color:on?col.fill:DS.inkTer,
+                      transition:"all .12s" }}>
+                    <div style={{ width:14,height:14,borderRadius:3,
+                      background:on?col.fill:"transparent",
+                      border:`1.5px solid ${on?col.fill:DS.canvasBdr}`,
+                      display:"flex",alignItems:"center",justifyContent:"center" }}>
+                      {on && <svg width="9" height="9" viewBox="0 0 12 12">
+                        <polyline points="2,6 5,9 10,3" fill="none" stroke="#fff"
+                          strokeWidth="2.5" strokeLinecap="round"/>
+                      </svg>}
+                    </div>
+                    {s.name}
+                  </button>
+                );
+              })}
+              <button onClick={()=>setCompareSelected(
+                Object.fromEntries(strategies.map(s=>[s.id,true]))
+              )} style={{ fontSize:11, color:DS.accent, background:"none", border:"none",
+                cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>
+                Select all
+              </button>
+              <button onClick={()=>setCompareSelected({})}
+                style={{ fontSize:11, color:DS.inkTer, background:"none", border:"none",
+                  cursor:"pointer", fontFamily:"inherit" }}>
+                Clear
+              </button>
+            </div>
+
+            {(() => {
+              const visibleStrats = strategies.filter(s=>compareSelected[s.id]!==false);
+              if (visibleStrats.length === 0) return (
+                <div style={{ padding:"48px", textAlign:"center", color:DS.inkTer, fontSize:13 }}>
+                  Tick at least one strategy above to compare.
+                </div>
+              );
+
+              return (
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse",
+                    minWidth:200+visibleStrats.length*200 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width:200, padding:"12px 16px", background:DS.ink,
+                          textAlign:"left", fontSize:10, fontWeight:700,
+                          color:"#5a6175", letterSpacing:.8, textTransform:"uppercase",
+                          borderRight:`1px solid ${DS.border}`,
+                          position:"sticky", left:0, zIndex:2 }}>
+                          Decision
+                        </th>
+                        {visibleStrats.map(s=>{
+                          const col = DS.s[s.colorIdx];
+                          return (
+                            <th key={s.id} style={{ padding:"12px 16px", background:DS.ink,
+                              textAlign:"center", minWidth:200,
+                              borderLeft:`1px solid ${DS.border}` }}>
+                              <div style={{ display:"flex", alignItems:"center",
+                                justifyContent:"center", gap:7 }}>
+                                <div style={{ width:9,height:9,borderRadius:"50%",
+                                  background:col.fill }}/>
+                                <span style={{ fontSize:12, fontWeight:700, color:col.fill }}>
+                                  {s.name}
+                                </span>
+                              </div>
+                              {s.description && (
+                                <div style={{ fontSize:10, color:"#4a5168",
+                                  fontStyle:"italic", marginTop:3 }}>
+                                  {s.description.slice(0,50)}{s.description.length>50?"…":""}
+                                </div>
+                              )}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nowDecisions.map((d, di)=>{
+                        // Check if strategies differ on this decision
+                        const chosenIdxs = visibleStrats.map(s=>s.selections[d.id]);
+                        const unique = new Set(chosenIdxs.filter(x=>x!==undefined));
+                        const allSame = unique.size <= 1 && chosenIdxs.every(x=>x!==undefined);
+                        const hasDifference = unique.size > 1;
+
+                        return (
+                          <tr key={d.id} style={{
+                            borderTop:`1px solid ${DS.canvasBdr}`,
+                            background: hasDifference ? "#fffbf0" : DS.canvas }}>
+                            {/* Decision label */}
+                            <td style={{ padding:"12px 16px",
+                              background: hasDifference ? "#fff8e6" : DS.canvasAlt,
+                              borderRight:`1px solid ${DS.canvasBdr}`,
+                              position:"sticky", left:0, zIndex:1 }}>
+                              <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                                <span style={{ width:20,height:20,borderRadius:4,
+                                  background:hasDifference?DS.warning:DS.inkDis,
+                                  display:"flex",alignItems:"center",justifyContent:"center",
+                                  fontSize:10,color:"#fff",fontWeight:700,flexShrink:0,
+                                  marginTop:1 }}>{di+1}</span>
+                                <div>
+                                  <div style={{ fontSize:12,fontWeight:700,color:DS.ink,
+                                    lineHeight:1.3,marginBottom:3 }}>{d.label}</div>
+                                  {hasDifference && (
+                                    <span style={{ fontSize:9, fontWeight:700,
+                                      color:DS.warning, background:DS.warnSoft,
+                                      padding:"1px 5px", borderRadius:3,
+                                      border:`1px solid ${DS.warnLine}` }}>
+                                      ⚡ DIFFERS
+                                    </span>
+                                  )}
+                                  {allSame && (
+                                    <span style={{ fontSize:9, fontWeight:700,
+                                      color:DS.success, background:DS.successSoft,
+                                      padding:"1px 5px", borderRadius:3,
+                                      border:`1px solid ${DS.successLine}` }}>
+                                      ✓ SAME
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Strategy choices */}
+                            {visibleStrats.map((s, si)=>{
+                              const col = DS.s[s.colorIdx];
+                              const idx = s.selections[d.id];
+                              const hasChoice = idx !== undefined;
+                              const choice = hasChoice ? d.choices[idx] : null;
+                              
+                              // Is this choice shared with another visible strategy?
+                              const othersWithSameChoice = visibleStrats.filter(
+                                (os,osi)=>osi!==si && os.selections[d.id]===idx && hasChoice
+                              );
+
+                              return (
+                                <td key={s.id} style={{ padding:"12px 14px",
+                                  background:hasChoice
+                                    ? hasDifference ? col.soft+"90" : col.soft+"50"
+                                    : "transparent",
+                                  borderLeft:`1px solid ${DS.canvasBdr}`,
+                                  textAlign:"center" }}>
+                                  {hasChoice ? (
+                                    <div>
+                                      <div style={{ fontSize:13, fontWeight:700,
+                                        color:col.fill, marginBottom:4 }}>
+                                        {choice}
+                                      </div>
+                                      {othersWithSameChoice.length > 0 && (
+                                        <div style={{ fontSize:9, color:DS.inkTer }}>
+                                          same as {othersWithSameChoice.map(os=>os.name).join(", ")}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize:12, color:DS.inkDis }}>—</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+
+                      {/* Key differences summary row */}
+                      <tr style={{ borderTop:`2px solid ${DS.canvasBdr}`,
+                        background:DS.canvasAlt }}>
+                        <td style={{ padding:"12px 16px",
+                          background:DS.canvasAlt,
+                          borderRight:`1px solid ${DS.canvasBdr}`,
+                          position:"sticky", left:0, zIndex:1 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                            letterSpacing:.6, textTransform:"uppercase" }}>
+                            Completeness
+                          </div>
+                        </td>
+                        {visibleStrats.map(s=>{
+                          const col = DS.s[s.colorIdx];
+                          const comp = completeness(s);
+                          return (
+                            <td key={s.id} style={{ padding:"12px 14px", textAlign:"center",
+                              borderLeft:`1px solid ${DS.canvasBdr}` }}>
+                              <div style={{ fontSize:16, fontWeight:700,
+                                fontFamily:"'Libre Baskerville',Georgia,serif",
+                                color:comp===100?DS.success:col.fill,
+                                marginBottom:4 }}>{comp}%</div>
+                              <div style={{ height:4, background:DS.canvasBdr,
+                                borderRadius:2, overflow:"hidden",
+                                width:"70%", margin:"0 auto" }}>
+                                <div style={{ width:`${comp}%`, height:"100%",
+                                  background:comp===100?DS.success:col.fill,
+                                  borderRadius:2 }}/>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* Difference analysis */}
+                  {visibleStrats.length >= 2 && (() => {
+                    const differingDecisions = nowDecisions.filter(d=>{
+                      const idxs = visibleStrats.map(s=>s.selections[d.id]);
+                      return new Set(idxs.filter(x=>x!==undefined)).size > 1;
+                    });
+                    const sameDecisions = nowDecisions.filter(d=>{
+                      const idxs = visibleStrats.map(s=>s.selections[d.id]);
+                      return idxs.every(x=>x!==undefined) && new Set(idxs).size===1;
+                    });
+                    return (
+                      <div style={{ marginTop:20, display:"grid",
+                        gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                        <div style={{ padding:"14px 16px", background:DS.warnSoft,
+                          border:`1px solid ${DS.warnLine}`, borderRadius:8 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:DS.warning,
+                            letterSpacing:.6, textTransform:"uppercase", marginBottom:8 }}>
+                            ⚡ Where strategies differ ({differingDecisions.length})
+                          </div>
+                          {differingDecisions.length===0 ? (
+                            <div style={{ fontSize:12, color:DS.inkTer }}>No differences yet</div>
+                          ) : differingDecisions.map(d=>(
+                            <div key={d.id} style={{ fontSize:12, color:DS.ink,
+                              marginBottom:4, display:"flex", gap:6 }}>
+                              <span style={{ color:DS.warning }}>•</span>{d.label}
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ padding:"14px 16px", background:DS.successSoft,
+                          border:`1px solid ${DS.successLine}`, borderRadius:8 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:DS.success,
+                            letterSpacing:.6, textTransform:"uppercase", marginBottom:8 }}>
+                            ✓ Where strategies agree ({sameDecisions.length})
+                          </div>
+                          {sameDecisions.length===0 ? (
+                            <div style={{ fontSize:12, color:DS.inkTer }}>No shared choices yet</div>
+                          ) : sameDecisions.map(d=>{
+                            const idx = visibleStrats[0].selections[d.id];
+                            return (
+                              <div key={d.id} style={{ fontSize:12, color:DS.ink,
+                                marginBottom:4, display:"flex", gap:6 }}>
+                                <span style={{ color:DS.success }}>•</span>
+                                {d.label}: <strong>{d.choices[idx]}</strong>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -5323,72 +5668,210 @@ Return ONLY JSON:
       )}
 
       {/* ── DIAGRAM VIEW ── */}
-      {view==="diagram" && (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-          <div style={{ padding:"8px 20px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`,
-            display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
-            <button onClick={()=>setLinkMode(l=>!l)}
-              style={{ padding:"5px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-                border:`1px solid ${linkMode?DS.accent:DS.canvasBdr}`, borderRadius:5,
-                background:linkMode?DS.accentSoft:"transparent",
-                color:linkMode?DS.accent:DS.inkSub, cursor:"pointer" }}>
-              {linkMode ? (linkSource?"Click target to link…":"Click source to start link") : "Draw Influence Links"}
-            </button>
-            {linkMode && <span style={{ fontSize:11, color:DS.accent }}>Click two nodes to draw an influence arrow</span>}
-            <span style={{ marginLeft:"auto", fontSize:11, color:DS.inkTer }}>{items.length} nodes · {links.length} links</span>
-          </div>
-          <div style={{ flex:1, overflow:"auto", position:"relative", background:"#fafaf8" }}>
-            <svg style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", pointerEvents:"none" }}>
-              <defs>
-                <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                  <path d="M0,0 L0,6 L8,3 z" fill={DS.accent}/>
-                </marker>
-              </defs>
-              {links.map(lk => {
-                const from = items.find(i=>i.id===lk.from);
-                const to   = items.find(i=>i.id===lk.to);
-                if (!from||!to) return null;
-                const fx=from.x+90, fy=from.y+28, tx=to.x+90, ty=to.y+28;
-                const mx=(fx+tx)/2, my=(fy+ty)/2;
-                return (
-                  <g key={lk.id}>
-                    <line x1={fx} y1={fy} x2={tx} y2={ty} stroke={DS.accent}
-                      strokeWidth={2} strokeDasharray="5,3" markerEnd="url(#arrow)" opacity={.6}/>
-                    <text x={mx} y={my-6} textAnchor="middle" fontSize="9" fill={DS.accent}
-                      fontFamily="'IBM Plex Sans',sans-serif">influences</text>
-                  </g>
-                );
-              })}
-            </svg>
-            {items.map(item => {
-              const q = quadrant(item);
-              const isSrc = linkSource===item.id;
-              return (
-                <div key={item.id}
-                  onClick={()=>{ if(linkMode) handleLink(item.id); else setSelected(selected===item.id?null:item.id); }}
-                  style={{ position:"absolute", left:item.x, top:item.y,
-                    width:180, padding:"10px 12px", borderRadius:8, cursor:"pointer",
-                    border:`2px solid ${isSrc?DS.accent:q.color}`,
-                    background:selected===item.id||isSrc?q.bg:DS.canvas,
-                    boxShadow:isSrc?`0 0 0 3px ${DS.accentLine}`:"0 2px 8px rgba(0,0,0,.08)",
-                    userSelect:"none", transition:"all .12s" }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:q.color, marginBottom:4, lineHeight:1.35 }}>{item.label}</div>
-                  <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                    <span style={{ fontSize:9, fontWeight:700, color:q.color,
-                      padding:"1px 5px", borderRadius:3, background:q.color+"18" }}>{q.label}</span>
-                    <span style={{ fontSize:9, color:DS.inkTer }}>{item.type}</span>
+      {view==="diagram" && (() => {
+        // Drag state — stored in refs so no re-render during drag
+        const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
+
+        const onMouseDown = (e, itemId) => {
+          if (linkMode) return;
+          if (e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const item = items.find(i=>i.id===itemId);
+          if (!item) return;
+          dragRef.current = { dragging:true, id:itemId, startX:e.clientX, startY:e.clientY, origX:item.x, origY:item.y };
+        };
+
+        const onMouseMove = (e) => {
+          const d = dragRef.current;
+          if (!d.dragging) return;
+          const dx = e.clientX - d.startX;
+          const dy = e.clientY - d.startY;
+          const newX = Math.max(0, d.origX + dx);
+          const newY = Math.max(0, d.origY + dy);
+          setItems(prev => prev.map(i => i.id===d.id ? {...i, x:newX, y:newY} : i));
+        };
+
+        const onMouseUp = (e) => {
+          const d = dragRef.current;
+          if (!d.dragging) return;
+          // Check if it was a click (tiny movement) vs a drag
+          const dx = Math.abs(e.clientX - d.startX);
+          const dy = Math.abs(e.clientY - d.startY);
+          if (dx < 5 && dy < 5) {
+            // It was a click
+            if (linkMode) handleLink(d.id);
+            else setSelected(sel => sel===d.id ? null : d.id);
+          }
+          dragRef.current = { ...dragRef.current, dragging:false };
+        };
+
+        const CANVAS_W = Math.max(900, items.reduce((m,i)=>Math.max(m,i.x+220),900));
+        const CANVAS_H = Math.max(600, items.reduce((m,i)=>Math.max(m,i.y+120),600));
+
+        return (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+            {/* Toolbar */}
+            <div style={{ padding:"8px 20px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`,
+              display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
+              <button onClick={()=>{ setLinkMode(l=>!l); setLinkSource(null); }}
+                style={{ padding:"5px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
+                  border:`1px solid ${linkMode?DS.accent:DS.canvasBdr}`, borderRadius:5,
+                  background:linkMode?DS.accentSoft:"transparent",
+                  color:linkMode?DS.accent:DS.inkSub, cursor:"pointer" }}>
+                {linkMode ? (linkSource ? "Click target node to link…" : "Click source node to start…") : "Draw Influence Links"}
+              </button>
+              {!linkMode && (
+                <span style={{ fontSize:11, color:DS.inkTer }}>
+                  Drag nodes to reposition · Click to select · Delete button removes
+                </span>
+              )}
+              {linkMode && (
+                <span style={{ fontSize:11, color:DS.accent }}>
+                  {linkSource ? "Now click the target node" : "Click the source node first"}
+                </span>
+              )}
+              <button onClick={()=>{ setLinks([]); }}
+                style={{ marginLeft:"auto", padding:"4px 10px", fontSize:10, fontWeight:700,
+                  fontFamily:"inherit", border:`1px solid ${DS.canvasBdr}`, borderRadius:5,
+                  background:"transparent", color:DS.inkTer, cursor:"pointer" }}>
+                Clear Links
+              </button>
+              <span style={{ fontSize:11, color:DS.inkTer }}>{items.length} nodes · {links.length} links</span>
+            </div>
+
+            {/* Canvas */}
+            <div style={{ flex:1, overflow:"auto", background:"#f8f9fb",
+              backgroundImage:"radial-gradient(circle, #d0d4e0 1px, transparent 1px)",
+              backgroundSize:"24px 24px" }}
+              onMouseMove={onMouseMove}
+              onMouseUp={onMouseUp}
+              onMouseLeave={onMouseUp}>
+              <div style={{ position:"relative", width:CANVAS_W, height:CANVAS_H, minWidth:"100%", minHeight:"100%" }}>
+
+                {/* SVG arrows layer */}
+                <svg style={{ position:"absolute", top:0, left:0, width:CANVAS_W, height:CANVAS_H, pointerEvents:"none" }}>
+                  <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                      <polygon points="0 0, 10 3.5, 0 7" fill={DS.accent} opacity=".7"/>
+                    </marker>
+                  </defs>
+                  {links.map(lk => {
+                    const from = items.find(i=>i.id===lk.from);
+                    const to   = items.find(i=>i.id===lk.to);
+                    if (!from||!to) return null;
+                    const NODE_W = 190, NODE_H = 56;
+                    const fx = from.x + NODE_W/2;
+                    const fy = from.y + NODE_H/2;
+                    const tx = to.x + NODE_W/2;
+                    const ty = to.y + NODE_H/2;
+                    // Curved path
+                    const mx = (fx+tx)/2;
+                    const my = (fy+ty)/2 - 30;
+                    return (
+                      <g key={lk.id}>
+                        <path d={"M"+fx+","+fy+" Q"+mx+","+my+" "+tx+","+ty}
+                          fill="none" stroke={DS.accent} strokeWidth={1.5}
+                          strokeDasharray="6,3" markerEnd="url(#arrowhead)" opacity={.65}/>
+                        <text x={(fx+tx)/2} y={(fy+ty)/2-16} textAnchor="middle"
+                          fontSize="9" fill={DS.accent} fontFamily="'IBM Plex Sans',sans-serif"
+                          opacity=".8">influences</text>
+                        {/* Click to remove link */}
+                        <circle cx={(fx+tx)/2} cy={(fy+ty)/2-16} r={8} fill="transparent"
+                          style={{ cursor:"pointer" }}
+                          onClick={()=>setLinks(l=>l.filter(x=>x.id!==lk.id))}/>
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                {/* Nodes */}
+                {items.map(item => {
+                  const q = quadrant(item);
+                  const isSrc    = linkSource===item.id;
+                  const isSel    = selected===item.id;
+                  const isDrag   = dragRef.current.dragging && dragRef.current.id===item.id;
+
+                  return (
+                    <div key={item.id}
+                      onMouseDown={e=>onMouseDown(e, item.id)}
+                      onClick={e=>{ if(linkMode){ e.stopPropagation(); handleLink(item.id); }}}
+                      style={{
+                        position:"absolute", left:item.x, top:item.y,
+                        width:190, padding:"10px 13px", borderRadius:9,
+                        border:`2px solid ${isSrc?DS.accent:isSel?q.color:q.color+"60"}`,
+                        background: isSrc ? DS.accentSoft : isSel ? q.bg : DS.canvas,
+                        boxShadow: isDrag
+                          ? "0 12px 32px rgba(0,0,0,.18)"
+                          : isSrc
+                            ? "0 0 0 3px "+DS.accentLine
+                            : "0 2px 8px rgba(0,0,0,.07)",
+                        cursor: linkMode ? "crosshair" : isDrag ? "grabbing" : "grab",
+                        userSelect:"none",
+                        transform: isDrag ? "scale(1.02)" : "scale(1)",
+                        transition: isDrag ? "none" : "box-shadow .12s, transform .12s",
+                        zIndex: isSel||isDrag ? 10 : 1,
+                      }}>
+                      {/* Drag handle indicator */}
+                      <div style={{ position:"absolute", top:6, right:8,
+                        display:"flex", gap:2, opacity:.3 }}>
+                        {[0,1,2].map(i=>(
+                          <div key={i} style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                            {[0,1].map(j=>(
+                              <div key={j} style={{ width:2, height:2, borderRadius:"50%",
+                                background:q.color }}/>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ fontSize:11, fontWeight:700, color:q.color,
+                        marginBottom:5, lineHeight:1.35, paddingRight:16 }}>
+                        {item.label}
+                      </div>
+                      <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:9, fontWeight:700, color:q.color,
+                          padding:"1px 5px", borderRadius:3,
+                          background:q.color+"22", border:"1px solid "+q.color+"33" }}>
+                          {q.label}
+                        </span>
+                        <span style={{ fontSize:9, color:DS.inkTer }}>{item.type}</span>
+                      </div>
+
+                      {/* Delete button when selected */}
+                      {isSel && (
+                        <button
+                          onMouseDown={e=>e.stopPropagation()}
+                          onClick={e=>{ e.stopPropagation(); remove(item.id); }}
+                          style={{ position:"absolute", top:-8, right:-8,
+                            width:20, height:20, borderRadius:"50%",
+                            background:DS.danger, border:"2px solid white",
+                            color:"#fff", fontSize:11, fontWeight:700,
+                            cursor:"pointer", display:"flex",
+                            alignItems:"center", justifyContent:"center",
+                            lineHeight:1, zIndex:20 }}>
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Empty state */}
+                {items.length === 0 && (
+                  <div style={{ position:"absolute", top:"50%", left:"50%",
+                    transform:"translate(-50%,-50%)", textAlign:"center",
+                    color:DS.inkTer, pointerEvents:"none" }}>
+                    <div style={{ fontSize:32, marginBottom:12 }}>◉</div>
+                    <div style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>No uncertainties yet</div>
+                    <div style={{ fontSize:12 }}>Go to the Matrix view and add uncertainties, or use AI Generate</div>
                   </div>
-                  {selected===item.id && (
-                    <button onClick={e=>{e.stopPropagation();remove(item.id);}}
-                      style={{ position:"absolute", top:4, right:4, background:"none", border:"none",
-                        cursor:"pointer", color:DS.danger, fontSize:12, lineHeight:1 }}>×</button>
-                  )}
-                </div>
-              );
-            })}
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── DRIVERS VIEW ── */}
       {view==="drivers" && (
