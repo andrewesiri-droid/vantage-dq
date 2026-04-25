@@ -2507,7 +2507,7 @@ Return ONLY JSON:
     const stratDesc = strategies.map(s=>{
       const path = nowDecisions.map(d=>{ const i=s.selections[d.id]; return i!==undefined?`${d.label}:${d.choices[i]}`:"MISSING"; }).join(", ");
       return `${s.name}: ${path}`;
-    }).join("\n");
+    }).join("\\n");
     aiCall(`You are a DQ expert. Validate these strategies for coherence, completeness, and distinctiveness.
 Decision: "${problem.decisionStatement}"
 Decisions:\n${tableDesc}
@@ -3056,42 +3056,26 @@ function ModuleQualitativeAssessment({
     const stratDescs = strategies.map(s => {
       const path = decisions.filter(d=>d.tier==="focus").map(d => {
         const idx = s.selections?.[d.id];
-        return idx !== undefined ? `${d.label}: ${d.choices[idx]}` : `${d.label}: ?`;
+        return idx !== undefined ? d.label + ": " + d.choices[idx] : d.label + ": ?";
       }).join(", ");
-      return `${DS.sNames[s.colorIdx]||s.name} — ${s.description||"No description"}. Choices: ${path}`;
-    }).join("
-");
+      return (DS.sNames[s.colorIdx]||s.name) + " - " + (s.description||"No description") + ". Choices: " + path;
+    }).join(" | ");
 
     const critDescs = criteria.map(c =>
-      `${c.label} [${c.type}, weight:${c.weight}]: ${c.description||""}`
-    ).join("
-");
+      c.label + " [" + c.type + ", weight:" + c.weight + "]: " + (c.description||"")
+    ).join(" | ");
 
-    aiCall(`You are a senior Decision Quality analyst performing an initial qualitative assessment.
+    const prompt = "You are a senior Decision Quality analyst. Score each strategy against each criterion from 1-5 where 1=very poor fit, 2=weak, 3=adequate, 4=strong, 5=excellent fit. " +
+      "Decision: " + (problem.decisionStatement||"") + ". " +
+      "Context: " + (problem.context||"") + ". " +
+      "Strategies: " + stratDescs + ". " +
+      "Criteria: " + critDescs + ". " +
+      "Be analytical and differentiated - strategies should score differently on different criteria. " +
+      "Return ONLY valid JSON: {" +
+      '"scores": [{"strategyName": "exact name", "criterionLabel": "exact label", "score": 4, "rationale": "one sentence"}], ' +
+      '"overallInsight": "2 sentences on trade-offs"}';
 
-Decision: "${problem.decisionStatement}"
-Context: "${problem.context}"
-Success criteria: "${problem.successCriteria}"
-
-Strategies being evaluated:
-${stratDescs}
-
-Decision criteria:
-${critDescs}
-
-Score each strategy against each criterion from 1-5:
-1 = Very poor fit  2 = Weak  3 = Adequate  4 = Strong  5 = Excellent fit
-
-Be analytical and differentiated — strategies should score differently on different criteria.
-Consider how each strategy's specific choices perform against each criterion.
-
-Return ONLY valid JSON:
-{
-  "scores": [
-    {"strategyName": "exact strategy name", "criterionLabel": "exact criterion label", "score": 4, "rationale": "one sentence why"}
-  ],
-  "overallInsight": "2 sentences on what the scoring reveals about the trade-offs"
-}`,
+    aiCall(prompt,
     (r) => {
       if (r.error) {
         onAIMsg({ role:"ai", text:"Assessment failed: " + r.error });
@@ -3128,7 +3112,7 @@ Return ONLY valid JSON:
         `${DS.sNames[s.colorIdx]||s.name}: ${getScore(s.id,c.id)||"—"}/5`
       ).join(" | ");
       return `${c.label} [wt:${getWeight(c.id)}]: ${row}`;
-    }).join("\n");
+    }).join("\\n");
 
     const totals = strategies.map(s =>
       `${DS.sNames[s.colorIdx]||s.name}: ${pct(s.id)}% (${weightedTotal(s.id)}/${maxPossible} weighted)`
@@ -4689,7 +4673,7 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
         return idx !== undefined ? `${d.label} → ${d.choices[idx]}` : `${d.label} → ?`;
       }).join(" | ");
       return `${DS.sNames[s.colorIdx]||s.name}: ${path}`;
-    }).join("\n");
+    }).join("\\n");
 
     const dqSummary = DQ_ELEMENTS.map(e =>
       `${e.label}: ${dqScores[e.key]||0}/100`
