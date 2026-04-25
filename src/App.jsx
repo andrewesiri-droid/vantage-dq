@@ -6371,8 +6371,23 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
     call(prompt, (result) => {
       clearInterval(progressTimer);
       setAnalysisProgress(ANALYSIS_STEPS.map(s => s.id));
-      if (result.error || result._raw) { setPhase("input"); return; }
-      setDraft(result);
+      if (result.error) {
+        alert("AI Error: " + result.error);
+        setPhase("input");
+        return;
+      }
+      // If _raw, try to parse it
+      let finalResult = result;
+      if (result._raw) {
+        try {
+          finalResult = JSON.parse(result._raw.replace(/```json|```/g,"").trim());
+        } catch(e) {
+          alert("Could not parse AI response. Please try again.");
+          setPhase("input");
+          return;
+        }
+      }
+      setDraft(finalResult);
       setAccepted({ frame:true, issues:true, decisions:true, criteria:true, strategies:true });
       setTimeout(() => setPhase("review"), 600);
     });
