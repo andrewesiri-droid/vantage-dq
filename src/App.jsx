@@ -7136,8 +7136,8 @@ function QuickStartScreen({ onComplete, onSkip }) {
     setPhase("analysing");
     setAnalysisProgress([]);
 
-    const prompt = dqPrompt(
-      "Analyse this decision brief and return a structured first draft as a single valid JSON object. " +
+    const prompt = (
+      "You are a Decision Quality expert. Analyse this decision brief and return a structured first draft as a single valid JSON object. " +
       "No preamble, no markdown, no explanation. Start with { and end with }. " +
       "INPUT: " + text + " " +
       "Return this exact structure: " +
