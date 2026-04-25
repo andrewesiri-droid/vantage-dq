@@ -6362,9 +6362,11 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
         
         // Strategy 2: strip markdown
         if (!parsed) {
-          try { parsed = JSON.parse(raw.replace(/```json
-?/gi,"").replace(/```
-?/gi,"").trim()); } catch(e) {}
+          try {
+            const tick3 = "```";
+            const stripped = raw.split(tick3 + "json").join("").split(tick3).join("").trim();
+            parsed = JSON.parse(stripped);
+          } catch(e) {}
         }
         
         // Strategy 3: extract { } block
