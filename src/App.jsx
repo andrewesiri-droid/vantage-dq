@@ -61,6 +61,9 @@ const DS = {
 let _seq = 0;
 const uid = (p="x") => `${p}_${++_seq}_${Math.random().toString(36).slice(2,7)}`;
 
+// Safe prompt builder - avoids template literal issues in nested contexts
+const buildPrompt = (...parts) => parts.filter(Boolean).join(" ");
+
 const useAI = () => {
   const [busy, setBusy] = useState(false);
   const [lastError, setLastError] = useState(null);
