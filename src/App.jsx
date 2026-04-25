@@ -6255,8 +6255,9 @@ function QuickStartScreen({ onComplete, onSkip }) {
   const [guidedAnswers, setGuidedAnswers] = useState({ what:"", why:"", who:"", when:"", constraints:"" });
   const [analysisProgress, setAnalysisProgress] = useState([]);
   const [draft, setDraft] = useState(null);
-  const [accepted, setAccepted] = useState({});
+  const [accepted, setAccepted] = useState({ frame:true, issues:true, decisions:true, criteria:true, strategies:true });
   const [dragOver, setDragOver] = useState(false);
+  const draftRef = useRef(null);
   const { busy, call } = useAI();
 
   const GUIDED_QUESTIONS = [
@@ -6341,13 +6342,15 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
 
     call(prompt, (result) => {
       clearInterval(progressTimer);
-      setAnalysisProgress(ANALYSIS_STEPS.map(s => s.id));
+      
+      // Handle error
       if (result.error) {
         alert("AI Error: " + result.error);
         setPhase("input");
         return;
       }
-      // If _raw, try to parse it
+      
+      // Parse raw if needed
       let finalResult = result;
       if (result._raw) {
         try {
@@ -6358,9 +6361,26 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
           return;
         }
       }
+      
+      // Validate we have at minimum a frame or some content
+      if (!finalResult || typeof finalResult !== "object" || Object.keys(finalResult).length === 0) {
+        alert("AI returned an empty response. Please try again.");
+        setPhase("input");
+        return;
+      }
+      
+      // Store in ref immediately (not subject to stale closure)
+      draftRef.current = finalResult;
+      
+      // Update all state in one batch then transition
+      setAnalysisProgress(ANALYSIS_STEPS.map(s => s.id));
       setDraft(finalResult);
       setAccepted({ frame:true, issues:true, decisions:true, criteria:true, strategies:true });
-      setTimeout(() => setPhase("review"), 600);
+      
+      // Small delay to let React flush the state updates before phase change
+      setTimeout(() => {
+        setPhase("review");
+      }, 800);
     });
   };
 
@@ -6652,13 +6672,19 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
   );
 
   // ── REVIEW ──
-  if (phase === "review" && draft) {
+  // Use ref as fallback in case state hasn't updated yet
+  const activeDraft = draft || draftRef.current;
+  if (phase === "review" && activeDraft) {
+    // Ensure draft state is synced
+    if (!draft && draftRef.current) {
+      setDraft(draftRef.current);
+    }
     const sections = [
       { key:"frame",      label:"Problem Definition",  count:null },
-      { key:"issues",     label:"Issues",              count:draft.issues?.length },
-      { key:"decisions",  label:"Decision Hierarchy",  count:draft.decisions?.length },
-      { key:"criteria",   label:"Criteria",            count:draft.criteria?.length },
-      { key:"strategies", label:"Strategies",          count:draft.strategies?.length },
+      { key:"issues",     label:"Issues",              count:activeDraft.issues?.length },
+      { key:"decisions",  label:"Decision Hierarchy",  count:activeDraft.decisions?.length },
+      { key:"criteria",   label:"Criteria",            count:activeDraft.criteria?.length },
+      { key:"strategies", label:"Strategies",          count:activeDraft.strategies?.length },
     ];
 
     return (
@@ -6673,7 +6699,7 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
             <Svg path={ICONS.check} size={13} color="#fff" sw={2.5}/>
           </div>
           <div>
-            <div style={{ fontSize:13, fontWeight:700, color:DS.textPri }}>First Draft Ready — {draft.projectName}</div>
+            <div style={{ fontSize:13, fontWeight:700, color:DS.textPri }}>First Draft Ready — {activeDraft.projectName}</div>
             <div style={{ fontSize:11, color:DS.textTer }}>Review what Vantage inferred · toggle sections on/off · load when ready</div>
           </div>
           <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
@@ -6688,38 +6714,38 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
           <div style={{ width:240, borderRight:`1px solid ${DS.border}`, overflowY:"auto",
             flexShrink:0, padding:"20px 18px" }}>
 
-            {draft.executiveSummary && (
+            {activeDraft.executiveSummary && (
               <div style={{ marginBottom:18, paddingBottom:18, borderBottom:`1px solid ${DS.border}` }}>
                 <div style={{ fontSize:9, fontWeight:700, color:DS.textTer, letterSpacing:1,
                   textTransform:"uppercase", marginBottom:8 }}>Executive Summary</div>
-                <div style={{ fontSize:11, color:DS.textSec, lineHeight:1.65 }}>{draft.executiveSummary}</div>
+                <div style={{ fontSize:11, color:DS.textSec, lineHeight:1.65 }}>{activeDraft.executiveSummary}</div>
               </div>
             )}
 
-            {draft.dqObservations?.length > 0 && (
+            {activeDraft.dqObservations?.length > 0 && (
               <div style={{ marginBottom:18, paddingBottom:18, borderBottom:`1px solid ${DS.border}` }}>
                 <div style={{ fontSize:9, fontWeight:700, color:DS.textTer, letterSpacing:1,
                   textTransform:"uppercase", marginBottom:8 }}>DQ Observations</div>
-                {draft.dqObservations.map((obs,i) => (
+                {activeDraft.dqObservations.map((obs,i) => (
                   <div key={i} style={{ fontSize:11, color:"#fbbf24", lineHeight:1.5, marginBottom:6,
                     paddingLeft:8, borderLeft:`2px solid #f59e0b` }}>{obs}</div>
                 ))}
               </div>
             )}
 
-            {draft.weakestLink && (
+            {activeDraft.weakestLink && (
               <div style={{ marginBottom:18, paddingBottom:18, borderBottom:`1px solid ${DS.border}` }}>
                 <div style={{ fontSize:9, fontWeight:700, color:DS.danger, letterSpacing:1,
                   textTransform:"uppercase", marginBottom:6 }}>Weakest DQ Link</div>
-                <div style={{ fontSize:11, color:DS.textSec, lineHeight:1.5 }}>{draft.weakestLink}</div>
+                <div style={{ fontSize:11, color:DS.textSec, lineHeight:1.5 }}>{activeDraft.weakestLink}</div>
               </div>
             )}
 
-            {draft.recommendedFirstStep && (
+            {activeDraft.recommendedFirstStep && (
               <div>
                 <div style={{ fontSize:9, fontWeight:700, color:DS.success, letterSpacing:1,
                   textTransform:"uppercase", marginBottom:6 }}>First Step</div>
-                <div style={{ fontSize:11, color:DS.textSec, lineHeight:1.5 }}>{draft.recommendedFirstStep}</div>
+                <div style={{ fontSize:11, color:DS.textSec, lineHeight:1.5 }}>{activeDraft.recommendedFirstStep}</div>
               </div>
             )}
           </div>
@@ -6748,24 +6774,24 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
             </div>
 
             {/* FRAME */}
-            {accepted.frame && draft.frame && (
+            {accepted.frame && activeDraft.frame && (
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt,
                   borderBottom:`1px solid ${DS.canvasBdr}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                   <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◎ Problem Definition</div>
-                  <Badge variant={confVar(draft.frame.confidence)} size="xs">{draft.frame.confidence} confidence</Badge>
+                  <Badge variant={confVar(activeDraft.frame.confidence)} size="xs">{activeDraft.frame.confidence} confidence</Badge>
                 </div>
                 <div style={{ padding:"14px 16px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                   {[
-                    ["Decision Statement", draft.frame.decisionStatement],
-                    ["Owner", draft.frame.owner],
-                    ["Trigger", draft.frame.trigger],
-                    ["Deadline", draft.frame.deadline],
-                    ["Scope In", draft.frame.scopeIn],
-                    ["Scope Out", draft.frame.scopeOut],
-                    ["Constraints", draft.frame.constraints],
-                    ["Success Criteria", draft.frame.successCriteria],
+                    ["Decision Statement", activeDraft.frame.decisionStatement],
+                    ["Owner", activeDraft.frame.owner],
+                    ["Trigger", activeDraft.frame.trigger],
+                    ["Deadline", activeDraft.frame.deadline],
+                    ["Scope In", activeDraft.frame.scopeIn],
+                    ["Scope Out", activeDraft.frame.scopeOut],
+                    ["Constraints", activeDraft.frame.constraints],
+                    ["Success Criteria", activeDraft.frame.successCriteria],
                   ].filter(([,v])=>v).map(([label, val]) => (
                     <div key={label}>
                       <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
@@ -6774,26 +6800,26 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
                     </div>
                   ))}
                 </div>
-                {draft.frame.confidenceNote && (
+                {activeDraft.frame.confidenceNote && (
                   <div style={{ padding:"8px 16px", borderTop:`1px solid ${DS.canvasBdr}`,
                     fontSize:11, color:DS.inkTer, fontStyle:"italic" }}>
-                    ℹ {draft.frame.confidenceNote}
+                    ℹ {activeDraft.frame.confidenceNote}
                   </div>
                 )}
               </div>
             )}
 
             {/* ISSUES */}
-            {accepted.issues && draft.issues?.length > 0 && (
+            {accepted.issues && activeDraft.issues?.length > 0 && (
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◈ Issues Raised — {draft.issues.length} identified</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◈ Issues Raised — {activeDraft.issues.length} identified</div>
                 </div>
                 <div style={{ maxHeight:260, overflowY:"auto" }}>
-                  {draft.issues.map((issue, i) => (
+                  {activeDraft.issues.map((issue, i) => (
                     <div key={i} style={{ padding:"9px 16px", display:"flex", alignItems:"flex-start", gap:10,
-                      borderBottom:i<draft.issues.length-1?`1px solid ${DS.canvasBdr}`:"none" }}>
+                      borderBottom:i<activeDraft.issues.length-1?`1px solid ${DS.canvasBdr}`:"none" }}>
                       <div style={{ flex:1 }}>
                         <div style={{ fontSize:12, color:DS.ink, lineHeight:1.45, marginBottom:5 }}>{issue.text}</div>
                         <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
@@ -6815,15 +6841,15 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
             )}
 
             {/* DECISIONS */}
-            {accepted.decisions && draft.decisions?.length > 0 && (
+            {accepted.decisions && activeDraft.decisions?.length > 0 && (
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◧ Decision Hierarchy — {draft.decisions.length} decisions</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◧ Decision Hierarchy — {activeDraft.decisions.length} decisions</div>
                 </div>
                 <div style={{ padding:"12px 16px", display:"flex", flexDirection:"column", gap:10 }}>
                   {["given","focus","tactical","deferred","dependency"].map(tier => {
-                    const td = draft.decisions.filter(d=>d.tier===tier);
+                    const td = activeDraft.decisions.filter(d=>d.tier===tier);
                     if (!td.length) return null;
                     const tierDef = H_TIERS.find(t=>t.key===tier);
                     return (
@@ -6852,16 +6878,16 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
             )}
 
             {/* CRITERIA */}
-            {accepted.criteria && draft.criteria?.length > 0 && (
+            {accepted.criteria && activeDraft.criteria?.length > 0 && (
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◫ Decision Criteria — {draft.criteria.length} criteria</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◫ Decision Criteria — {activeDraft.criteria.length} criteria</div>
                 </div>
                 <div>
-                  {draft.criteria.map((c,i) => (
+                  {activeDraft.criteria.map((c,i) => (
                     <div key={i} style={{ padding:"9px 16px", display:"flex", alignItems:"center", gap:10,
-                      borderBottom:i<draft.criteria.length-1?`1px solid ${DS.canvasBdr}`:"none" }}>
+                      borderBottom:i<activeDraft.criteria.length-1?`1px solid ${DS.canvasBdr}`:"none" }}>
                       <div style={{ width:4, alignSelf:"stretch", borderRadius:2, flexShrink:0,
                         background:c.weight==="high"?DS.danger:c.weight==="medium"?DS.warning:DS.inkDis }}/>
                       <div style={{ flex:1 }}>
@@ -6879,15 +6905,15 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
             )}
 
             {/* STRATEGIES */}
-            {accepted.strategies && draft.strategies?.length > 0 && (
+            {accepted.strategies && activeDraft.strategies?.length > 0 && (
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>⊞ Strategy Directions — {draft.strategies.length} directions</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>⊞ Strategy Directions — {activeDraft.strategies.length} directions</div>
                 </div>
                 <div style={{ padding:"12px 16px", display:"grid",
                   gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:10 }}>
-                  {draft.strategies.map((s,i) => {
+                  {activeDraft.strategies.map((s,i) => {
                     const col = DS.s[i%DS.s.length];
                     return (
                       <div key={i} style={{ padding:"13px 14px", borderRadius:7,
