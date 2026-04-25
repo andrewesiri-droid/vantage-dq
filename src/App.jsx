@@ -7130,50 +7130,9 @@ function QuickStartScreen({ onComplete, onSkip }) {
   const runAnalysis = async () => {
     const rawText = getInputText();
     if (!rawText.trim() || rawText.trim().length < 40) return;
-    // Truncate very large inputs to prevent token overflow
-    const truncNote = " [Input truncated]";
-    const text = rawText.length > 3000 ? rawText.slice(0, 3000) + truncNote : rawText;
+    const text = rawText.length > 4000 ? rawText.slice(0, 4000) : rawText;
     setPhase("analysing");
     setAnalysisProgress([]);
-
-    const prompt = (
-      "You are a Decision Quality expert. Analyse this decision brief and return a structured first draft as a single valid JSON object. " +
-      "No preamble, no markdown, no explanation. Start with { and end with }. " +
-      "INPUT: " + text + " " +
-      "Return this exact structure: " +
-      '{"projectName":"short name","executiveSummary":"2 sentences",' +
-      '"frame":{' +
-        '"decisionStatement":"How should we... (genuine question)",' +
-        '"context":"business context",' +
-        '"background":"relevant history",' +
-        '"trigger":"what caused this decision now",' +
-        '"symptoms":"observable issues",' +
-        '"rootDecision":"underlying strategic choice",' +
-        '"scopeIn":"what is in scope",' +
-        '"scopeOut":"what is out of scope",' +
-        '"timeHorizon":"timeframe",' +
-        '"deadline":"decision deadline",' +
-        '"owner":"decision owner",' +
-        '"stakeholders":[{"name":"name","role":"role","influence":"High"}],' +
-        '"constraints":"hard constraints",' +
-        '"assumptions":"key assumptions",' +
-        '"successCriteria":"definition of success",' +
-        '"failureConsequences":"cost of poor decision",' +
-        '"urgency":"High",' +
-        '"importance":"Strategically significant",' +
-        '"confidence":"high",' +
-        '"confidenceNote":"assessment basis"' +
-      '},' +
-      '"issues":[{"text":"issue","category":"uncertainty-external","severity":"High","hat":"Team","confidence":"high","source":"input"}],' +
-      '"decisions":[{"label":"decision label","choices":["Option A","Option B","Option C"],"tier":"focus","owner":"","rationale":"why","confidence":"high"}],' +
-      '"criteria":[{"label":"criterion","type":"financial","weight":"high","description":"what it measures","confidence":"high"}],' +
-      '"strategies":[{"name":"Strategy name","description":"what it does","rationale":"why coherent","keyTheme":"central logic","confidence":"high"}],' +
-      '"dqObservations":["observation"],' +
-      '"weakestLink":"which DQ element is weakest",' +
-      '"recommendedFirstStep":"most important next action"' +
-      '} ' +
-      "Generate 5-8 issues, 3-5 decisions, 3-5 criteria, 2-3 strategies. Be specific to the actual content provided."
-    );
 
     const progressTimer = setInterval(() => {
       setAnalysisProgress(p => {
@@ -7181,77 +7140,137 @@ function QuickStartScreen({ onComplete, onSkip }) {
         clearInterval(progressTimer);
         return p;
       });
-    }, 950);
+    }, 900);
+
+    // Step 1: Get structured analysis as JSON
+    // Keep the schema minimal and explicit
+    const schemaStr = '{"projectName":"string","executiveSummary":"string","decisionStatement":"How should we...","context":"string","background":"string","trigger":"string","scopeIn":"string","scopeOut":"string","timeHorizon":"string","deadline":"string","owner":"string","constraints":"string","assumptions":"string","successCriteria":"string","issues":[{"text":"string","category":"uncertainty-external","severity":"High","source":"string"}],"decisions":[{"label":"string","choices":["A","B","C"],"tier":"focus","rationale":"string"}],"criteria":[{"label":"string","type":"financial","weight":"high","description":"string"}],"strategies":[{"name":"string","description":"string","rationale":"string"}],"weakestLink":"string","recommendedFirstStep":"string"}';
+
+    const prompt =
+      "You are a Decision Quality expert. Read this decision brief and extract a structured analysis." +
+      " Return ONLY a JSON object matching this schema exactly. No other text." +
+      " Schema: " + schemaStr +
+      " Brief: " + text;
 
     call(prompt, (result) => {
       clearInterval(progressTimer);
-      
-      // Handle error
+      setAnalysisProgress(ANALYSIS_STEPS.map(s => s.id));
+
       if (result.error) {
         alert("AI Error: " + result.error);
         setPhase("input");
         return;
       }
-      
-      // Parse raw if needed
-      let finalResult = result;
+
+      // Get the data — either parsed object or raw text to parse
+      let data = result;
       if (result._raw) {
-        const raw = result._raw;
-        // Try multiple parse strategies
-        let parsed = null;
-        
-        // Strategy 1: direct
-        try { parsed = JSON.parse(raw); } catch(e) {}
-        
-        // Strategy 2: strip markdown
-        if (!parsed) {
-          try {
-            const tick3 = "```";
-            const stripped = raw.split(tick3 + "json").join("").split(tick3).join("").trim();
-            parsed = JSON.parse(stripped);
-          } catch(e) {}
-        }
-        
-        // Strategy 3: extract { } block
-        if (!parsed) {
-          try {
-            const s = raw.indexOf("{"), e2 = raw.lastIndexOf("}");
-            if (s !== -1 && e2 > s) parsed = JSON.parse(raw.slice(s, e2+1));
-          } catch(e) {}
-        }
-        
-        if (parsed) {
-          finalResult = parsed;
-        } else {
-          // Cannot parse — go back to input
-          console.error("Parse failed. Raw:", raw.slice(0, 200));
+        try {
+          // Try to extract JSON from raw text
+          const raw = result._raw;
+          const start = raw.indexOf("{");
+          const end = raw.lastIndexOf("}");
+          if (start !== -1 && end > start) {
+            data = JSON.parse(raw.slice(start, end + 1));
+          } else {
+            setPhase("input");
+            alert("Could not extract structured data. Please try again.");
+            return;
+          }
+        } catch(e) {
           setPhase("input");
-          alert("The AI response could not be parsed. Please try again with a simpler input.");
+          alert("Parse failed. Please try again with a shorter input.");
           return;
         }
       }
-      
-      // Validate we have at minimum a frame or some content
-      if (!finalResult || typeof finalResult !== "object" || Object.keys(finalResult).length === 0) {
-        alert("AI returned an empty response. Please try again.");
+
+      // Map the simple schema to the full draft structure
+      const draft = {
+        projectName: data.projectName || "Untitled Project",
+        executiveSummary: data.executiveSummary || "",
+        frame: {
+          decisionStatement: data.decisionStatement || "",
+          context: data.context || "",
+          background: data.background || "",
+          trigger: data.trigger || "",
+          symptoms: data.symptoms || "",
+          rootDecision: data.rootDecision || data.decisionStatement || "",
+          scopeIn: data.scopeIn || "",
+          scopeOut: data.scopeOut || "",
+          timeHorizon: data.timeHorizon || "",
+          deadline: data.deadline || "",
+          owner: data.owner || "",
+          stakeholders: data.stakeholders || [],
+          constraints: data.constraints || "",
+          assumptions: data.assumptions || "",
+          successCriteria: data.successCriteria || "",
+          failureConsequences: data.failureConsequences || "",
+          urgency: data.urgency || "Medium",
+          importance: data.importance || "Significant",
+          confidence: "medium",
+          confidenceNote: "AI-generated first draft — review and refine",
+        },
+        issues: (data.issues || []).map(i => ({
+          id: uid("iss"),
+          text: i.text || "",
+          category: i.category || "uncertainty-external",
+          severity: i.severity || "Medium",
+          hat: i.hat || "Team",
+          confidence: i.confidence || "medium",
+          source: i.source || "AI Deep Dive",
+          status: "Open",
+          owner: "",
+          votes: 0,
+        })),
+        decisions: (data.decisions || []).map(d => ({
+          id: uid("dec"),
+          label: d.label || "",
+          choices: d.choices || ["Option A", "Option B"],
+          tier: d.tier || "focus",
+          owner: d.owner || "",
+          rationale: d.rationale || "",
+          confidence: d.confidence || "medium",
+          sourceId: null,
+        })),
+        criteria: (data.criteria || []).map(c => ({
+          id: uid("crit"),
+          label: c.label || "",
+          type: c.type || "strategic",
+          weight: c.weight || "medium",
+          description: c.description || "",
+          confidence: c.confidence || "medium",
+        })),
+        strategies: (data.strategies || []).map((s, i) => ({
+          id: uid("strat"),
+          colorIdx: i % 6,
+          name: s.name || ("Strategy " + (i + 1)),
+          description: s.description || "",
+          objective: s.objective || "",
+          rationale: s.rationale || "",
+          keyTheme: s.keyTheme || "",
+          confidence: s.confidence || "medium",
+          selections: {},
+        })),
+        dqObservations: data.dqObservations || [],
+        weakestLink: data.weakestLink || "",
+        recommendedFirstStep: data.recommendedFirstStep || "",
+      };
+
+      // Validate minimum content
+      if (!draft.frame.decisionStatement && !draft.projectName) {
         setPhase("input");
+        alert("AI returned insufficient data. Please try again.");
         return;
       }
-      
-      // Store in ref immediately (not subject to stale closure)
-      draftRef.current = finalResult;
-      
-      // Update all state in one batch then transition
-      setAnalysisProgress(ANALYSIS_STEPS.map(s => s.id));
-      setDraft(finalResult);
+
+      draftRef.current = draft;
+      setDraft(draft);
       setAccepted({ frame:true, issues:true, decisions:true, criteria:true, strategies:true });
-      
-      // Small delay to let React flush the state updates before phase change
-      setTimeout(() => {
-        setPhase("review");
-      }, 800);
+      setTimeout(() => setPhase("review"), 800);
     });
   };
+
+
 
   const applyDraft = () => { if (draft) onComplete(draft, accepted); };
   const confVar = c => c==="high"?"green":c==="medium"?"warn":"danger";
