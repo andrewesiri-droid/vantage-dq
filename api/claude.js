@@ -5,7 +5,7 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured on server" });
+    return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
   }
 
   try {
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2000,
+        max_tokens: 4000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -36,26 +36,52 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    
-    // Extract text from response
     const text = (data.content || [])
       .filter(b => b.type === "text")
       .map(b => b.text || "")
       .join("")
       .trim();
 
-    // Try to parse as JSON, return parsed object directly
-    try {
-      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      return res.status(200).json(parsed);
-    } catch (e) {
-      // Return raw text if not JSON
-      return res.status(200).json({ _raw: text });
+    // Try multiple JSON extraction strategies
+    let parsed = null;
+
+    // Strategy 1: direct parse
+    try { parsed = JSON.parse(text); } catch(e) {}
+
+    // Strategy 2: strip markdown code blocks
+    if (!parsed) {
+      try {
+        const stripped = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+        parsed = JSON.parse(stripped);
+      } catch(e) {}
     }
 
+    // Strategy 3: find JSON object in text
+    if (!parsed) {
+      try {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) parsed = JSON.parse(match[0]);
+      } catch(e) {}
+    }
+
+    // Strategy 4: find JSON array in text
+    if (!parsed) {
+      try {
+        const match = text.match(/\[[\s\S]*\]/);
+        if (match) parsed = JSON.parse(match[0]);
+      } catch(e) {}
+    }
+
+    if (parsed) {
+      return res.status(200).json(parsed);
+    }
+
+    // Return raw if nothing worked
+    console.error("Could not parse JSON from response:", text.slice(0, 200));
+    return res.status(200).json({ _raw: text });
+
   } catch (err) {
-    console.error("Claude proxy error:", err);
+    console.error("Proxy error:", err);
     return res.status(500).json({ error: String(err) });
   }
 }

@@ -6281,84 +6281,55 @@ function QuickStartScreen({ onComplete, onSkip }) {
     setPhase("analysing");
     setAnalysisProgress([]);
 
-    const prompt = `You are a senior Decision Quality expert performing a deep-dive analysis of a decision problem.
+    const prompt = `You are a Decision Quality expert. Analyse this input and return a structured first draft.
 
-Read the following input and produce a complete structured first draft for a Decision Quality framing exercise. Be specific — extract real details from the text, not generic placeholders.
-
-=== INPUT ===
+INPUT:
 ${text}
-=== END INPUT ===
 
-Return ONLY valid JSON:
+Return ONLY valid JSON with this exact structure (no extra text, no markdown):
 {
-  "projectName": "short project name from context",
-  "executiveSummary": "2-3 sentence summary reframed through a DQ lens",
+  "projectName": "short project name",
+  "executiveSummary": "2-3 sentence DQ summary",
   "frame": {
-    "decisionStatement": "precise decision statement starting with How should we... or What is the best...",
-    "context": "business context from text",
-    "background": "relevant history or strategic context",
-    "trigger": "what precipitated this decision now",
-    "symptoms": "observable symptoms vs root decision",
+    "decisionStatement": "precise decision statement starting with How should we...",
+    "context": "business context",
+    "background": "relevant history",
+    "trigger": "what caused this decision now",
+    "symptoms": "observable symptoms",
     "rootDecision": "underlying strategic choice",
     "scopeIn": "what is in scope",
-    "scopeOut": "what should be out of scope",
+    "scopeOut": "what is out of scope",
     "timeHorizon": "time horizon",
     "deadline": "decision deadline",
     "owner": "decision owner",
-    "stakeholders": [{"name":"name","role":"role","influence":"High|Medium|Low"}],
+    "stakeholders": [{"name":"name","role":"role","influence":"High"}],
     "constraints": "hard constraints",
-    "assumptions": "stated or implied assumptions",
-    "successCriteria": "what good looks like",
+    "assumptions": "key assumptions",
+    "successCriteria": "what success looks like",
     "failureConsequences": "consequences of poor decision",
     "urgency": "High — Decide within weeks",
     "importance": "Strategically significant",
-    "confidence": "high|medium|low",
-    "confidenceNote": "why this confidence level"
+    "confidence": "high",
+    "confidenceNote": "based on information provided"
   },
   "issues": [
-    {
-      "text": "specific actionable issue statement",
-      "type": "Risk|Opportunity|Constraint|Assumption|Stakeholder Concern|Operational|Financial|Technical|Strategic|Regulatory|Data Gap|Open Question|Dependency",
-      "severity": "Critical|High|Medium|Low",
-      "hat": "Team / Internal|Customer / Market|Competition|Risk / Downside|Regulator / External",
-      "confidence": "high|medium|low",
-      "source": "brief phrase from input that drove this inference"
-    }
+    {"text":"specific issue","category":"uncertainty-external","severity":"High","hat":"Team / Internal","confidence":"high","source":"from input"}
   ],
   "decisions": [
-    {
-      "label": "Decision label",
-      "choices": ["Option A", "Option B", "Option C"],
-      "tier": "given|focus|tactical|deferred|dependency",
-      "owner": "who owns this",
-      "rationale": "why in this tier",
-      "confidence": "high|medium|low"
-    }
+    {"label":"Decision label","choices":["Option A","Option B","Option C"],"tier":"focus","owner":"","rationale":"why this tier","confidence":"high"}
   ],
   "criteria": [
-    {
-      "label": "criterion name",
-      "type": "financial|strategic|operational|risk|commercial|technical",
-      "weight": "high|medium|low",
-      "description": "what this measures",
-      "confidence": "high|medium|low"
-    }
+    {"label":"criterion","type":"financial","weight":"high","description":"what it measures","confidence":"high"}
   ],
   "strategies": [
-    {
-      "name": "Strategy name",
-      "description": "one sentence — what this strategy does",
-      "rationale": "why this is a coherent distinct direction",
-      "keyTheme": "central logic in 4-6 words",
-      "confidence": "high|medium|low"
-    }
+    {"name":"Strategy name","description":"what this strategy does","rationale":"why coherent","keyTheme":"central logic","confidence":"high"}
   ],
-  "dqObservations": ["Key DQ observation about the framing quality"],
-  "weakestLink": "Which DQ element is weakest and why",
-  "recommendedFirstStep": "Single most important thing to do first"
+  "dqObservations": ["Key observation about framing quality"],
+  "weakestLink": "which DQ element is weakest and why",
+  "recommendedFirstStep": "most important immediate action"
 }
 
-Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strategies. Be specific to the actual content.`;
+Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific to the actual content.`;
 
     const progressTimer = setInterval(() => {
       setAnalysisProgress(p => {
