@@ -2611,6 +2611,10 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
   };
 
   const aiValidate = () => {
+    if (strategies.length === 0 || nowDecisions.length === 0) {
+      onAIMsg({ role: "ai", text: "Add strategies and focus decisions before validating." });
+      return;
+    }
     setValidating(true);
     const tableDesc = nowDecisions.map(d => d.label + ": [" + d.choices.join(" / ") + "]").join(" | ");
     const stratDesc = strategies.map(s => {
@@ -2632,8 +2636,15 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
       '"distinctiveness":"high|medium|low","distinctivenessNote":"explanation",' +
       '"recommendations":["rec 1"]}'
     ), (r) => {
+      if (r.error) {
+        onAIMsg({ role: "ai", text: "Validation failed: " + r.error });
+        setValidating(false);
+        return;
+      }
       setValidation(r);
-      onAIMsg({ role: "ai", text: "Validation: " + r.overall + ". " + (r.recommendations?.[0] || "") });
+      const msg = "Validation: " + (r.overall || "complete") + ". Distinctiveness: " +
+        (r.distinctiveness || "—") + ". " + (r.recommendations?.[0] || "");
+      onAIMsg({ role: "ai", text: msg });
       setValidating(false);
     });
   };
@@ -2737,8 +2748,14 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
             {nowDecisions.length === 0 ? (
               <div style={{ padding: "60px 40px", textAlign: "center", margin: 24,
                 border: "1.5px dashed " + DS.canvasMid, borderRadius: 10, color: DS.inkTer }}>
-                <div style={{ fontSize: 14, marginBottom: 8 }}>No Focus decisions yet.</div>
-                <div style={{ fontSize: 12 }}>Go to Decision Hierarchy and set decisions to the Focus tier.</div>
+                <div style={{ fontSize: 14, marginBottom: 8, fontWeight: 700 }}>No Focus decisions yet.</div>
+                <div style={{ fontSize: 12 }}>Go to Decision Hierarchy and assign decisions to the Focus tier.</div>
+              </div>
+            ) : strategies.length === 0 ? (
+              <div style={{ padding: "60px 40px", textAlign: "center", margin: 24,
+                border: "1.5px dashed " + DS.canvasMid, borderRadius: 10, color: DS.inkTer }}>
+                <div style={{ fontSize: 14, marginBottom: 8, fontWeight: 700 }}>No strategies yet.</div>
+                <div style={{ fontSize: 12 }}>Click "New Strategy" above to add one, or use AI Suggest.</div>
               </div>
             ) : (
               <div>
@@ -2755,296 +2772,228 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
                         <strong>{f.strategy}:</strong> {f.issue}
                       </div>
                     ))}
+                    {validation.insight && (
+                      <div style={{ fontSize: 11, color: DS.inkSub, marginTop: 6,
+                        fontStyle: "italic" }}>{validation.insight}</div>
+                    )}
                   </div>
                 )}
 
-                {/* Active strategy banner */}
-                {activeS && activeSData && (() => {
-                  const col = DS.s[activeSData.colorIdx];
-                  return (
-                    <div style={{ margin: "10px 24px 0", padding: "8px 14px",
-                      background: col.soft, border: "1px solid " + col.line,
-                      borderRadius: 7, fontSize: 12, color: col.fill,
-                      fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%",
-                        background: col.fill, flexShrink: 0 }}/>
-                      Editing: {activeSData.name} — click any option below to assign it to this strategy
-                    </div>
-                  );
-                })()}
-
-                {/* Main table */}
-                <div style={{ overflowX: "auto", marginTop: 12 }}>
+                {/* 
+                  LAYOUT: 
+                  - LEFT COLUMN: Strategy name + colour + objective + rationale (sticky)
+                  - TOP HEADER: Each Focus Decision as a column
+                  - CELLS: Options for that decision, highlighted in strategy colour when selected
+                  - ROWS = STRATEGIES (each row is one strategy, same colour throughout)
+                */}
+                <div style={{ overflowX: "auto", marginTop: 14 }}>
                   <table style={{ borderCollapse: "collapse", width: "100%",
-                    minWidth: 220 + strategies.length * 180 }}>
+                    minWidth: 280 + nowDecisions.length * 200 }}>
+
                     <thead>
                       <tr>
-                        <th style={{ width: 220, padding: "10px 16px",
+                        {/* Top-left: Strategy label */}
+                        <th style={{ width: 240, padding: "11px 16px",
                           background: DS.ink, textAlign: "left",
                           fontSize: 10, fontWeight: 700, color: "#5a6175",
                           letterSpacing: .8, textTransform: "uppercase",
-                          borderRight: "1px solid " + DS.border,
+                          borderRight: "2px solid " + DS.border,
                           position: "sticky", left: 0, zIndex: 3 }}>
-                          Decision
+                          Strategy
                         </th>
-                        {strategies.map(s => {
-                          const col = DS.s[s.colorIdx];
-                          const isActive = activeS === s.id;
-                          return (
-                            <th key={s.id}
-                              onClick={() => setActiveS(isActive ? null : s.id)}
-                              style={{ padding: "11px 14px",
-                                background: isActive ? col.fill : DS.ink,
-                                textAlign: "center", cursor: "pointer",
-                                minWidth: 180,
-                                borderLeft: "1px solid " + DS.border,
-                                transition: "background .15s" }}>
-                              <div style={{ display: "flex", alignItems: "center",
-                                justifyContent: "center", gap: 7 }}>
-                                <div style={{ width: 8, height: 8, borderRadius: "50%",
-                                  background: isActive ? "rgba(255,255,255,.5)" : col.fill }}/>
-                                <span style={{ fontSize: 12, fontWeight: 700,
-                                  color: isActive ? "#fff" : col.fill }}>
-                                  {s.name}
+                        {/* Decision columns */}
+                        {nowDecisions.map((d, di) => (
+                          <th key={d.id}
+                            style={{ padding: "12px 16px", background: DS.ink,
+                              textAlign: "center", minWidth: 200,
+                              borderLeft: "1px solid " + DS.border }}>
+                            <div style={{ fontSize: 11, fontWeight: 700,
+                              color: DS.textPri, marginBottom: 3 }}>
+                              {d.label}
+                            </div>
+                            <div style={{ display: "flex", gap: 4,
+                              justifyContent: "center", flexWrap: "wrap" }}>
+                              {d.choices.map((c, ci) => (
+                                <span key={ci} style={{ fontSize: 9,
+                                  padding: "1px 6px", borderRadius: 3,
+                                  background: "#2d3650",
+                                  color: "#8b96b8", fontWeight: 500 }}>
+                                  {c}
                                 </span>
-                                <span style={{ fontSize: 10,
-                                  color: isActive ? "rgba(255,255,255,.5)" : "#5a6175" }}>
-                                  {completeness(s)}%
-                                </span>
-                              </div>
-                            </th>
-                          );
-                        })}
+                              ))}
+                            </div>
+                          </th>
+                        ))}
                       </tr>
                     </thead>
+
                     <tbody>
+                      {strategies.map(s => {
+                        const col = DS.s[s.colorIdx];
+                        const comp = completeness(s);
+                        const isActive = activeS === s.id;
 
-                      {/* Decision rows */}
-                      {nowDecisions.map((d, di) => (
-                        <tr key={d.id} style={{ borderTop: "1px solid " + DS.canvasBdr }}>
-                          {/* Decision label — sticky */}
-                          <td style={{ padding: 0, background: DS.canvasAlt,
-                            borderRight: "1px solid " + DS.canvasBdr,
-                            position: "sticky", left: 0, zIndex: 2,
-                            verticalAlign: "top", minWidth: 220 }}>
-                            <div style={{ padding: "12px 16px" }}>
-                              <div style={{ display: "flex", alignItems: "center",
-                                gap: 7, marginBottom: 8 }}>
-                                <span style={{ width: 20, height: 20, borderRadius: 4,
-                                  background: DS.accent, flexShrink: 0,
-                                  display: "flex", alignItems: "center",
-                                  justifyContent: "center",
-                                  fontSize: 10, color: "#fff", fontWeight: 700 }}>
-                                  {di + 1}
-                                </span>
-                                <span style={{ fontSize: 12, fontWeight: 700,
-                                  color: DS.ink, lineHeight: 1.3 }}>
-                                  {d.label}
-                                </span>
-                              </div>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                                {d.choices.map((c, ci) => (
-                                  <div key={ci} style={{ fontSize: 10, color: DS.inkTer,
-                                    padding: "2px 6px", borderRadius: 3,
-                                    background: DS.canvas,
-                                    border: "1px solid " + DS.canvasBdr }}>
-                                    {c}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </td>
+                        return (
+                          <tr key={s.id}
+                            style={{ borderTop: "1px solid " + DS.canvasBdr }}>
 
-                          {/* Strategy option cells */}
-                          {strategies.map(s => {
-                            const col = DS.s[s.colorIdx];
-                            const isActive = activeS === s.id;
-                            const selectedIdx = s.selections[d.id];
-
-                            return (
-                              <td key={s.id}
-                                style={{ padding: "10px 12px",
-                                  verticalAlign: "top",
-                                  background: selectedIdx !== undefined
-                                    ? isActive ? col.soft : col.soft + "60"
-                                    : DS.canvas,
-                                  borderLeft: "1px solid " + DS.canvasBdr,
-                                  transition: "background .12s" }}>
+                            {/* LEFT: Strategy identity — sticky */}
+                            <td style={{ padding: 0,
+                              background: isActive ? col.soft : DS.canvasAlt,
+                              borderRight: "2px solid " + col.fill,
+                              position: "sticky", left: 0, zIndex: 2,
+                              verticalAlign: "top", minWidth: 240,
+                              transition: "background .12s",
+                              cursor: "pointer" }}
+                              onClick={() => setActiveS(isActive ? null : s.id)}>
+                              <div style={{ padding: "14px 16px" }}>
+                                {/* Strategy header */}
                                 <div style={{ display: "flex",
-                                  flexDirection: "column", gap: 5 }}>
-                                  {d.choices.map((choice, ri) => {
-                                    const isChosen = selectedIdx === ri;
-                                    const otherChose = strategies.filter(
-                                      st => st.id !== s.id && st.selections[d.id] === ri
-                                    );
-                                    return (
-                                      <div key={ri}
-                                        onClick={() => {
-                                          if (activeS === s.id) selectCell(s.id, d.id, ri);
-                                          else setActiveS(s.id);
-                                        }}
-                                        style={{ padding: "8px 10px", borderRadius: 6,
-                                          border: "1.5px solid " + (isChosen ? col.fill : DS.canvasBdr),
-                                          background: isChosen ? col.soft : "transparent",
-                                          cursor: "pointer",
-                                          display: "flex", alignItems: "center", gap: 7,
-                                          opacity: !isActive && !isChosen ? 0.45 : 1,
-                                          transition: "all .1s" }}>
-                                        {/* Checkbox */}
-                                        <div style={{ width: 15, height: 15,
-                                          borderRadius: 4, flexShrink: 0,
-                                          display: "flex", alignItems: "center",
-                                          justifyContent: "center",
-                                          background: isChosen ? col.fill : "transparent",
-                                          border: "1.5px solid " + (isChosen ? col.fill : DS.canvasBdr) }}>
-                                          {isChosen && (
-                                            <svg width="9" height="9" viewBox="0 0 12 12">
-                                              <polyline points="2,6 5,9 10,3"
-                                                fill="none" stroke="#fff"
-                                                strokeWidth="2" strokeLinecap="round"/>
-                                            </svg>
+                                  alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                  <div style={{ width: 10, height: 10,
+                                    borderRadius: "50%", flexShrink: 0,
+                                    background: col.fill,
+                                    boxShadow: isActive ? "0 0 0 3px " + col.line : "none" }}/>
+                                  <span style={{ fontSize: 13, fontWeight: 700,
+                                    color: col.fill, flex: 1, lineHeight: 1.2 }}>
+                                    {s.name}
+                                  </span>
+                                  <span style={{ fontSize: 10,
+                                    fontWeight: 700, color: DS.inkTer }}>
+                                    {comp}%
+                                  </span>
+                                </div>
+
+                                {/* Completeness bar */}
+                                <div style={{ height: 3, background: DS.canvasBdr,
+                                  borderRadius: 2, overflow: "hidden", marginBottom: 10 }}>
+                                  <div style={{ width: comp + "%", height: "100%",
+                                    background: comp === 100 ? DS.success : col.fill,
+                                    borderRadius: 2, transition: "width .3s" }}/>
+                                </div>
+
+                                {/* Objective */}
+                                <div style={{ fontSize: 9, fontWeight: 700,
+                                  color: DS.inkTer, letterSpacing: .5,
+                                  textTransform: "uppercase", marginBottom: 3 }}>
+                                  Objective
+                                </div>
+                                <textarea
+                                  value={s.objective || ""}
+                                  onChange={e => { e.stopPropagation(); updStrategy(s.id, "objective", e.target.value); }}
+                                  onClick={e => e.stopPropagation()}
+                                  placeholder="What this strategy aims to achieve..."
+                                  rows={2}
+                                  style={{ width: "100%", padding: "5px 7px",
+                                    fontSize: 11, fontFamily: "inherit",
+                                    background: DS.canvas,
+                                    border: "1px solid " + DS.canvasBdr,
+                                    borderRadius: 4, color: DS.ink,
+                                    outline: "none", resize: "none",
+                                    lineHeight: 1.4, boxSizing: "border-box",
+                                    marginBottom: 8 }}
+                                  onFocus={e => { e.stopPropagation(); e.target.style.borderColor = col.fill; }}
+                                  onBlur={e => e.target.style.borderColor = DS.canvasBdr}/>
+
+                                {/* Rationale */}
+                                <div style={{ fontSize: 9, fontWeight: 700,
+                                  color: DS.inkTer, letterSpacing: .5,
+                                  textTransform: "uppercase", marginBottom: 3 }}>
+                                  Rationale
+                                </div>
+                                <textarea
+                                  value={s.description || ""}
+                                  onChange={e => { e.stopPropagation(); updStrategy(s.id, "description", e.target.value); }}
+                                  onClick={e => e.stopPropagation()}
+                                  placeholder="Why these choices form a coherent path..."
+                                  rows={3}
+                                  style={{ width: "100%", padding: "5px 7px",
+                                    fontSize: 11, fontFamily: "inherit",
+                                    background: DS.canvas,
+                                    border: "1px solid " + DS.canvasBdr,
+                                    borderRadius: 4, color: DS.ink,
+                                    outline: "none", resize: "none",
+                                    lineHeight: 1.4, boxSizing: "border-box" }}
+                                  onFocus={e => { e.stopPropagation(); e.target.style.borderColor = col.fill; }}
+                                  onBlur={e => e.target.style.borderColor = DS.canvasBdr}/>
+                              </div>
+                            </td>
+
+                            {/* DECISION CELLS — one per focus decision */}
+                            {nowDecisions.map(d => {
+                              const selectedIdx = s.selections[d.id];
+
+                              return (
+                                <td key={d.id}
+                                  style={{ padding: "12px 14px",
+                                    verticalAlign: "top",
+                                    borderLeft: "1px solid " + DS.canvasBdr,
+                                    background: selectedIdx !== undefined
+                                      ? col.soft
+                                      : DS.canvas }}>
+                                  <div style={{ display: "flex",
+                                    flexDirection: "column", gap: 6 }}>
+                                    {d.choices.map((choice, ri) => {
+                                      const isChosen = selectedIdx === ri;
+                                      // Other strategies that also chose this option
+                                      const others = strategies.filter(
+                                        st => st.id !== s.id && st.selections[d.id] === ri
+                                      );
+                                      return (
+                                        <div key={ri}
+                                          onClick={() => selectCell(s.id, d.id, ri)}
+                                          style={{ padding: "9px 12px",
+                                            borderRadius: 7,
+                                            border: isChosen
+                                              ? "2px solid " + col.fill
+                                              : "1.5px solid " + DS.canvasBdr,
+                                            background: isChosen ? col.fill : "transparent",
+                                            cursor: "pointer",
+                                            display: "flex",
+                                            alignItems: "center", gap: 8,
+                                            transition: "all .1s",
+                                            opacity: isChosen ? 1 : 0.65 }}>
+                                          {/* Filled circle when chosen */}
+                                          <div style={{ width: 14, height: 14,
+                                            borderRadius: "50%", flexShrink: 0,
+                                            background: isChosen ? "#fff" : "transparent",
+                                            border: "2px solid " + (isChosen ? "#fff" : col.fill + "60"),
+                                            display: "flex", alignItems: "center",
+                                            justifyContent: "center" }}>
+                                            {isChosen && (
+                                              <div style={{ width: 6, height: 6,
+                                                borderRadius: "50%",
+                                                background: col.fill }}/>
+                                            )}
+                                          </div>
+                                          <span style={{ fontSize: 12, flex: 1,
+                                            fontWeight: isChosen ? 700 : 400,
+                                            color: isChosen ? "#fff" : DS.inkSub,
+                                            lineHeight: 1.3 }}>
+                                            {choice}
+                                          </span>
+                                          {/* Dots showing other strategies with same choice */}
+                                          {others.length > 0 && (
+                                            <div style={{ display: "flex", gap: 2 }}>
+                                              {others.map(os => (
+                                                <div key={os.id} title={os.name}
+                                                  style={{ width: 5, height: 5,
+                                                    borderRadius: "50%",
+                                                    background: DS.s[os.colorIdx].fill,
+                                                    opacity: .8 }}/>
+                                              ))}
+                                            </div>
                                           )}
                                         </div>
-                                        <span style={{ fontSize: 11, flex: 1,
-                                          fontWeight: isChosen ? 700 : 400,
-                                          color: isChosen ? col.fill : DS.inkSub,
-                                          lineHeight: 1.3 }}>
-                                          {choice}
-                                        </span>
-                                        {otherChose.length > 0 && (
-                                          <div style={{ display: "flex", gap: 2 }}>
-                                            {otherChose.map(os => (
-                                              <div key={os.id} title={os.name}
-                                                style={{ width: 5, height: 5,
-                                                  borderRadius: "50%",
-                                                  background: DS.s[os.colorIdx].fill }}/>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-
-                      {/* Objective row */}
-                      <tr style={{ borderTop: "1px solid " + DS.canvasBdr,
-                        background: DS.canvasAlt }}>
-                        <td style={{ padding: "12px 16px", position: "sticky", left: 0,
-                          zIndex: 2, background: DS.canvasAlt,
-                          borderRight: "1px solid " + DS.canvasBdr, verticalAlign: "top" }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
-                            letterSpacing: .6, textTransform: "uppercase",
-                            marginBottom: 2 }}>Objective</div>
-                          <div style={{ fontSize: 10, color: DS.inkDis }}>
-                            What this strategy aims to achieve
-                          </div>
-                        </td>
-                        {strategies.map(s => {
-                          const col = DS.s[s.colorIdx];
-                          return (
-                            <td key={s.id}
-                              style={{ padding: "10px 12px",
-                                borderLeft: "1px solid " + DS.canvasBdr,
-                                verticalAlign: "top" }}>
-                              <textarea
-                                value={s.objective || ""}
-                                onChange={e => updStrategy(s.id, "objective", e.target.value)}
-                                placeholder="e.g. Maximise speed to market while managing risk..."
-                                rows={2}
-                                style={{ width: "100%", padding: "7px 9px",
-                                  fontSize: 11, fontFamily: "inherit",
-                                  background: DS.canvas,
-                                  border: "1px solid " + DS.canvasBdr,
-                                  borderRadius: 5, color: DS.ink,
-                                  outline: "none", resize: "vertical",
-                                  lineHeight: 1.5, boxSizing: "border-box" }}
-                                onFocus={e => e.target.style.borderColor = col.fill}
-                                onBlur={e => e.target.style.borderColor = DS.canvasBdr}/>
-                            </td>
-                          );
-                        })}
-                      </tr>
-
-                      {/* Rationale row */}
-                      <tr style={{ borderTop: "1px solid " + DS.canvasBdr,
-                        background: DS.canvasAlt }}>
-                        <td style={{ padding: "12px 16px", position: "sticky", left: 0,
-                          zIndex: 2, background: DS.canvasAlt,
-                          borderRight: "1px solid " + DS.canvasBdr, verticalAlign: "top" }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
-                            letterSpacing: .6, textTransform: "uppercase",
-                            marginBottom: 2 }}>Rationale</div>
-                          <div style={{ fontSize: 10, color: DS.inkDis }}>
-                            Why these choices form a coherent path
-                          </div>
-                        </td>
-                        {strategies.map(s => {
-                          const col = DS.s[s.colorIdx];
-                          return (
-                            <td key={s.id}
-                              style={{ padding: "10px 12px",
-                                borderLeft: "1px solid " + DS.canvasBdr,
-                                verticalAlign: "top" }}>
-                              <textarea
-                                value={s.description || ""}
-                                onChange={e => updStrategy(s.id, "description", e.target.value)}
-                                placeholder="e.g. This strategy prioritises partnership to reduce capital..."
-                                rows={3}
-                                style={{ width: "100%", padding: "7px 9px",
-                                  fontSize: 11, fontFamily: "inherit",
-                                  background: DS.canvas,
-                                  border: "1px solid " + DS.canvasBdr,
-                                  borderRadius: 5, color: DS.ink,
-                                  outline: "none", resize: "vertical",
-                                  lineHeight: 1.5, boxSizing: "border-box" }}
-                                onFocus={e => e.target.style.borderColor = col.fill}
-                                onBlur={e => e.target.style.borderColor = DS.canvasBdr}/>
-                            </td>
-                          );
-                        })}
-                      </tr>
-
-                      {/* Completeness row */}
-                      <tr style={{ borderTop: "2px solid " + DS.canvasBdr,
-                        background: DS.canvasAlt }}>
-                        <td style={{ padding: "12px 16px", position: "sticky", left: 0,
-                          zIndex: 2, background: DS.canvasAlt,
-                          borderRight: "1px solid " + DS.canvasBdr }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
-                            letterSpacing: .6, textTransform: "uppercase" }}>
-                            Completeness
-                          </div>
-                        </td>
-                        {strategies.map(s => {
-                          const col = DS.s[s.colorIdx];
-                          const comp = completeness(s);
-                          return (
-                            <td key={s.id}
-                              style={{ padding: "12px 14px", textAlign: "center",
-                                borderLeft: "1px solid " + DS.canvasBdr }}>
-                              <div style={{ fontSize: 18, fontWeight: 700,
-                                fontFamily: "'Libre Baskerville',Georgia,serif",
-                                color: comp === 100 ? DS.success : comp > 50 ? DS.warning : col.fill,
-                                marginBottom: 4 }}>
-                                {comp}%
-                              </div>
-                              <div style={{ height: 4, background: DS.canvasBdr,
-                                borderRadius: 2, overflow: "hidden",
-                                width: "80%", margin: "0 auto" }}>
-                                <div style={{ width: comp + "%", height: "100%",
-                                  background: comp === 100 ? DS.success : col.fill,
-                                  borderRadius: 2, transition: "width .4s" }}/>
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-
+                                      );
+                                    })}
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
