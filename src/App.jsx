@@ -64,6 +64,39 @@ const uid = (p="x") => `${p}_${++_seq}_${Math.random().toString(36).slice(2,7)}`
 // Safe prompt builder - avoids template literal issues in nested contexts
 const buildPrompt = (...parts) => parts.filter(Boolean).join(" ");
 
+// ── DQ CONSTITUTION ────────────────────────────────────────────────────────────
+// Injected into every AI prompt to enforce DQ methodology compliance
+const DQ_SYSTEM_BRIEF = [
+  "You are a senior Decision Quality (DQ) expert and facilitator.",
+  "You must strictly follow these DQ principles in every response:",
+  "1. DECISION STATEMENTS must be genuine questions starting with How/What/Which/Should — never solutions or goals.",
+  "2. STRATEGIES must be genuinely distinct — if two strategies share >60% of their choices they are not meaningfully different.",
+  "3. ISSUES must distinguish between: facts (verified), assumptions (treated as true but unverified), uncertainties (unknown), and brutal truths (known but avoided).",
+  "4. FOCUS DECISIONS are the strategic choices that drive strategy design — they must be decisions, not goals or actions.",
+  "5. CRITERIA must reflect what the organisation genuinely values — not just what is easy to measure.",
+  "6. RECOMMENDATIONS must be directly traceable to criteria scores — never assert a recommendation without showing the reasoning chain.",
+  "7. COMMITMENT is a DQ element — flag explicitly when stakeholder alignment is weak or assumed.",
+  "8. NEVER generate content that would mislead the team into thinking they have higher decision quality than they do.",
+  "9. PUSH BACK when asked to do something that would violate DQ principles — explain why and suggest the correct approach.",
+  "10. LABEL clearly: what is fact, what is assumption, what is inference from available data.",
+].join(" ");
+
+// DQ self-check appended to outputs that produce structured recommendations
+const DQ_SELF_CHECK = [
+  "BEFORE returning your response, verify:",
+  "(a) Decision statements are questions not solutions.",
+  "(b) Strategies are genuinely distinct from each other.",
+  "(c) Issues clearly distinguish facts from assumptions from uncertainties.",
+  "(d) Any recommendation is directly traceable to criteria.",
+  "(e) Commitment and stakeholder alignment risks are flagged if relevant.",
+  "If any check fails, correct it before responding.",
+].join(" ");
+
+// Harden any prompt with DQ methodology enforcement
+const dqPrompt = (prompt, includeSelfCheck = true) => {
+  return DQ_SYSTEM_BRIEF + " " + prompt + (includeSelfCheck ? " " + DQ_SELF_CHECK : "");
+};
+
 const useAI = () => {
   const [busy, setBusy] = useState(false);
   const [lastError, setLastError] = useState(null);
@@ -103,7 +136,49 @@ const useAI = () => {
     }
     setBusy(false);
   }, []);
-  return { busy, call, lastError };
+  // DQ output validator — checks AI output against DQ principles
+  const validateDQOutput = useCallback(async (outputType, data, context, onResult) => {
+    const checks = {
+      decisionStatement: (d) => {
+        const stmt = d?.frame?.decisionStatement || d?.decisionStatement || "";
+        const isQuestion = /^(how|what|which|should|where|when|who|why)/i.test(stmt.trim());
+        const isSolution = /^(we should|we will|implement|deploy|use|adopt|choose|select)/i.test(stmt.trim());
+        if (!isQuestion) return "Decision statement is not framed as a question. DQ requires open questions, not predetermined answers.";
+        if (isSolution) return "Decision statement reads as a solution. Reframe as an open question.";
+        return null;
+      },
+      strategies: (d) => {
+        const strats = d?.strategies || [];
+        if (strats.length < 2) return null;
+        // Check distinctiveness
+        for (let i = 0; i < strats.length; i++) {
+          for (let j = i+1; j < strats.length; j++) {
+            const s1 = strats[i]; const s2 = strats[j];
+            if (s1.name && s2.name && s1.name.toLowerCase() === s2.name.toLowerCase())
+              return "Two strategies have identical names — they are not genuinely distinct.";
+          }
+        }
+        return null;
+      },
+      issues: (d) => {
+        const issues = d?.issues || [];
+        const hasBrutal = issues.some(i=>i.category==="brutal-truth");
+        const hasAssumption = issues.some(i=>i.category==="assumption");
+        const hasUncertainty = issues.some(i=>i.category==="uncertainty-external"||i.category==="uncertainty-internal");
+        if (!hasBrutal) return "No brutal truths in generated issues. Good DQ always surfaces uncomfortable realities.";
+        if (!hasAssumption) return "No assumptions identified. Every decision rests on unverified assumptions.";
+        return null;
+      },
+    };
+
+    const check = checks[outputType];
+    if (check) {
+      const warning = check(data);
+      if (warning && onResult) onResult(warning);
+    }
+  }, []);
+
+  return { busy, call, lastError, validateDQOutput };
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -508,7 +583,7 @@ Evaluate strictly. Return ONLY valid JSON:
   "missingElements": ["missing item 1"],
   "executiveSummary": "2-sentence summary of the decision frame quality"
 }`;
-    aiCall(prompt, (r) => {
+    aiCall(dqPrompt(prompt), (r) => {
       upd("aiValidation", r);
       setChecking(false);
       onAIMsg({ role:"ai", text: r.executiveSummary || (r._raw ? r._raw.slice(0,200) : "Validation complete. Check the frame quality panel.") });
@@ -1144,7 +1219,7 @@ function ModuleIssueRaising({ issues, onChange, decisions, onDecisions, criteria
   // ── AI GENERATE ─────────────────────────────────────────────────────────────
   const generate = () => {
     setGenerating(true);
-    aiCall(`You are a Decision Quality facilitator. Generate 12 diverse, specific issues for this decision.
+    aiCall(dqPrompt(`You are a Decision Quality facilitator. Generate 12 diverse, specific issues for this decision. Each issue must be grounded in the actual decision context provided — no generic placeholders.
 
 Decision: "${problem.decisionStatement}"
 Context: "${problem.context}"
@@ -1181,7 +1256,7 @@ Return ONLY JSON:
     setCategorising(true);
     const uncategorised = issues.filter(i=>!i.category||i.category==="focus-decision"&&i.text.length<20);
     const ctx = issues.map(i=>`[${i.id}] "${i.text}" [currently: ${i.category||"unassigned"}]`).join("\n");
-    aiCall(`You are a DQ expert. Review these issues and assign the most accurate DQ category to each.
+    aiCall(dqPrompt(`You are a DQ expert. Review these issues and assign the most accurate DQ category. Distinguish carefully between facts, assumptions, and uncertainties — miscategorising these is a common DQ error.
 
 Categories:
 - focus-decision: strategic choices that must be made now → strategy table columns
@@ -1968,7 +2043,7 @@ function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria,
     setSorting(true);
     const issueCtx = issues.slice(0,16).map(i=>`"${i.text}" [${i.severity}]`).join("\n");
     const decCtx = decisions.map(d=>`"${d.label}" [currently: ${d.tier}]`).join("\n");
-    aiCall(`You are a senior DQ facilitator. Classify these decisions into the correct hierarchy tiers.
+    aiCall(dqPrompt(`You are a senior DQ facilitator. Classify these decisions into the correct hierarchy tiers. IMPORTANT: A FOCUS decision is one that must be made NOW and drives strategy design — not a goal or an action. Flag any item that is framed as a solution rather than a genuine decision.
 
 Tier definitions:
 - given: already decided, locked, board mandate, non-negotiable
@@ -2012,7 +2087,7 @@ Return ONLY JSON:
   const suggestCriteria = () => {
     setSuggestingCrit(true);
     const focusDecs = decisions.filter(d=>d.tier==="focus").map(d=>d.label).join(", ");
-    aiCall(`You are a DQ expert. Suggest 5 decision criteria for evaluating strategies for these focus decisions: ${focusDecs}.
+    aiCall(dqPrompt(`You are a DQ expert. Suggest decision criteria that reflect what the organisation genuinely values — not just what is easy to measure. Each criterion must be evaluable, distinct, and collectively sufficient to differentiate between strategies.ecisions: ${focusDecs}.
 Context: "${issues.slice(0,3).map(i=>i.text).join("; ")}"
 
 Return ONLY JSON:
@@ -2478,7 +2553,7 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
       const path = nowDecisions.map(d=>{ const i=s.selections[d.id]; return i!==undefined?d.choices[i]:"?"; }).join("→");
       return `${s.name}: ${path}`;
     }).join(" | ");
-    aiCall(`You are a DQ strategist. Build 2 genuinely distinct new strategies for this decision.
+    aiCall(dqPrompt(`You are a DQ strategist. Build genuinely distinct strategies — strategies that make DIFFERENT choices on the decisions that matter most. If two strategies share more than 60% of their choices they are not meaningfully different and must be revised. Each strategy must be internally coherent — its choices must form a logical, consistent path.
 Decision: "${problem.decisionStatement}"
 Table columns: ${tableDesc}
 Existing strategies: ${existing||"none"}
@@ -2512,7 +2587,7 @@ Return ONLY JSON:
       const path = nowDecisions.map(d=>{ const i=s.selections[d.id]; return i!==undefined?`${d.label}:${d.choices[i]}`:"MISSING"; }).join(", ");
       return `${s.name}: ${path}`;
     }).join("\\n");
-    aiCall(`You are a DQ expert. Validate these strategies for coherence, completeness, and distinctiveness.
+    aiCall(dqPrompt(`You are a DQ expert. Validate these strategies for coherence, completeness, and distinctiveness.
 Decision: "${problem.decisionStatement}"
 Decisions:\n${tableDesc}
 Strategies:\n${stratDesc}
@@ -3587,7 +3662,7 @@ function ModuleQualitativeAssessment({
       '"scores": [{"strategyName": "exact name", "criterionLabel": "exact label", "score": 4, "rationale": "one sentence"}], ' +
       '"overallInsight": "2 sentences on trade-offs"}';
 
-    aiCall(prompt,
+    aiCall(dqPrompt(prompt),
     (r) => {
       if (r.error) {
         onAIMsg({ role:"ai", text:"Assessment failed: " + r.error });
@@ -3639,7 +3714,7 @@ function ModuleQualitativeAssessment({
       }`
     ).join("\n");
 
-    aiCall(`You are a senior Decision Quality expert writing a decision brief for an executive audience.
+    aiCall(dqPrompt(`You are a senior Decision Quality expert writing a decision brief for an executive audience.
 
 Decision: "${problem.decisionStatement}"
 Owner: "${problem.owner}" | Deadline: "${problem.deadline}"
@@ -4625,7 +4700,7 @@ DQ Scores: ${elementSummary}
 Overall DQ Score: ${overall}/100
 Weakest element: ${weakest.label} (${getScore(weakest.key)}/100)`.trim();
 
-    aiCall(`You are a senior Decision Quality facilitator writing a formal DQ assessment narrative.
+    aiCall(dqPrompt(`You are a senior Decision Quality facilitator writing a formal DQ assessment narrative.
 
 ${contextSummary}
 
@@ -5193,7 +5268,7 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
       `${e.label}: ${dqScores[e.key]||0}/100`
     ).join(" | ");
 
-    aiCall(`You are a senior Decision Quality consultant preparing a complete executive decision package.
+    aiCall(dqPrompt(`You are a senior Decision Quality consultant preparing a complete executive decision package.
 
 Decision: "${problem.decisionStatement}"
 Owner: ${problem.owner} | Deadline: ${problem.deadline}
@@ -5648,7 +5723,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
     setGenerating(true);
     const focusDecs = decisions.filter(d=>d.tier==="focus").map(d=>d.label).join(", ");
     const existingLabels = items.map(i=>i.label).join("; ");
-    aiCall(`You are a DQ uncertainty analyst. Identify key uncertainties for this decision.
+    aiCall(dqPrompt(`You are a DQ uncertainty analyst. Identify key uncertainties for this decision.
 
 Focus decisions: ${focusDecs}
 Existing uncertainties already captured: ${existingLabels||"none"}
@@ -5685,7 +5760,7 @@ Return ONLY JSON:
     setAnalyzing(true);
     const ctx = items.map(u => `"${u.label}" [impact:${u.impact}, control:${u.control}, type:${u.type}]`).join("\n");
     const strats = strategies.map(s => DS.sNames[s.colorIdx]||s.name).join(", ");
-    aiCall(`You are a DQ uncertainty expert. Analyse these uncertainties for this decision.
+    aiCall(dqPrompt(`You are a DQ uncertainty expert. Analyse these uncertainties for this decision.
 
 Uncertainties:\n${ctx}
 Strategies being evaluated: ${strats}
@@ -6647,7 +6722,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies, asses
       return `${DS.sNames[s.colorIdx]||s.name}:${total}pts`;
     }).join(", ");
 
-    aiCall(`You are a senior DQ expert performing a cross-module intelligence audit of a decision framing session.
+    aiCall(dqPrompt(`You are a senior DQ expert performing a cross-module intelligence audit of a decision framing session.
 
 Decision: "${problem.decisionStatement}"
 Frame quality indicators: owner="${problem.owner}", scope-in="${problem.scopeIn?.slice(0,60)}", deadline="${problem.deadline}"
@@ -7131,7 +7206,7 @@ Generate 6-10 issues, 4-8 decisions, 3-6 criteria, 2-3 strategies. Be specific t
       });
     }, 950);
 
-    call(prompt, (result) => {
+    call(dqPrompt(prompt), (result) => {
       clearInterval(progressTimer);
       
       // Handle error
@@ -8325,6 +8400,150 @@ function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, aiBus
   );
 }
 
+/* ── DQ PROCESS GATES ───────────────────────────────────────────────────── */
+// Returns gate warnings for a given module based on current session data
+const getDQGateWarnings = (module, { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores }) => {
+  const warnings = [];
+  const focusDecs = decisions.filter(d=>d.tier==="focus");
+
+  if (module === "problem") {
+    const stmt = problem.decisionStatement || "";
+    // Check decision statement is a question not a solution
+    const startsAsQuestion = /^(how|what|which|should|where|when|who|why)/i.test(stmt.trim());
+    const isSolution = /^(we should|we will|we need to|the answer|the solution|implement|deploy|use|adopt|choose|select)/i.test(stmt.trim());
+    if (stmt.length > 10 && !startsAsQuestion)
+      warnings.push({ level:"error", text:'Decision statement should start with How/What/Which/Should — it looks like a goal or solution, not a decision question.', element:"frame" });
+    if (isSolution)
+      warnings.push({ level:"error", text:'This reads as a predetermined solution, not an open decision. Reframe as a question to preserve genuine strategic choice.', element:"frame" });
+    if (!problem.owner)
+      warnings.push({ level:"warn", text:'No decision owner assigned. Every decision needs a clear owner with authority to decide.', element:"commitment" });
+    if (!problem.scopeIn && !problem.scopeOut)
+      warnings.push({ level:"warn", text:'Scope is undefined. Explicitly stating what is in and out of scope prevents the decision from expanding or contracting unintentionally.', element:"frame" });
+  }
+
+  if (module === "issues") {
+    if (issues.length < 5)
+      warnings.push({ level:"warn", text:`Only ${issues.length} issues raised. Fewer than 5 issues suggests the problem hasn't been fully explored from all stakeholder perspectives.`, element:"information" });
+    const brutals = issues.filter(i=>i.category==="brutal-truth");
+    if (brutals.length === 0 && issues.length >= 5)
+      warnings.push({ level:"warn", text:'No brutal truths raised. Every real decision has uncomfortable realities the team may be avoiding. Surface them now before they surface later.', element:"frame" });
+    const assumptions = issues.filter(i=>i.category==="assumption");
+    if (assumptions.length === 0 && issues.length >= 5)
+      warnings.push({ level:"warn", text:'No assumptions identified. Every decision rests on assumptions — not identifying them is itself a DQ risk.', element:"information" });
+  }
+
+  if (module === "hierarchy") {
+    if (focusDecs.length === 0)
+      warnings.push({ level:"error", text:'No Focus decisions defined. Without at least 2 Focus decisions you cannot build meaningfully distinct strategies.', element:"alternatives" });
+    if (focusDecs.length === 1)
+      warnings.push({ level:"warn", text:'Only 1 Focus decision. Strategies built on a single fork are rarely genuinely distinct. Consider whether there are more strategic choices to surface.', element:"alternatives" });
+    if (criteria.length === 0)
+      warnings.push({ level:"error", text:'No decision criteria defined. Without criteria you cannot evaluate strategies — you would be choosing based on gut feel, not values.', element:"values" });
+    if (criteria.length < 3)
+      warnings.push({ level:"warn", text:`Only ${criteria.length} criteria. A robust qualitative assessment typically needs 4-7 criteria to meaningfully differentiate strategies.`, element:"values" });
+  }
+
+  if (module === "strategy") {
+    if (strategies.length < 2)
+      warnings.push({ level:"error", text:'Fewer than 2 strategies. You need at least 2 genuine alternatives — a single option is a decision already made, not a decision being evaluated.', element:"alternatives" });
+    if (strategies.length >= 2) {
+      // Check for strategies that are too similar
+      strategies.forEach((s1, i) => {
+        strategies.slice(i+1).forEach(s2 => {
+          const sharedKeys = focusDecs.filter(d=>
+            s1.selections[d.id]!==undefined &&
+            s1.selections[d.id]===s2.selections[d.id]
+          ).length;
+          const totalKeys = focusDecs.filter(d=>
+            s1.selections[d.id]!==undefined || s2.selections[d.id]!==undefined
+          ).length;
+          if (totalKeys > 0 && sharedKeys/totalKeys > 0.6)
+            warnings.push({ level:"warn", text:`"${s1.name}" and "${s2.name}" share ${Math.round(sharedKeys/totalKeys*100)}% of their choices — they may not be genuinely distinct strategies. The point of alternatives is real strategic difference.`, element:"alternatives" });
+        });
+      });
+    }
+    const incomplete = strategies.filter(s=>{
+      const filled = focusDecs.filter(d=>s.selections[d.id]!==undefined).length;
+      return focusDecs.length > 0 && filled/focusDecs.length < 0.5;
+    });
+    if (incomplete.length > 0)
+      warnings.push({ level:"warn", text:`${incomplete.map(s=>s.name).join(", ")} ${incomplete.length===1?"is":"are"} less than 50% complete. Incomplete strategies cannot be meaningfully compared.`, element:"alternatives" });
+  }
+
+  if (module === "assessment") {
+    const totalCells = strategies.length * criteria.length;
+    const scoredCells = Object.keys(assessmentScores).length;
+    if (totalCells > 0 && scoredCells < totalCells)
+      warnings.push({ level:"warn", text:`${totalCells-scoredCells} cells unscored. A partial assessment risks producing a biased recommendation — score all strategies on all criteria.`, element:"values" });
+    if (strategies.length >= 2 && criteria.length >= 2) {
+      // Check if all strategies score the same — no differentiation
+      const totals = strategies.map(s=>criteria.reduce((sum,c)=>sum+(assessmentScores[s.id+"__"+c.id]||0),0));
+      const maxDiff = Math.max(...totals) - Math.min(...totals);
+      if (scoredCells === totalCells && maxDiff < 3)
+        warnings.push({ level:"warn", text:'Strategies score nearly identically. Either the criteria are not discriminating or the scoring is undifferentiated — both are DQ problems. Review whether your criteria genuinely reveal differences between strategies.', element:"values" });
+    }
+  }
+
+  if (module === "scorecard") {
+    const commitmentScore = dqScores["commitment"] || 0;
+    if (commitmentScore > 0 && commitmentScore < 50)
+      warnings.push({ level:"error", text:`Commitment scores ${commitmentScore}/100 — the weakest DQ element. A decision without stakeholder commitment will not be implemented. Address alignment issues before archiving this decision.`, element:"commitment" });
+    const minScore = Math.min(...Object.values(dqScores).filter(s=>s>0));
+    const overallDQ = DQ_ELEMENTS.length > 0
+      ? Math.round(DQ_ELEMENTS.reduce((s,e)=>s+(dqScores[e.key]||0),0)/DQ_ELEMENTS.length) : 0;
+    if (overallDQ > 0 && minScore < 35)
+      warnings.push({ level:"error", text:`One DQ element scores below 35/100. The chain is only as strong as its weakest link — a critically weak element degrades the entire decision quality regardless of other scores.`, element:"frame" });
+  }
+
+  return warnings;
+};
+
+// DQ Gate Warning Banner shown at top of each module
+function DQGateWarnings({ warnings }) {
+  const [dismissed, setDismissed] = useState([]);
+  const visible = warnings.filter((_,i)=>!dismissed.includes(i));
+  if (visible.length === 0) return null;
+
+  return (
+    <div style={{ flexShrink:0, borderBottom:`1px solid ${DS.canvasBdr}` }}>
+      {visible.slice(0,3).map((w, i) => (
+        <div key={i} style={{ padding:"9px 16px 9px 14px",
+          background: w.level==="error" ? "#fff5f5" : "#fffbeb",
+          borderLeft:`3px solid ${w.level==="error"?DS.danger:DS.warning}`,
+          display:"flex", alignItems:"flex-start", gap:10 }}>
+          <span style={{ fontSize:12, flexShrink:0, marginTop:1 }}>
+            {w.level==="error" ? "⚠" : "◐"}
+          </span>
+          <div style={{ flex:1 }}>
+            <span style={{ fontSize:11,
+              color: w.level==="error" ? DS.danger : "#92400e",
+              lineHeight:1.5 }}>{w.text}</span>
+            {w.element && (
+              <span style={{ marginLeft:8, fontSize:9, fontWeight:700,
+                color: w.level==="error" ? DS.danger : DS.warning,
+                textTransform:"uppercase", letterSpacing:.6,
+                padding:"1px 5px", borderRadius:3,
+                background: w.level==="error" ? DS.dangerSoft : DS.warnSoft,
+                border:`1px solid ${w.level==="error"?DS.dangerLine:DS.warnLine}` }}>
+                DQ: {w.element}
+              </span>
+            )}
+          </div>
+          <button onClick={()=>setDismissed(d=>[...d,i])}
+            style={{ background:"none", border:"none", cursor:"pointer",
+              color:DS.inkDis, fontSize:14, lineHeight:1, flexShrink:0, padding:2 }}>×</button>
+        </div>
+      ))}
+      {warnings.filter((_,i)=>!dismissed.includes(i)).length > 3 && (
+        <div style={{ padding:"5px 16px", background:"#fffbeb",
+          fontSize:10, color:DS.warning, fontWeight:600 }}>
+          + {warnings.filter((_,i)=>!dismissed.includes(i)).length - 3} more DQ warnings
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── CROSS-MODULE NUDGE SYSTEM ──────────────────────────────────────────── */
 function NudgeBar({ module, issues, decisions, criteria, strategies, assessmentScores, dqScores, onNavigate }) {
   const nudges = [];
@@ -8411,7 +8630,7 @@ export default function App() {
   // Onboarding
   const [onboardingStep, setOnboardingStep] = useState(-1);
 
-  const { busy: aiBusy, call: aiCall } = useAI();
+  const { busy: aiBusy, call: aiCall, validateDQOutput } = useAI();
   const pushAIMsg = (msg) => setAIMessages(m=>[...m, msg]);
 
   // Auto-save
@@ -8489,7 +8708,19 @@ export default function App() {
     }
     setShowQuickStart(false);
     setModule("problem");
-    pushAIMsg({ role:"ai", text:`First draft loaded. Project: "${draft.projectName||"Untitled"}". Review each module and refine with your team.` });
+    // Validate the loaded draft against DQ principles
+    const dqWarnings = [];
+    if (draft.frame?.decisionStatement) {
+      const stmt = draft.frame.decisionStatement;
+      const isQ = /^(how|what|which|should|where|when|who|why)/i.test(stmt.trim());
+      if (!isQ) dqWarnings.push("The AI-generated decision statement may not be well-formed as a DQ question — review it in Problem Definition.");
+    }
+    if (draft.strategies && draft.strategies.length < 2)
+      dqWarnings.push("Fewer than 2 strategies generated — add more alternatives before proceeding to assessment.");
+    const msg = dqWarnings.length > 0
+      ? "First draft loaded. DQ note: " + dqWarnings.join(" | ")
+      : "First draft loaded. Project: " + (draft.projectName||"Untitled") + ". Review each module and refine with your team.";
+    pushAIMsg({ role:"ai", text: msg });
     // Show onboarding after first draft load if not seen before
     try { if (!localStorage.getItem("vantage_onboarded")) setOnboardingStep(0); } catch {}
   };
@@ -8497,7 +8728,7 @@ export default function App() {
   const handleAISend = (text) => {
     pushAIMsg({ role:"user", text });
     const ctx = `Project:"${problem.projectName||problem.decisionStatement}" | Module:${module} | Issues:${issues.length} | Focus:${decisions.filter(d=>d.tier==="focus").length} | Strategies:${strategies.length} | Criteria:${criteria.length}`;
-    aiCall(`You are a DQ expert facilitator. Context: ${ctx}\n\nQuestion: "${text}"\n\nReply in 80 words or less. Plain text only.`,
+    aiCall(`You are a DQ expert facilitator bound by Decision Quality methodology. Context: ${ctx}\n\nQuestion: "${text}"\n\nReply in 80 words or less. Plain text only.`,
       r => pushAIMsg({ role:"ai", text:(r._raw||r.error||(typeof r==="string"?r:JSON.stringify(r))).slice(0,300) })
     );
   };
@@ -8515,6 +8746,9 @@ export default function App() {
   };
 
   const overall = Math.round(MODULES.filter(m=>m.id!=="influence").reduce((s,m)=>s+moduleCompletion(m.id),0)/PHASE1.length);
+
+  // DQ gate warnings for current module
+  const gateWarnings = getDQGateWarnings(module, { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores });
 
   // PDF export
   const handlePDFExport = () => {
@@ -8913,6 +9147,7 @@ export default function App() {
           <div style={{ flex:1, background:DS.canvasAlt, overflow:"hidden",
             display:"flex", flexDirection:"column",
             animation:"fadeIn .2s ease" }} key={module}>
+            <DQGateWarnings warnings={gateWarnings}/>
             {module==="problem"    && <ModuleProblemDefinition    {...moduleProps.problem}/>}
             {module==="issues"     && <ModuleIssueRaising         {...moduleProps.issues}/>}
             {module==="hierarchy"  && <ModuleDecisionHierarchy    {...moduleProps.hierarchy}/>}
