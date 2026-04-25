@@ -2508,16 +2508,11 @@ const defaultStrategies = () => ([
 function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, problem, onAIMsg }) {
   const [mode, setMode] = useState("builder"); // builder | compare | workshop | review
   const [compareSelected, setCompareSelected] = useState({});
-  const [activeS, setActiveS] = useState(strategies[0]?.id || null);
+  const [_activeS, _setActiveS] = useState(strategies[0]?.id || null);
   
-  // Keep activeS in sync when strategies change
-  const strategyIds = strategies.map(s=>s.id).join(",");
-  useEffect(() => {
-    if (strategies.length === 0) { setActiveS(null); return; }
-    if (!activeS || !strategies.find(s=>s.id===activeS)) {
-      setActiveS(strategies[0].id);
-    }
-  }, [strategyIds]); // eslint-disable-line
+  // Derive activeS safely - if stored value no longer exists, fall back to first
+  const activeS = (strategies.find(s=>s.id===_activeS) ? _activeS : strategies[0]?.id) || null;
+  const setActiveS = (id) => _setActiveS(id);
   const [suggesting, setSuggesting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState(null);
