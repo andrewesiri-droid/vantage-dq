@@ -2430,6 +2430,12 @@ const defaultStrategies = () => ([
 function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, problem, onAIMsg }) {
   const [mode, setMode] = useState("builder"); // builder | workshop | review
   const [activeS, setActiveS] = useState(strategies[0]?.id || null);
+  
+  // Keep activeS in sync when strategies change
+  useEffect(() => {
+    if (!activeS && strategies.length > 0) setActiveS(strategies[0].id);
+    if (activeS && !strategies.find(s=>s.id===activeS) && strategies.length > 0) setActiveS(strategies[0].id);
+  }, [strategies]);
   const [suggesting, setSuggesting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState(null);
@@ -2650,37 +2656,45 @@ Return ONLY JSON:
 
                           // Which strategies have selected this cell?
                           const hits = strategies.filter(s=>s.selections[d.id]===ri);
-                          const isSelected = hits.length>0;
-                          const primaryS = hits[0];
-                          const primaryCol = primaryS ? DS.s[primaryS.colorIdx] : null;
-
-                          // Is this cell in an active strategy?
-                          const activeMatch = activeS && hits.find(s=>s.id===activeS);
-                          const isFiltered = activeS && !activeMatch;
+                          const activeHit = hits.find(s=>s.id===activeS);
+                          const isSelectedByActive = !!activeHit;
+                          const isSelectedByOther = hits.length > 0 && !isSelectedByActive;
+                          const primaryCol = activeHit 
+                            ? DS.s[activeHit.colorIdx]
+                            : hits[0] ? DS.s[hits[0].colorIdx] : null;
 
                           return (
-                            <div key={d.id+ri} style={{ opacity:isFiltered?.3:1, transition:"opacity .15s" }}>
+                            <div key={d.id+ri} style={{ transition:"opacity .15s" }}>
                               <div onClick={()=>{ if(activeS) selectCell(activeS,d.id,ri); }}
-                                onContextMenu={e=>{ e.preventDefault(); setSelectedCell({stratId:activeS,decId:d.id}); }}
                                 style={{ padding:"10px 13px", borderRadius:7,
-                                  border:`1.5px solid ${isSelected&&!isFiltered ? primaryCol.fill : DS.canvasBdr}`,
-                                  background: isSelected&&!isFiltered ? primaryCol.soft : DS.canvas,
+                                  border:`1.5px solid ${isSelectedByActive ? primaryCol.fill : hits.length>0 ? DS.canvasBdr : DS.canvasBdr}`,
+                                  background: isSelectedByActive ? primaryCol.soft : DS.canvas,
                                   cursor: activeS?"pointer":"default",
                                   display:"flex", alignItems:"center", gap:8,
-                                  boxShadow: isSelected&&!isFiltered ? `0 0 0 3px ${primaryCol.line}40` : "0 1px 2px rgba(0,0,0,.04)",
-                                  transition:"all .12s", minHeight:46 }}>
-                                {isSelected&&!isFiltered && (
+                                  boxShadow: isSelectedByActive ? `0 0 0 3px ${primaryCol.line}40` : "0 1px 2px rgba(0,0,0,.04)",
+                                  transition:"all .12s", minHeight:46,
+                                  outline: isSelectedByActive ? `2px solid ${primaryCol.fill}` : "none" }}>
+                                {/* Active strategy dot */}
+                                {isSelectedByActive && (
                                   <div style={{ width:8,height:8,borderRadius:"50%",
                                     background:primaryCol.fill,flexShrink:0 }}/>
                                 )}
-                                <span style={{ fontSize:12, color:isSelected&&!isFiltered?DS.ink:DS.inkSub,
+                                <span style={{ fontSize:12, 
+                                  color: isSelectedByActive ? DS.ink : DS.inkSub,
+                                  fontWeight: isSelectedByActive ? 700 : 400,
                                   flex:1, lineHeight:1.4 }}>{choice}</span>
-                                {/* Multi-strategy dots */}
-                                {hits.length>1 && (
-                                  <div style={{ display:"flex",gap:3 }}>
-                                    {hits.slice(1).map(s=>(
-                                      <div key={s.id} style={{ width:5,height:5,borderRadius:"50%",
-                                        background:DS.s[s.colorIdx].fill }}/>
+                                {/* All strategy dots - show ALL strategies that selected this cell */}
+                                {hits.length > 0 && (
+                                  <div style={{ display:"flex", gap:3, alignItems:"center" }}>
+                                    {hits.map(s=>(
+                                      <div key={s.id} 
+                                        title={s.name}
+                                        style={{ width: s.id===activeS?8:5, 
+                                          height: s.id===activeS?8:5, 
+                                          borderRadius:"50%",
+                                          background:DS.s[s.colorIdx].fill,
+                                          border: s.id===activeS?`1.5px solid white`:"none",
+                                          flexShrink:0 }}/>
                                     ))}
                                   </div>
                                 )}
