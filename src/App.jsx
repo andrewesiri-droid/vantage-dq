@@ -5713,6 +5713,37 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   }, [issues]);
 
   const add = (item) => setItems(p => [...p, { id: uid("u"), x:300, y:200, ...item }]);
+
+  // Diagram drag state
+  const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
+
+  const onDiagMouseDown = (e, itemId) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const item = items.find(i=>i.id===itemId);
+    if (!item) return;
+    dragRef.current = { dragging:true, id:itemId, startX:e.clientX, startY:e.clientY, origX:item.x, origY:item.y };
+  };
+
+  const onDiagMouseMove = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    const newX = Math.max(0, d.origX + (e.clientX - d.startX));
+    const newY = Math.max(0, d.origY + (e.clientY - d.startY));
+    setItems(prev => prev.map(i => i.id===d.id ? {...i, x:newX, y:newY} : i));
+  };
+
+  const onDiagMouseUp = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    const dx = Math.abs(e.clientX - d.startX);
+    const dy = Math.abs(e.clientY - d.startY);
+    if (dx < 5 && dy < 5) {
+      if (linkMode) handleLink(d.id);
+      else setSelected(sel => sel===d.id ? null : d.id);
+    }
+    dragRef.current = { ...dragRef.current, dragging:false };
+  };
   const upd = (id, key, val) => setItems(p => p.map(u => u.id===id ? {...u,[key]:val} : u));
   const remove = (id) => {
     setItems(p => p.filter(u => u.id!==id));
@@ -5909,48 +5940,7 @@ Return ONLY JSON:
       )}
 
       {/* ── DIAGRAM VIEW ── */}
-      {view==="diagram" && (() => {
-        // Drag state — stored in refs so no re-render during drag
-        const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
-
-        const onMouseDown = (e, itemId) => {
-          if (linkMode) return;
-          if (e.button !== 0) return;
-          e.preventDefault();
-          e.stopPropagation();
-          const item = items.find(i=>i.id===itemId);
-          if (!item) return;
-          dragRef.current = { dragging:true, id:itemId, startX:e.clientX, startY:e.clientY, origX:item.x, origY:item.y };
-        };
-
-        const onMouseMove = (e) => {
-          const d = dragRef.current;
-          if (!d.dragging) return;
-          const dx = e.clientX - d.startX;
-          const dy = e.clientY - d.startY;
-          const newX = Math.max(0, d.origX + dx);
-          const newY = Math.max(0, d.origY + dy);
-          setItems(prev => prev.map(i => i.id===d.id ? {...i, x:newX, y:newY} : i));
-        };
-
-        const onMouseUp = (e) => {
-          const d = dragRef.current;
-          if (!d.dragging) return;
-          // Check if it was a click (tiny movement) vs a drag
-          const dx = Math.abs(e.clientX - d.startX);
-          const dy = Math.abs(e.clientY - d.startY);
-          if (dx < 5 && dy < 5) {
-            // It was a click
-            if (linkMode) handleLink(d.id);
-            else setSelected(sel => sel===d.id ? null : d.id);
-          }
-          dragRef.current = { ...dragRef.current, dragging:false };
-        };
-
-        const CANVAS_W = Math.max(900, items.reduce((m,i)=>Math.max(m,i.x+220),900));
-        const CANVAS_H = Math.max(600, items.reduce((m,i)=>Math.max(m,i.y+120),600));
-
-        return (
+      {view==="diagram" && (
           <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
             {/* Toolbar */}
             <div style={{ padding:"8px 20px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`,
@@ -5985,9 +5975,9 @@ Return ONLY JSON:
             <div style={{ flex:1, overflow:"auto", background:"#f8f9fb",
               backgroundImage:"radial-gradient(circle, #d0d4e0 1px, transparent 1px)",
               backgroundSize:"24px 24px" }}
-              onMouseMove={onMouseMove}
-              onMouseUp={onMouseUp}
-              onMouseLeave={onMouseUp}>
+              onMouseMove={onDiagMouseMove}
+              onMouseUp={onDiagMouseUp}
+              onMouseLeave={onDiagMouseUp}>
               <div style={{ position:"relative", width:CANVAS_W, height:CANVAS_H, minWidth:"100%", minHeight:"100%" }}>
 
                 {/* SVG arrows layer */}
@@ -6035,7 +6025,7 @@ Return ONLY JSON:
 
                   return (
                     <div key={item.id}
-                      onMouseDown={e=>onMouseDown(e, item.id)}
+                      onMouseDown={e=>onDiagMouseDown(e, item.id)}
                       onClick={e=>{ if(linkMode){ e.stopPropagation(); handleLink(item.id); }}}
                       style={{
                         position:"absolute", left:item.x, top:item.y,
@@ -6111,8 +6101,7 @@ Return ONLY JSON:
               </div>
             </div>
           </div>
-        );
-      })()}
+      )}
 
       {/* ── DRIVERS VIEW ── */}
       {view==="drivers" && (
