@@ -8387,8 +8387,8 @@ function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, aiBus
                 border:"none", borderBottom: i<items.length-1?`1px solid ${DS.border}`:"none",
                 cursor:"pointer", display:"flex", alignItems:"center", gap:10,
                 fontFamily:"inherit", textAlign:"left", transition:"background .1s" }}
-              onMouseEnter={e=>e.currentTarget.style.background=DS.chromeMid}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              onMouseEnter={e=>{ e.currentTarget.style.background=DS.chromeMid; }}
+              onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; }}>
               <span style={{ fontSize:14, flexShrink:0 }}>{item.icon}</span>
               <div>
                 <div style={{ fontSize:12, fontWeight:600, color:DS.textSec }}>{item.label}</div>
@@ -8938,8 +8938,8 @@ export default function App() {
             style={{ padding:"11px 16px", borderBottom:`1px solid ${DS.border}`,
               background:"transparent", border:"none", borderBottom:`1px solid ${DS.border}`,
               cursor:"pointer", textAlign:"left", width:"100%", transition:"background .12s" }}
-            onMouseEnter={e=>e.currentTarget.style.background=DS.chromeMid}
-            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            onMouseEnter={e=>{ e.currentTarget.style.background=DS.chromeMid; }}
+            onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; }}>
             <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
               textTransform:"uppercase", marginBottom:4 }}>Active Project</div>
             <div style={{ fontSize:11, fontWeight:700, color:DS.textPri, lineHeight:1.35,
@@ -9084,8 +9084,8 @@ export default function App() {
               cursor:"pointer", display:"flex", alignItems:"center",
               gap:10, textAlign:"left", marginTop:4,
               opacity:.7, transition:"opacity .1s" }}
-            onMouseEnter={e=>e.currentTarget.style.opacity="1"}
-            onMouseLeave={e=>e.currentTarget.style.opacity=".7"}>
+            onMouseEnter={e=>{ e.currentTarget.style.opacity=1; }}
+            onMouseLeave={e=>{ e.currentTarget.style.opacity=0.7; }}>
             <span style={{ fontSize:16, flexShrink:0, width:20,
               textAlign:"center", color:DS.accent }}>+</span>
             {!navCollapsed && (
