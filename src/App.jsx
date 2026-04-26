@@ -6598,8 +6598,6 @@ const loadVersions = () => {
 
 function VersionPanel({ currentData, onRestore, onClose }) {
   const [versions, setVersions]     = useState(loadVersions);
-  const [customTabs, setCustomTabs] = useState([]);
-  const [showTabPicker, setShowTabPicker] = useState(false);
   const [label, setLabel]           = useState("");
   const [confirmRestore, setConfirm] = useState(null);
 
@@ -8698,6 +8696,8 @@ function NudgeBar({ module, issues, decisions, criteria, strategies, assessmentS
 /* ── MAIN APP ─────────────────────────────────────────────────────────────── */
 export default function App() {
   const [module, setModule]               = useState("problem");
+  const [customTabs, setCustomTabs]       = useState([]);
+  const [showTabPicker, setShowTabPicker] = useState(false);
   const [problem, setProblem]             = useState(defaultProblem);
   const [issues, setIssues]               = useState(defaultIssues);
   const [decisions, setDecisions]         = useState(defaultDecisions);
