@@ -7502,35 +7502,81 @@ function QuickStartScreen({ onComplete, onSkip }) {
           </div>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:32 }}>
+        {/* ── Three start paths ── */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:28 }}>
+
+          {/* Path 1 — AI Deep Dive */}
           {[
-            { mode:"paste", emoji:"📄", title:"Paste or drop text",
-              desc:"Board paper, strategy memo, brief, case study, email thread, or any description of the decision problem." },
-            { mode:"guided", emoji:"🗂", title:"Answer 5 questions",
-              desc:"No document? Answer five quick questions about the decision and we'll structure the draft from your answers." },
+            { mode:"paste",   icon:"📄", title:"AI Deep Dive",
+              sub:"Best for most sessions",
+              desc:"Paste any brief, memo, or problem description. The AI reads it through a DQ lens and populates all modules in seconds.",
+              accent: DS.accent },
+            { mode:"guided",  icon:"🗂", title:"Guided Questions",
+              sub:"No document? Start here",
+              desc:"Answer 5 structured questions about the decision. We build your first draft from your answers.",
+              accent: "#7c3aed" },
           ].map(opt => (
-            <button key={opt.mode} onClick={()=>{ setInputMode(opt.mode); setPhase("input"); }}
-              style={{ padding:"22px 22px", background:DS.chromeMid, border:`1.5px solid ${DS.borderMid}`,
-                borderRadius:10, cursor:"pointer", textAlign:"left", transition:"all .15s", fontFamily:"inherit" }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=DS.accent; e.currentTarget.style.background=DS.chromeSub;}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.borderMid; e.currentTarget.style.background=DS.chromeMid;}}>
-              <div style={{ fontSize:24, marginBottom:11 }}>{opt.emoji}</div>
-              <div style={{ fontSize:13, fontWeight:700, color:DS.textPri, marginBottom:6 }}>{opt.title}</div>
-              <div style={{ fontSize:11, color:DS.textTer, lineHeight:1.55 }}>{opt.desc}</div>
+            <button key={opt.mode}
+              onClick={()=>{ setInputMode(opt.mode); setPhase("input"); }}
+              style={{ padding:"20px 18px", background:DS.chromeMid,
+                border:"1.5px solid "+DS.borderMid,
+                borderRadius:10, cursor:"pointer", textAlign:"left",
+                transition:"all .15s", fontFamily:"inherit" }}
+              onMouseEnter={e=>{ e.currentTarget.style.borderColor=opt.accent; e.currentTarget.style.background=DS.chromeSub; }}
+              onMouseLeave={e=>{ e.currentTarget.style.borderColor=DS.borderMid; e.currentTarget.style.background=DS.chromeMid; }}>
+              <div style={{ fontSize:22, marginBottom:8 }}>{opt.icon}</div>
+              <div style={{ fontSize:12, fontWeight:700, color:DS.textPri, marginBottom:2 }}>{opt.title}</div>
+              <div style={{ fontSize:9, fontWeight:700, color:opt.accent, letterSpacing:.5,
+                textTransform:"uppercase", marginBottom:8 }}>{opt.sub}</div>
+              <div style={{ fontSize:10, color:DS.textTer, lineHeight:1.6 }}>{opt.desc}</div>
             </button>
           ))}
+
+          {/* Path 3 — Start Clean */}
+          <button
+            onClick={()=>{
+              if (window.confirm("Start with completely empty modules? You can always load an example later from the Tools menu.")) {
+                onSkip("clean");
+              }
+            }}
+            style={{ padding:"20px 18px", background:"transparent",
+              border:"1.5px dashed "+DS.border,
+              borderRadius:10, cursor:"pointer", textAlign:"left",
+              transition:"all .15s", fontFamily:"inherit" }}
+            onMouseEnter={e=>{ e.currentTarget.style.borderColor=DS.textSec; e.currentTarget.style.background=DS.chromeMid; }}
+            onMouseLeave={e=>{ e.currentTarget.style.borderColor=DS.border; e.currentTarget.style.background="transparent"; }}>
+            <div style={{ fontSize:22, marginBottom:8 }}>◎</div>
+            <div style={{ fontSize:12, fontWeight:700, color:DS.textPri, marginBottom:2 }}>Start Clean</div>
+            <div style={{ fontSize:9, fontWeight:700, color:DS.textTer, letterSpacing:.5,
+              textTransform:"uppercase", marginBottom:8 }}>Blank canvas</div>
+            <div style={{ fontSize:10, color:DS.textTer, lineHeight:1.6 }}>
+              Begin with empty modules. Fill in the Problem Definition yourself and build everything from scratch.
+            </div>
+          </button>
         </div>
 
-        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-          <button onClick={onSkip}
-            style={{ background:"none", border:"none", cursor:"pointer", color:DS.textTer,
-              fontSize:12, fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
-              padding:"8px 0" }}>
-            <Svg path={ICONS.chevR} size={13} color={DS.textTer}/>
-            Skip — start with the example project
+        {/* Path 4 — Load example */}
+        <div style={{ padding:"14px 18px", background:DS.chromeMid,
+          border:"1px solid "+DS.border, borderRadius:8,
+          display:"flex", alignItems:"center", gap:14 }}>
+          <div style={{ fontSize:20, flexShrink:0 }}>🏢</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:DS.textPri, marginBottom:2 }}>
+              Load Pre-built Example
+            </div>
+            <div style={{ fontSize:10, color:DS.textTer }}>
+              APAC market entry case — fully populated with frame, issues, decisions, strategies, and assessment. Explore the platform with real content.
+            </div>
+          </div>
+          <button onClick={()=>onSkip("example")}
+            style={{ padding:"8px 18px", background:DS.accent, border:"none",
+              borderRadius:6, color:"#fff", fontSize:11, fontWeight:700,
+              cursor:"pointer", fontFamily:"inherit", flexShrink:0,
+              transition:"background .12s" }}
+            onMouseEnter={e=>{ e.currentTarget.style.background=DS.accentDim; }}
+            onMouseLeave={e=>{ e.currentTarget.style.background=DS.accent; }}>
+            Load Example →
           </button>
-          <div style={{ height:1, flex:1, background:DS.border }}/>
-          <div style={{ fontSize:10, color:DS.textTer }}>Pre-loaded with an APAC market entry case</div>
         </div>
       </div>
     </div>
