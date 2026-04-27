@@ -5854,7 +5854,7 @@ Return ONLY valid JSON:
 
 const IMPACT_LEVELS      = ["Critical","High","Medium","Low"];
 const CONTROL_LEVELS     = ["High Control","Some Control","Low Control","No Control"];
-const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Competitive","Operational","Political","Stakeholder"
+const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Competitive","Operational","Political","Stakeholder"];
 
 
 function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg }) {
@@ -9149,6 +9149,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies, asses
 /* ── MAIN APP ─────────────────────────────────── */
 
 
+const HARDCODED_API_KEY = null;
 export default function App() {
   const [module, setModule]               = useState("problem");
   const [customTabs, setCustomTabs]       = useState([]);
@@ -9524,7 +9525,7 @@ export default function App() {
       <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
 
         {/* API key warning */}
-        {!import.meta.env.VITE_ANTHROPIC_API_KEY && !HARDCODED_API_KEY && (
+        {!false && !HARDCODED_API_KEY && (
           <div style={{ padding:"8px 16px", background:"#7c3aed22", borderBottom:"1px solid #7c3aed44",
             display:"flex", alignItems:"center", gap:8, flexShrink:0, fontSize:11, color:"#a78bfa" }}>
             <span>⚠</span>
