@@ -2621,8 +2621,8 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
       "Decision: " + (problem.decisionStatement || "Not defined") + ". " +
       "Focus decisions with options (use option index numbers in selections array): " + decList + ". " +
       "Existing strategies to avoid duplicating: " + existingList + ". " +
-      "Return ONLY a JSON object with this exact structure: " +
-      "{"strategies":[{"name":"Strategy name","description":"What this strategy does in one sentence","objective":"What it aims to achieve","selections":[0,1,0],"rationale":"Why these choices form a coherent path"}],"insight":"Key observation about the strategic options"}. " +
+      "Return ONLY a JSON object with this exact structure (use double quotes inside): " +
+      '{"strategies":[{"name":"Strategy name","description":"one sentence","objective":"goal","selections":[0,1,0],"rationale":"why coherent"}],"insight":"observation"}. ' +
       "The selections array must have exactly " + nowDecisions.length + " numbers, one per decision above (0-based index of chosen option).",
     (r) => {
       let result = r;
