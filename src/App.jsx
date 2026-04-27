@@ -8262,6 +8262,136 @@ function NudgeBar({ module, issues, decisions, criteria, strategies, assessmentS
   );
 }
 
+
+function CrossModuleAI({ problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, aiCall, aiBusy, onClose }) {
+  const [running, setRunning] = useState(false);
+  const [insights, setInsights] = useState(null);
+
+  const run = () => {
+    setRunning(true);
+    const focusDecs = decisions.filter(d=>d.tier==="focus");
+    const scored = Object.keys(assessmentScores).length;
+    const dqOverall = Object.values(dqScores).filter(s=>s>0).length > 0
+      ? Math.round(Object.values(dqScores).reduce((a,b)=>a+b,0)/Object.values(dqScores).filter(s=>s>0).length)
+      : 0;
+
+    aiCall(dqPrompt(
+      "You are a senior DQ expert performing a cross-module intelligence audit. " +
+      "Decision: " + (problem.decisionStatement||"Not defined") + ". " +
+      "Frame quality: owner=" + (problem.owner?"set":"missing") + ", scope=" + (problem.scopeIn?"set":"missing") + ". " +
+      "Issues: " + issues.length + " raised, " + issues.filter(i=>i.category==="brutal-truth").length + " brutal truths, " + issues.filter(i=>i.category==="assumption").length + " assumptions. " +
+      "Hierarchy: " + focusDecs.length + " focus decisions, " + criteria.length + " criteria. " +
+      "Strategies: " + strategies.length + " built, completeness varies. " +
+      "Assessment: " + scored + " cells scored. " +
+      "DQ Scores: " + Object.entries(dqScores).map(([k,v])=>k+":"+v).join(", ") + ". " +
+      "Analyse coherence across all modules. Identify gaps between modules. " +
+      'Return ONLY JSON: {"sessionCoherenceScore":72,"coherenceAnalysis":"2 sentences","moduleGaps":[{"module":"issues","gap":"desc","severity":"high"}],"crossModuleInsights":["insight 1"],"recommendedFocus":"what to work on next","facilitatorNotes":"practical note"}'
+    ), (r) => {
+      let result = r;
+      if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setRunning(false); return; } }
+      setInsights(result);
+      setRunning(false);
+    });
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)",
+      display:"flex", alignItems:"center", justifyContent:"center", zIndex:8000 }}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ width:"100%", maxWidth:620, background:DS.canvas,
+        borderRadius:14, boxShadow:"0 24px 64px rgba(0,0,0,.25)",
+        overflow:"hidden", maxHeight:"85vh", display:"flex", flexDirection:"column" }}>
+        <div style={{ padding:"20px 24px", borderBottom:"1px solid "+DS.canvasBdr,
+          display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:16, fontWeight:700, color:DS.ink }}>Cross-Module AI Analysis</div>
+            <div style={{ fontSize:11, color:DS.inkTer }}>Session coherence audit across all 8 modules</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none",
+            cursor:"pointer", color:DS.inkTer, fontSize:18 }}>×</button>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
+          {!insights ? (
+            <div style={{ textAlign:"center", padding:"32px 0" }}>
+              <div style={{ fontSize:13, color:DS.inkSub, marginBottom:20, lineHeight:1.7 }}>
+                Analyses coherence across all modules — checks if issues connect to decisions,
+                strategies address key uncertainties, and the frame remains valid.
+              </div>
+              <Btn variant="primary" icon="spark" onClick={run} disabled={running||aiBusy}>
+                {running?"Analysing…":"Run Cross-Module Analysis"}
+              </Btn>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20,
+                padding:"16px 18px", background:DS.accentSoft,
+                border:"1px solid "+DS.accentLine, borderRadius:10 }}>
+                <div style={{ fontFamily:"'Libre Baskerville',serif",
+                  fontSize:36, fontWeight:700, color:DS.accent }}>
+                  {insights.sessionCoherenceScore}
+                </div>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>Session Coherence Score</div>
+                  <div style={{ fontSize:11, color:DS.inkSub }}>{insights.coherenceAnalysis}</div>
+                </div>
+              </div>
+              {insights.moduleGaps?.length > 0 && (
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    letterSpacing:.6, textTransform:"uppercase", marginBottom:8 }}>Module Gaps</div>
+                  {insights.moduleGaps.map((g,i)=>(
+                    <div key={i} style={{ padding:"10px 14px", marginBottom:6,
+                      background:g.severity==="high"?DS.dangerSoft:DS.warnSoft,
+                      border:"1px solid "+(g.severity==="high"?DS.dangerLine:DS.warnLine),
+                      borderRadius:7, fontSize:12 }}>
+                      <strong style={{ textTransform:"capitalize" }}>{g.module}:</strong> {g.gap}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {insights.crossModuleInsights?.length > 0 && (
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    letterSpacing:.6, textTransform:"uppercase", marginBottom:8 }}>Key Insights</div>
+                  {insights.crossModuleInsights.map((ins,i)=>(
+                    <div key={i} style={{ padding:"8px 12px", marginBottom:5,
+                      background:DS.canvasAlt, border:"1px solid "+DS.canvasBdr,
+                      borderRadius:6, fontSize:12, color:DS.ink }}>
+                      · {ins}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {insights.recommendedFocus && (
+                <div style={{ padding:"14px 16px", background:DS.successSoft,
+                  border:"1px solid "+DS.successLine, borderRadius:8, marginBottom:12 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.success,
+                    letterSpacing:.6, textTransform:"uppercase", marginBottom:4 }}>
+                    Recommended Focus
+                  </div>
+                  <div style={{ fontSize:12, color:DS.ink }}>{insights.recommendedFocus}</div>
+                </div>
+              )}
+              {insights.facilitatorNotes && (
+                <div style={{ fontSize:11, color:DS.inkSub, fontStyle:"italic",
+                  padding:"10px 14px", background:DS.canvasAlt,
+                  borderRadius:7, border:"1px solid "+DS.canvasBdr }}>
+                  Facilitator note: {insights.facilitatorNotes}
+                </div>
+              )}
+              <div style={{ marginTop:16, textAlign:"center" }}>
+                <Btn variant="secondary" size="sm" onClick={()=>{ setInsights(null); }}>
+                  Run Again
+                </Btn>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── MAIN APP ─────────────────────────────────────────────────────────────── */
 export default function App() {
   const [module, setModule]               = useState("problem");
