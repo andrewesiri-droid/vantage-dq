@@ -2526,6 +2526,8 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
   const [newDecLabel, setNewDecLabel] = useState("");
   const [showAddDec, setShowAddDec] = useState(false);
 
+  const [editingDec, setEditingDec] = useState(null); // decId being edited
+
   const addFocusDecision = () => {
     const label = newDecLabel.trim();
     if (!label) return;
@@ -2537,7 +2539,32 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
     onChange2([...decisions, nd]);
     setNewDecLabel("");
     setShowAddDec(false);
+    setEditingDec(nd.id); // immediately open for editing
   };
+
+  const updateDecision = (decId, patch) =>
+    onChange2(decisions.map(d => d.id === decId ? { ...d, ...patch } : d));
+
+  const updateChoice = (decId, choiceIdx, val) =>
+    onChange2(decisions.map(d => {
+      if (d.id !== decId) return d;
+      const choices = [...d.choices];
+      choices[choiceIdx] = val;
+      return { ...d, choices };
+    }));
+
+  const addChoice = (decId) =>
+    onChange2(decisions.map(d => d.id !== decId ? d :
+      { ...d, choices: [...d.choices, "Option " + String.fromCharCode(65 + d.choices.length)] }
+    ));
+
+  const removeChoice = (decId, choiceIdx) =>
+    onChange2(decisions.map(d => d.id !== decId ? d :
+      { ...d, choices: d.choices.filter((_, i) => i !== choiceIdx) }
+    ));
+
+  const removeDecision = (decId) =>
+    onChange2(decisions.filter(d => d.id !== decId));
 
   const addStrategy = () => {
     const used = strategies.map(s => s.colorIdx);
@@ -2883,24 +2910,91 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
                         {/* Decision columns */}
                         {nowDecisions.map((d, di) => (
                           <th key={d.id}
-                            style={{ padding: "12px 16px", background: DS.ink,
-                              textAlign: "center", minWidth: 200,
-                              borderLeft: "1px solid " + DS.border }}>
-                            <div style={{ fontSize: 11, fontWeight: 700,
-                              color: DS.textPri, marginBottom: 3 }}>
-                              {d.label}
-                            </div>
-                            <div style={{ display: "flex", gap: 4,
-                              justifyContent: "center", flexWrap: "wrap" }}>
-                              {d.choices.map((c, ci) => (
-                                <span key={ci} style={{ fontSize: 9,
-                                  padding: "1px 6px", borderRadius: 3,
-                                  background: "#2d3650",
-                                  color: "#8b96b8", fontWeight: 500 }}>
-                                  {c}
-                                </span>
-                              ))}
-                            </div>
+                            style={{ padding: "10px 12px", background: DS.ink,
+                              textAlign: "left", minWidth: 220,
+                              borderLeft: "1px solid " + DS.border,
+                              verticalAlign: "top" }}>
+                            {editingDec === d.id ? (
+                              /* Editing mode */
+                              <div onClick={e=>e.stopPropagation()}>
+                                <input
+                                  value={d.label}
+                                  onChange={e=>updateDecision(d.id, {label:e.target.value})}
+                                  style={{ width:"100%", padding:"4px 7px", fontSize:11,
+                                    fontFamily:"inherit", background:"#2d3650",
+                                    border:"1px solid "+DS.accent, borderRadius:4,
+                                    color:"#fff", outline:"none", marginBottom:6,
+                                    boxSizing:"border-box" }}/>
+                                {d.choices.map((c, ci) => (
+                                  <div key={ci} style={{ display:"flex", gap:4,
+                                    alignItems:"center", marginBottom:4 }}>
+                                    <input
+                                      value={c}
+                                      onChange={e=>updateChoice(d.id, ci, e.target.value)}
+                                      style={{ flex:1, padding:"3px 6px", fontSize:10,
+                                        fontFamily:"inherit", background:"#1e2433",
+                                        border:"1px solid #3d4d6b", borderRadius:3,
+                                        color:"#e0e4f0", outline:"none" }}/>
+                                    {d.choices.length > 2 && (
+                                      <button onClick={()=>removeChoice(d.id, ci)}
+                                        style={{ background:"none", border:"none",
+                                          cursor:"pointer", color:"#dc2626",
+                                          fontSize:12, padding:"0 3px" }}>×</button>
+                                    )}
+                                  </div>
+                                ))}
+                                <div style={{ display:"flex", gap:6, marginTop:4 }}>
+                                  <button onClick={()=>addChoice(d.id)}
+                                    style={{ fontSize:9, padding:"2px 7px",
+                                      background:"#2d3650", border:"1px solid #3d4d6b",
+                                      borderRadius:3, color:"#8b96b8",
+                                      cursor:"pointer", fontFamily:"inherit" }}>
+                                    + Option
+                                  </button>
+                                  <button onClick={()=>removeDecision(d.id)}
+                                    style={{ fontSize:9, padding:"2px 7px",
+                                      background:"none", border:"1px solid #dc262640",
+                                      borderRadius:3, color:"#dc2626",
+                                      cursor:"pointer", fontFamily:"inherit" }}>
+                                    Remove
+                                  </button>
+                                  <button onClick={()=>setEditingDec(null)}
+                                    style={{ marginLeft:"auto", fontSize:9,
+                                      padding:"2px 8px", background:DS.accent,
+                                      border:"none", borderRadius:3, color:"#fff",
+                                      cursor:"pointer", fontFamily:"inherit" }}>
+                                    Done
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              /* View mode */
+                              <div>
+                                <div style={{ display:"flex", alignItems:"center",
+                                  gap:6, marginBottom:5 }}>
+                                  <span style={{ fontSize:11, fontWeight:700,
+                                    color:DS.textPri, flex:1 }}>{d.label}</span>
+                                  <button onClick={()=>setEditingDec(d.id)}
+                                    style={{ background:"none", border:"none",
+                                      cursor:"pointer", color:"#5a6175",
+                                      fontSize:10, padding:"1px 5px",
+                                      borderRadius:3, fontFamily:"inherit" }}>
+                                    ✎
+                                  </button>
+                                </div>
+                                <div style={{ display:"flex", flexDirection:"column",
+                                  gap:3 }}>
+                                  {d.choices.map((c, ci) => (
+                                    <span key={ci} style={{ fontSize:9,
+                                      padding:"2px 7px", borderRadius:3,
+                                      background:"#2d3650", color:"#8b96b8",
+                                      fontWeight:500 }}>
+                                      {ci}: {c}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </th>
                         ))}
                       </tr>
