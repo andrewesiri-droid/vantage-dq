@@ -5858,450 +5858,914 @@ const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Compe
 
 
 function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg, problem }) {
+
+  // ── Node taxonomy per spec ────────────────────────────────────────────────
   const NODE_TYPES = {
-    decision:      { label:"Decision",        shape:"rect",    color:"#2563eb", bg:"#eff4ff", border:"#bfcfff", icon:"▣" },
-    uncertainty:   { label:"Uncertainty",     shape:"oval",    color:"#d97706", bg:"#fffbeb", border:"#fde68a", icon:"◎" },
-    value:         { label:"Value / Outcome", shape:"diamond", color:"#059669", bg:"#ecfdf5", border:"#a7f3d0", icon:"◆" },
-    deterministic: { label:"Deterministic",   shape:"hex",     color:"#7c3aed", bg:"#f5f3ff", border:"#ddd6fe", icon:"⬡" },
+    decision: {
+      label:"Decision", color:"#2563eb", bg:"#eff4ff", border:"#93c5fd",
+      icon:"▣", shape:"rect",
+      desc:"A controllable choice — what can be decided",
+      rule:"Must have outgoing influence. Cannot be probabilistic.",
+    },
+    uncertainty: {
+      label:"Uncertainty", color:"#d97706", bg:"#fffbeb", border:"#fcd34d",
+      icon:"◎", shape:"oval",
+      desc:"An unknown variable — what cannot be controlled",
+      rule:"May influence other uncertainties and value nodes.",
+    },
+    value: {
+      label:"Value / Outcome", color:"#059669", bg:"#ecfdf5", border:"#6ee7b7",
+      icon:"◆", shape:"diamond",
+      desc:"An objective or result — NPV, market share, strategic value",
+      rule:"Terminal node. Should not influence upstream nodes.",
+    },
+    deterministic: {
+      label:"Deterministic", color:"#7c3aed", bg:"#f5f3ff", border:"#c4b5fd",
+      icon:"⬡", shape:"hex",
+      desc:"A calculated relationship — revenue, cash flow, emissions",
+      rule:"Calculated from inputs. Can influence value nodes.",
+    },
   };
 
-  const [view, setView]           = useState("diagram");
-  const [nodes, setNodes]         = useState([]);
-  const [edges, setEdges]         = useState([]);
-  const [selected, setSelected]   = useState(null);
-  const [linkMode, setLinkMode]   = useState(false);
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [view, setView]             = useState("diagram");
+  const [nodes, setNodes]           = useState([]);
+  const [edges, setEdges]           = useState([]);
+  const [selected, setSelected]     = useState(null);
+  const [linkMode, setLinkMode]     = useState(false);
   const [linkSource, setLinkSource] = useState(null);
-  const [addType, setAddType]     = useState("uncertainty");
+  const [addType, setAddType]       = useState("uncertainty");
+  const [newLabel, setNewLabel]     = useState("");
+  const [showAdd, setShowAdd]       = useState(false);
   const [generating, setGenerating] = useState(false);
   const [validation, setValidation] = useState(null);
-  const [showAdd, setShowAdd]     = useState(false);
-  const [newLabel, setNewLabel]   = useState("");
+  const [zoom, setZoom]             = useState(1);
+  const [metaNode, setMetaNode]     = useState(null); // node being edited in metadata panel
 
   const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
 
-  const onDragMouseDown = (e, id) => {
+  // ── Seeding from issues ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (nodes.length > 0) return;
+    const uIssues = issues.filter(i =>
+      i.category === "uncertainty-external" || i.category === "uncertainty-internal"
+    );
+    if (uIssues.length > 0) {
+      const seeded = uIssues.slice(0, 8).map((iss, idx) => ({
+        id: uid("n"), type: "uncertainty",
+        label: iss.text.length > 55 ? iss.text.slice(0, 55) + "…" : iss.text,
+        description: iss.text, owner: "", assumptions: "",
+        impact: iss.severity === "Critical" || iss.severity === "High" ? "High" : "Medium",
+        control: iss.category === "uncertainty-external" ? "Low" : "Medium",
+        tags: [],
+        x: 180 + (idx % 4) * 230,
+        y: 120 + Math.floor(idx / 4) * 200,
+      }));
+      setNodes(seeded);
+    }
+  }, [issues.length]);
+
+  // ── Drag handlers ─────────────────────────────────────────────────────────
+  const onMouseDown = (e, id) => {
     if (linkMode || e.button !== 0) return;
     e.preventDefault(); e.stopPropagation();
-    const n = nodes.find(n=>n.id===id);
+    const n = nodes.find(n => n.id === id);
     if (!n) return;
-    dragRef.current = { dragging:true, id, startX:e.clientX, startY:e.clientY, origX:n.x, origY:n.y };
-  };
-  const onDragMouseMove = (e) => {
-    const d = dragRef.current;
-    if (!d.dragging) return;
-    setNodes(prev=>prev.map(n=>n.id===d.id
-      ? {...n, x:Math.max(20,d.origX+(e.clientX-d.startX)), y:Math.max(20,d.origY+(e.clientY-d.startY))}
-      : n));
-  };
-  const onDragMouseUp = (e) => {
-    const d = dragRef.current;
-    if (!d.dragging) return;
-    const dx = Math.abs(e.clientX-d.startX), dy = Math.abs(e.clientY-d.startY);
-    if (dx<5&&dy<5) {
-      if (linkMode) handleLink(d.id);
-      else setSelected(s=>s===d.id?null:d.id);
-    }
-    dragRef.current = {...dragRef.current, dragging:false};
+    dragRef.current = { dragging: true, id, startX: e.clientX, startY: e.clientY, origX: n.x, origY: n.y };
   };
 
+  const onMouseMove = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    setNodes(prev => prev.map(n => n.id === d.id
+      ? { ...n, x: Math.max(16, d.origX + (e.clientX - d.startX)), y: Math.max(16, d.origY + (e.clientY - d.startY)) }
+      : n
+    ));
+  };
+
+  const onMouseUp = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    const dx = Math.abs(e.clientX - d.startX), dy = Math.abs(e.clientY - d.startY);
+    if (dx < 5 && dy < 5) {
+      if (linkMode) handleLink(d.id);
+      else { setSelected(s => s === d.id ? null : d.id); setMetaNode(d.id); }
+    }
+    dragRef.current = { ...dragRef.current, dragging: false };
+  };
+
+  // ── Link / edge logic ─────────────────────────────────────────────────────
   const handleLink = (targetId) => {
     if (!linkSource) { setLinkSource(targetId); return; }
-    if (linkSource===targetId) { setLinkSource(null); return; }
-    const src = nodes.find(n=>n.id===linkSource);
-    if (src?.type==="value") {
-      onAIMsg({ role:"ai", text:"Value nodes cannot influence upstream — they are terminal." });
+    if (linkSource === targetId) { setLinkSource(null); return; }
+
+    const src = nodes.find(n => n.id === linkSource);
+    const tgt = nodes.find(n => n.id === targetId);
+
+    // Rule: value nodes cannot influence upstream
+    if (src?.type === "value") {
+      onAIMsg({ role: "ai", text: "⚠ Invalid link: Value/Outcome nodes are terminal — they cannot influence other nodes. Reverse the arrow direction." });
       setLinkSource(null); return;
     }
-    if (edges.find(e=>e.from===linkSource&&e.to===targetId)) { setLinkSource(null); return; }
-    setEdges(prev=>[...prev, { id:uid("e"), from:linkSource, to:targetId }]);
+
+    // Rule: no duplicate edges
+    if (edges.find(e => e.from === linkSource && e.to === targetId)) {
+      setLinkSource(null); return;
+    }
+
+    // Rule: circular dependency check (DFS)
+    const wouldCycle = (from, to) => {
+      const visited = new Set();
+      const dfs = (id) => {
+        if (id === from) return true;
+        if (visited.has(id)) return false;
+        visited.add(id);
+        return edges.filter(e => e.from === id).some(e => dfs(e.to));
+      };
+      return dfs(to);
+    };
+    if (wouldCycle(linkSource, targetId)) {
+      onAIMsg({ role: "ai", text: "⚠ Circular dependency detected. Influence diagrams must be acyclic — this link would create a loop." });
+      setLinkSource(null); return;
+    }
+
+    setEdges(prev => [...prev, { id: uid("e"), from: linkSource, to: targetId, label: "influences" }]);
     setLinkSource(null);
   };
 
+  // ── Node CRUD ─────────────────────────────────────────────────────────────
   const addNode = () => {
-    if (!newLabel.trim()) return;
-    const n = { id:uid("n"), type:addType, label:newLabel.trim(),
-      x:200+Math.random()*400, y:150+Math.random()*300,
-      description:"", owner:"", impact:"High", control:"Low" };
-    setNodes(prev=>[...prev,n]);
-    setNewLabel(""); setShowAdd(false); setSelected(n.id);
+    const label = newLabel.trim();
+    if (!label) return;
+    const n = {
+      id: uid("n"), type: addType, label,
+      description: "", owner: "", assumptions: "", tags: [],
+      impact: "High", control: "Low",
+      x: 200 + Math.random() * 500, y: 150 + Math.random() * 300,
+    };
+    setNodes(prev => [...prev, n]);
+    setNewLabel(""); setShowAdd(false);
+    setSelected(n.id); setMetaNode(n.id);
   };
 
-  const updateNode = (id, patch) => setNodes(prev=>prev.map(n=>n.id===id?{...n,...patch}:n));
+  const updateNode = (id, patch) => setNodes(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
+
   const removeNode = (id) => {
-    setNodes(prev=>prev.filter(n=>n.id!==id));
-    setEdges(prev=>prev.filter(e=>e.from!==id&&e.to!==id));
-    if (selected===id) setSelected(null);
+    setNodes(prev => prev.filter(n => n.id !== id));
+    setEdges(prev => prev.filter(e => e.from !== id && e.to !== id));
+    if (selected === id) setSelected(null);
+    if (metaNode === id) setMetaNode(null);
   };
 
-  useEffect(()=>{
-    if (nodes.length>0) return;
-    const uIssues = issues.filter(i=>i.category==="uncertainty-external"||i.category==="uncertainty-internal");
-    if (uIssues.length>0) setNodes(uIssues.slice(0,6).map((i,idx)=>({
-      id:uid("n"), type:"uncertainty", label:i.text.slice(0,50),
-      description:i.text, owner:"", impact:i.severity==="Critical"?"High":"Medium", control:"Low",
-      x:200+idx%3*220, y:120+Math.floor(idx/3)*200,
-    })));
-  }, [issues.length]);
+  // ── Auto-layout ───────────────────────────────────────────────────────────
+  const autoLayout = () => {
+    // Topological sort then arrange in columns by type
+    const cols = { decision: [], uncertainty: [], deterministic: [], value: [] };
+    nodes.forEach(n => cols[n.type]?.push(n));
+    const colOrder = ["decision", "uncertainty", "deterministic", "value"];
+    const newNodes = [...nodes];
+    colOrder.forEach((type, ci) => {
+      cols[type].forEach((n, ri) => {
+        const target = newNodes.find(x => x.id === n.id);
+        if (target) { target.x = 80 + ci * 240; target.y = 80 + ri * 160; }
+      });
+    });
+    setNodes([...newNodes]);
+  };
 
+  // ── Validation engine ─────────────────────────────────────────────────────
   const runValidation = () => {
-    const v = [];
-    nodes.forEach(n=>{ if (!edges.some(e=>e.from===n.id||e.to===n.id)) v.push({node:n.label,msg:"Orphan node — not connected to anything."}); });
-    nodes.filter(n=>n.type==="value").forEach(n=>{ if (!edges.some(e=>e.to===n.id)) v.push({node:n.label,msg:"Value node has no incoming influence."}); });
-    nodes.filter(n=>n.type==="decision").forEach(n=>{ if (!edges.some(e=>e.from===n.id)) v.push({node:n.label,msg:"Decision node has no outgoing influence."}); });
-    setValidation(v);
+    const issues_found = [];
+
+    // Orphan nodes
+    nodes.forEach(n => {
+      const connected = edges.some(e => e.from === n.id || e.to === n.id);
+      if (!connected) issues_found.push({ type: "orphan", node: n.label, msg: "Not connected to anything — either link it or remove it." });
+    });
+
+    // Value nodes with no incoming
+    nodes.filter(n => n.type === "value").forEach(n => {
+      if (!edges.some(e => e.to === n.id))
+        issues_found.push({ type: "disconnected-value", node: n.label, msg: "Value node has no incoming influence — what drives this outcome?" });
+    });
+
+    // Decision nodes with no outgoing
+    nodes.filter(n => n.type === "decision").forEach(n => {
+      if (!edges.some(e => e.from === n.id))
+        issues_found.push({ type: "disconnected-decision", node: n.label, msg: "Decision node has no outgoing influence — what does this decision affect?" });
+    });
+
+    // Duplicate labels
+    const labels = nodes.map(n => n.label.toLowerCase().trim());
+    nodes.forEach((n, i) => {
+      if (labels.indexOf(n.label.toLowerCase().trim()) !== i)
+        issues_found.push({ type: "duplicate", node: n.label, msg: "Duplicate node label — consolidate these into one node." });
+    });
+
+    // No value nodes at all
+    if (nodes.length > 3 && !nodes.some(n => n.type === "value"))
+      issues_found.push({ type: "no-value", node: "Diagram", msg: "No Value/Outcome nodes — what is this diagram optimising for?" });
+
+    setValidation(issues_found);
+    return issues_found;
   };
 
+  // ── AI Generate ───────────────────────────────────────────────────────────
   const generateNodes = () => {
     setGenerating(true);
-    const decList = decisions.filter(d=>d.tier==="focus").map(d=>d.label).join(", ");
-    const existing = nodes.map(n=>n.label).join(", ");
+    const focusDecs = decisions.filter(d => d.tier === "focus").map(d => d.label).join(", ");
+    const strats = strategies.map(s => s.name).join(", ");
+    const existing = nodes.map(n => n.type + ": " + n.label).join("; ");
+    const today = new Date().toISOString().slice(0, 10);
+
     aiCall(
-      "You are a decision analyst building an influence diagram. " +
-      "Decision: " + (problem?.decisionStatement||"") + ". Focus decisions: " + (decList||"none") + ". " +
-      "Existing nodes (do not duplicate): " + (existing||"none") + ". " +
-      "Generate 5-8 nodes (mix of decision, uncertainty, value types) and suggest influence edges. " +
-      'Return ONLY JSON: {"nodes":[{"type":"uncertainty","label":"Oil Price","description":"desc","impact":"High","control":"Low"}],' +
-      '"edges":[{"from":"Oil Price","to":"Revenue"}],"insight":"observation"}',
-    (r)=>{
+      "You are a decision analysis expert building an influence diagram per the Decision Quality methodology. " +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + ". " +
+      "Focus decisions: " + (focusDecs || "none") + ". " +
+      "Strategies being evaluated: " + (strats || "none") + ". " +
+      "Existing nodes (do not duplicate): " + (existing || "none") + ". " +
+      "Generate a realistic influence diagram. Include all four node types: " +
+      "decision nodes (controllable choices), uncertainty nodes (unknown variables), " +
+      "deterministic nodes (calculated relationships like revenue/cost), and value nodes (outcomes like NPV/market share). " +
+      "Suggest influence edges. Value nodes must be terminal — they cannot influence other nodes. " +
+      "Decision nodes must have outgoing edges. No circular dependencies. " +
+      'Return ONLY JSON: {"nodes":[{"type":"uncertainty","label":"Oil Price","description":"Global crude benchmark","impact":"High","control":"Low","owner":""}],' +
+      '"edges":[{"from":"Oil Price","to":"Revenue","label":"drives"}],' +
+      '"insight":"Key observation about the decision structure","missingNodes":["what else should be added"]}',
+    (r) => {
       let result = r;
-      if (r._raw) { try { result=JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setGenerating(false); return; } }
+      if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); } catch(e) { setGenerating(false); return; } }
+      if (result.error) { onAIMsg({ role: "ai", text: "AI error: " + result.error }); setGenerating(false); return; }
+
       if (result.nodes?.length) {
-        const newNodes = result.nodes.map((n,i)=>({
-          id:uid("n"), type:n.type||"uncertainty", label:n.label,
-          description:n.description||"", owner:"", impact:n.impact||"Medium", control:n.control||"Low",
-          x:150+i%4*220, y:120+Math.floor(i/4)*200,
+        const newNodes = result.nodes.map((n, i) => ({
+          id: uid("n"), type: n.type || "uncertainty",
+          label: n.label, description: n.description || "",
+          owner: n.owner || "", assumptions: "", tags: [],
+          impact: n.impact || "Medium", control: n.control || "Low",
+          x: 150 + (i % 4) * 240, y: 120 + Math.floor(i / 4) * 180,
         }));
-        setNodes(prev=>[...prev,...newNodes]);
+        setNodes(prev => [...prev, ...newNodes]);
+
         if (result.edges?.length) {
-          const all = [...nodes, ...newNodes];
-          const newEdges = result.edges.map(e=>{
-            const s = all.find(n=>n.label.toLowerCase()===e.from?.toLowerCase());
-            const t = all.find(n=>n.label.toLowerCase()===e.to?.toLowerCase());
-            return s&&t ? {id:uid("e"),from:s.id,to:t.id} : null;
+          const allNodes = [...nodes, ...newNodes];
+          const newEdges = result.edges.map(e => {
+            const s = allNodes.find(n => n.label.toLowerCase() === (e.from || "").toLowerCase());
+            const t = allNodes.find(n => n.label.toLowerCase() === (e.to || "").toLowerCase());
+            return s && t ? { id: uid("e"), from: s.id, to: t.id, label: e.label || "influences" } : null;
           }).filter(Boolean);
-          setEdges(prev=>[...prev,...newEdges]);
+          setEdges(prev => [...prev, ...newEdges]);
         }
-        onAIMsg({role:"ai",text:result.insight||("Added "+result.nodes.length+" nodes.")});
+
+        const msg = result.insight || ("Added " + result.nodes.length + " nodes.");
+        const missing = result.missingNodes?.length ? " Consider adding: " + result.missingNodes.join(", ") + "." : "";
+        onAIMsg({ role: "ai", text: msg + missing });
       }
       setGenerating(false);
     });
   };
 
-  const CANVAS_W = Math.max(1000, nodes.reduce((m,n)=>Math.max(m,(n.x||0)+240),1000));
-  const CANVAS_H = Math.max(700,  nodes.reduce((m,n)=>Math.max(m,(n.y||0)+160),700));
-  const sel = nodes.find(n=>n.id===selected);
+  // ── Canvas dimensions ─────────────────────────────────────────────────────
+  const CANVAS_W = Math.max(1100, nodes.reduce((m, n) => Math.max(m, (n.x || 0) + 260), 1100)) * zoom;
+  const CANVAS_H = Math.max(700,  nodes.reduce((m, n) => Math.max(m, (n.y || 0) + 180), 700)) * zoom;
 
-  return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
-      {/* Header */}
-      <div style={{ padding:"12px 20px", background:DS.canvas,
-        borderBottom:"1px solid "+DS.canvasBdr,
-        display:"flex", alignItems:"center", gap:10, flexShrink:0, flexWrap:"wrap" }}>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase", fontWeight:700, letterSpacing:1 }}>Module 08</div>
-          <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:18, fontWeight:700, color:DS.ink }}>Influence Diagram</div>
+  const selNode = nodes.find(n => n.id === selected);
+  const metaNodeData = nodes.find(n => n.id === metaNode);
+
+  // ── Node shape SVG renderer ───────────────────────────────────────────────
+  const NodeShape = ({ node }) => {
+    const nt = NODE_TYPES[node.type] || NODE_TYPES.uncertainty;
+    const isSel = selected === node.id;
+    const isSrc = linkSource === node.id;
+    const W = 190, H = 60;
+    const cx = W / 2, cy = H / 2;
+
+    const shapeStyle = {
+      position: "absolute", left: node.x * zoom, top: node.y * zoom,
+      width: W, minHeight: H,
+      cursor: linkMode ? "crosshair" : "grab",
+      userSelect: "none", zIndex: isSel || isSrc ? 10 : 1,
+    };
+
+    const boxStyle = {
+      padding: "10px 14px",
+      background: isSrc ? nt.color : nt.bg,
+      border: "2px solid " + (isSel ? nt.color : isSrc ? nt.color : nt.border),
+      borderRadius:
+        node.type === "uncertainty" ? 50 :
+        node.type === "value" ? 4 :
+        node.type === "hex" ? 8 : 8,
+      transform: node.type === "value" ? "rotate(-1deg)" : "none",
+      boxShadow: isSel
+        ? "0 0 0 3px " + nt.border + "80, 0 4px 16px rgba(0,0,0,.12)"
+        : "0 2px 8px rgba(0,0,0,.07)",
+      transition: "box-shadow .12s",
+    };
+
+    return (
+      <div style={shapeStyle}
+        onMouseDown={e => onMouseDown(e, node.id)}
+        onClick={e => { if (linkMode) { e.stopPropagation(); handleLink(node.id); } }}>
+        <div style={boxStyle}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
+            <span style={{ fontSize: 12, color: isSrc ? "#fff" : nt.color, flexShrink: 0, marginTop: 1 }}>
+              {nt.icon}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700,
+                color: isSrc ? "#fff" : nt.color,
+                lineHeight: 1.3, wordBreak: "break-word" }}>
+                {node.label}
+              </div>
+              <div style={{ fontSize: 9, color: isSrc ? "rgba(255,255,255,.65)" : "#9ca3af",
+                textTransform: "uppercase", letterSpacing: .5, marginTop: 3 }}>
+                {nt.label}
+                {node.type === "uncertainty" ? " · " + (node.impact || "?") + " impact" : ""}
+              </div>
+            </div>
+          </div>
         </div>
-        <div style={{ display:"flex", border:"1px solid "+DS.canvasBdr, borderRadius:6, overflow:"hidden" }}>
-          {[{id:"diagram",label:"Diagram"},{id:"matrix",label:"Impact Matrix"},{id:"metadata",label:"Node List"},{id:"validate",label:"Validate"}].map(v=>(
-            <button key={v.id} onClick={()=>setView(v.id)}
-              style={{ padding:"5px 11px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-                cursor:"pointer", border:"none",
-                background:view===v.id?DS.accent:"transparent",
-                color:view===v.id?"#fff":DS.inkSub }}>
-              {v.label}
+
+        {/* Action row when selected */}
+        {isSel && !linkMode && (
+          <div style={{ position: "absolute", top: -30, right: 0,
+            display: "flex", gap: 4 }}>
+            <button onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); setMetaNode(node.id); }}
+              style={{ padding: "2px 8px", fontSize: 9, fontWeight: 700,
+                background: nt.color, border: "none", borderRadius: 4,
+                color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
+              ✎ Edit
             </button>
-          ))}
+            <button onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); removeNode(node.id); }}
+              style={{ padding: "2px 8px", fontSize: 9, fontWeight: 700,
+                background: "#dc2626", border: "none", borderRadius: 4,
+                color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── RENDER ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+
+      {/* ── HEADER ── */}
+      <div style={{ background: DS.canvas, borderBottom: "1px solid " + DS.canvasBdr, flexShrink: 0 }}>
+        <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, color: DS.inkTer, textTransform: "uppercase",
+              fontWeight: 700, letterSpacing: 1 }}>Module 08</div>
+            <div style={{ fontFamily: "'Libre Baskerville',serif",
+              fontSize: 18, fontWeight: 700, color: DS.ink }}>Influence Diagram</div>
+          </div>
+          <Btn variant="secondary" size="sm" onClick={() => setShowAdd(p => !p)}>+ Add Node</Btn>
+          <Btn variant="secondary" size="sm" onClick={autoLayout}>Auto Layout</Btn>
+          <Btn variant="secondary" size="sm"
+            onClick={() => { setLinkMode(l => !l); setLinkSource(null); }}
+            style={{
+              background: linkMode ? DS.accentSoft : "transparent",
+              border: "1px solid " + (linkMode ? DS.accent : DS.canvasBdr),
+              color: linkMode ? DS.accent : DS.inkSub,
+            }}>
+            {linkMode ? (linkSource ? "→ Click target node" : "→ Click source node") : "Draw Links"}
+          </Btn>
+          <Btn variant="secondary" size="sm" onClick={runValidation}>Validate</Btn>
+          <Btn variant="primary" icon="spark" size="sm"
+            onClick={generateNodes} disabled={aiBusy || generating}>
+            {generating ? "Generating…" : "AI Generate"}
+          </Btn>
         </div>
-        <Btn variant="secondary" size="sm" onClick={()=>setShowAdd(p=>!p)}>+ Add Node</Btn>
-        <Btn variant="secondary" size="sm"
-          onClick={()=>{ setLinkMode(l=>!l); setLinkSource(null); }}
-          style={{ background:linkMode?DS.accentSoft:"transparent",
-            border:"1px solid "+(linkMode?DS.accent:DS.canvasBdr),
-            color:linkMode?DS.accent:DS.inkSub }}>
-          {linkMode?(linkSource?"Click target…":"Click source…"):"Draw Links"}
-        </Btn>
-        <Btn variant="secondary" size="sm" onClick={runValidation}>Validate</Btn>
-        <Btn variant="primary" icon="spark" size="sm" onClick={generateNodes} disabled={aiBusy||generating}>
-          {generating?"Generating…":"AI Generate"}
-        </Btn>
+
+        {/* View tabs + zoom */}
+        <div style={{ padding: "0 20px 8px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", border: "1px solid " + DS.canvasBdr,
+            borderRadius: 6, overflow: "hidden" }}>
+            {[
+              { id: "diagram",  label: "Diagram" },
+              { id: "matrix",   label: "Impact Matrix" },
+              { id: "metadata", label: "Node Registry" },
+              { id: "validate", label: "Validate" },
+            ].map(v => (
+              <button key={v.id} onClick={() => setView(v.id)}
+                style={{ padding: "5px 12px", fontSize: 11, fontWeight: 700,
+                  fontFamily: "inherit", cursor: "pointer", border: "none",
+                  background: view === v.id ? DS.accent : "transparent",
+                  color: view === v.id ? "#fff" : DS.inkSub }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+
+          {view === "diagram" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: "auto" }}>
+              <button onClick={() => setZoom(z => Math.max(0.4, z - 0.15))}
+                style={{ width: 22, height: 22, borderRadius: 4,
+                  border: "1px solid " + DS.canvasBdr, background: "transparent",
+                  cursor: "pointer", fontFamily: "inherit", fontSize: 14,
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+              <span style={{ fontSize: 10, color: DS.inkTer, width: 38, textAlign: "center" }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button onClick={() => setZoom(z => Math.min(2, z + 0.15))}
+                style={{ width: 22, height: 22, borderRadius: 4,
+                  border: "1px solid " + DS.canvasBdr, background: "transparent",
+                  cursor: "pointer", fontFamily: "inherit", fontSize: 14,
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+              <button onClick={() => setZoom(1)}
+                style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4,
+                  border: "1px solid " + DS.canvasBdr, background: "transparent",
+                  cursor: "pointer", fontFamily: "inherit", color: DS.inkTer }}>Reset</button>
+            </div>
+          )}
+
+          {/* Node type legend */}
+          <div style={{ display: "flex", gap: 10, marginLeft: view === "diagram" ? 0 : "auto" }}>
+            {Object.entries(NODE_TYPES).map(([type, nt]) => (
+              <div key={type} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 10, color: nt.color }}>{nt.icon}</span>
+                <span style={{ fontSize: 9, color: DS.inkTer }}>{nt.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Add node panel */}
       {showAdd && (
-        <div style={{ padding:"10px 20px", background:DS.accentSoft,
-          borderBottom:"1px solid "+DS.accentLine,
-          display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-          {Object.entries(NODE_TYPES).map(([key,nt])=>(
-            <button key={key} onClick={()=>setAddType(key)}
-              style={{ padding:"3px 10px", fontSize:10, fontWeight:700, fontFamily:"inherit",
-                cursor:"pointer", border:"1.5px solid "+(addType===key?nt.color:DS.canvasBdr),
-                borderRadius:5, background:addType===key?nt.bg:"transparent",
-                color:addType===key?nt.color:DS.inkSub }}>
+        <div style={{ padding: "10px 20px", background: DS.accentSoft,
+          borderBottom: "1px solid " + DS.accentLine,
+          display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flexShrink: 0 }}>
+          {Object.entries(NODE_TYPES).map(([key, nt]) => (
+            <button key={key} onClick={() => setAddType(key)}
+              style={{ padding: "4px 11px", fontSize: 10, fontWeight: 700,
+                fontFamily: "inherit", cursor: "pointer",
+                border: "1.5px solid " + (addType === key ? nt.color : DS.canvasBdr),
+                borderRadius: 5,
+                background: addType === key ? nt.bg : "transparent",
+                color: addType === key ? nt.color : DS.inkSub }}>
               {nt.icon} {nt.label}
             </button>
           ))}
-          <input autoFocus value={newLabel} onChange={e=>setNewLabel(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter") addNode(); if(e.key==="Escape") setShowAdd(false); }}
-            placeholder={"Label for new "+NODE_TYPES[addType].label.toLowerCase()+"..."}
-            style={{ flex:1, minWidth:180, padding:"5px 10px", fontSize:12,
-              fontFamily:"inherit", background:DS.canvas,
-              border:"1px solid "+DS.accentLine, borderRadius:5, color:DS.ink, outline:"none" }}/>
+          <input autoFocus value={newLabel}
+            onChange={e => setNewLabel(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addNode(); if (e.key === "Escape") setShowAdd(false); }}
+            placeholder={"Label for this " + (NODE_TYPES[addType]?.label || "node").toLowerCase() + "..."}
+            style={{ flex: 1, minWidth: 200, padding: "6px 10px", fontSize: 12,
+              fontFamily: "inherit", background: DS.canvas,
+              border: "1px solid " + DS.accentLine, borderRadius: 5,
+              color: DS.ink, outline: "none" }}/>
           <Btn variant="primary" size="sm" onClick={addNode}>Add</Btn>
-          <Btn variant="secondary" size="sm" onClick={()=>setShowAdd(false)}>Cancel</Btn>
+          <Btn variant="secondary" size="sm" onClick={() => setShowAdd(false)}>Cancel</Btn>
         </div>
       )}
 
-      {/* Validation results */}
+      {/* Validation banner */}
       {validation && (
-        <div style={{ padding:"8px 20px", flexShrink:0,
-          background:validation.length===0?DS.successSoft:"#fff5f5",
-          borderBottom:"1px solid "+(validation.length===0?DS.successLine:"#fecaca") }}>
-          {validation.length===0
-            ? <span style={{ fontSize:11, color:DS.success, fontWeight:700 }}>✓ Diagram is structurally valid.</span>
-            : validation.map((v,i)=>(
-              <span key={i} style={{ fontSize:10, color:"#7f1d1d",
-                background:"#fee2e2", padding:"2px 8px", borderRadius:3,
-                marginRight:6, display:"inline-block" }}>
-                {v.node}: {v.msg}
+        <div style={{ padding: "8px 20px", flexShrink: 0,
+          background: validation.length === 0 ? DS.successSoft : "#fff5f5",
+          borderBottom: "1px solid " + (validation.length === 0 ? DS.successLine : "#fecaca"),
+          display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {validation.length === 0 ? (
+            <span style={{ fontSize: 11, color: DS.success, fontWeight: 700 }}>
+              ✓ Diagram is structurally valid — no orphans, circular dependencies, or missing value nodes.
+            </span>
+          ) : (
+            <>
+              <span style={{ fontSize: 11, fontWeight: 700, color: DS.danger, flexShrink: 0 }}>
+                ⚠ {validation.length} issue{validation.length !== 1 ? "s" : ""}:
               </span>
-            ))}
-          <button onClick={()=>setValidation(null)}
-            style={{ marginLeft:8, background:"none", border:"none",
-              cursor:"pointer", color:DS.inkTer, fontSize:12 }}>×</button>
+              {validation.map((v, i) => (
+                <span key={i} style={{ fontSize: 10, color: "#7f1d1d",
+                  background: "#fee2e2", padding: "2px 8px", borderRadius: 4 }}>
+                  <strong>{v.node}:</strong> {v.msg}
+                </span>
+              ))}
+            </>
+          )}
+          <button onClick={() => setValidation(null)}
+            style={{ marginLeft: "auto", background: "none", border: "none",
+              cursor: "pointer", color: DS.inkTer, fontSize: 14, flexShrink: 0 }}>×</button>
         </div>
       )}
 
-      {/* Main content */}
-      <div style={{ flex:1, overflow:"hidden", display:"flex" }}>
-        {/* Diagram view */}
-        {view==="diagram" && (
-          <div style={{ flex:1, overflow:"auto", background:"#f8f9fb",
-            backgroundImage:"radial-gradient(circle, #d0d4e0 1px, transparent 1px)",
-            backgroundSize:"24px 24px" }}
-            onMouseMove={onDragMouseMove} onMouseUp={onDragMouseUp} onMouseLeave={onDragMouseUp}>
-            <div style={{ position:"relative", width:CANVAS_W, height:CANVAS_H, minWidth:"100%", minHeight:"100%" }}>
-              <svg style={{ position:"absolute", top:0, left:0, width:CANVAS_W, height:CANVAS_H, pointerEvents:"none" }}>
+      {/* ── MAIN CONTENT AREA ── */}
+      <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+
+        {/* ── DIAGRAM VIEW ── */}
+        {view === "diagram" && (
+          <div style={{ flex: 1, overflow: "auto", position: "relative",
+            background: "#f7f8fa",
+            backgroundImage: "radial-gradient(circle, #d1d5db 1px, transparent 1px)",
+            backgroundSize: "28px 28px" }}
+            onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
+
+            {nodes.length === 0 && (
+              <div style={{ position: "absolute", top: "50%", left: "50%",
+                transform: "translate(-50%,-50%)",
+                textAlign: "center", color: DS.inkTer, pointerEvents: "none" }}>
+                <div style={{ fontSize: 40, marginBottom: 12, opacity: .3 }}>◎</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>No nodes yet</div>
+                <div style={{ fontSize: 12 }}>
+                  Click <strong>+ Add Node</strong> to start, or use <strong>AI Generate</strong> to build a first draft from your decision context.
+                </div>
+              </div>
+            )}
+
+            <div style={{ position: "relative", width: CANVAS_W, height: CANVAS_H, minWidth: "100%", minHeight: "100%" }}>
+
+              {/* SVG layer for edges */}
+              <svg style={{ position: "absolute", top: 0, left: 0,
+                width: CANVAS_W, height: CANVAS_H, pointerEvents: "none" }}>
                 <defs>
-                  <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill={DS.accent} opacity=".6"/>
-                  </marker>
+                  {Object.entries(NODE_TYPES).map(([type, nt]) => (
+                    <marker key={type}
+                      id={"arr-" + type} markerWidth="10" markerHeight="7"
+                      refX="9" refY="3.5" orient="auto">
+                      <polygon points="0 0, 10 3.5, 0 7" fill={nt.color} opacity=".8"/>
+                    </marker>
+                  ))}
                 </defs>
-                {edges.map(e=>{
-                  const f=nodes.find(n=>n.id===e.from), t=nodes.find(n=>n.id===e.to);
-                  if (!f||!t) return null;
-                  const fx=f.x+90,fy=f.y+28,tx=t.x+90,ty=t.y+28;
-                  const nt=NODE_TYPES[f.type]||NODE_TYPES.uncertainty;
+                {edges.map(e => {
+                  const f = nodes.find(n => n.id === e.from);
+                  const t = nodes.find(n => n.id === e.to);
+                  if (!f || !t) return null;
+                  const nt = NODE_TYPES[f.type] || NODE_TYPES.uncertainty;
+                  const fx = (f.x + 95) * zoom, fy = (f.y + 35) * zoom;
+                  const tx = (t.x + 95) * zoom, ty = (t.y + 35) * zoom;
+                  const mx = (fx + tx) / 2, my = (fy + ty) / 2 - 40;
                   return (
                     <g key={e.id}>
-                      <path d={"M"+fx+","+fy+" Q"+((fx+tx)/2)+","+(Math.min(fy,ty)-30)+" "+tx+","+ty}
-                        fill="none" stroke={nt.color} strokeWidth={1.5} strokeDasharray="5,3"
-                        markerEnd="url(#arr)" opacity={.65}/>
-                      <circle cx={(fx+tx)/2} cy={(fy+ty)/2-15} r={8}
-                        fill="transparent" style={{ cursor:"pointer" }}
-                        onClick={()=>setEdges(prev=>prev.filter(x=>x.id!==e.id))}/>
+                      <path
+                        d={"M" + fx + "," + fy + " Q" + mx + "," + my + " " + tx + "," + ty}
+                        fill="none" stroke={nt.color} strokeWidth={1.8}
+                        strokeDasharray="6,3" opacity={.7}
+                        markerEnd={"url(#arr-" + f.type + ")"}/>
+                      {e.label && (
+                        <text x={mx} y={my + 14} textAnchor="middle"
+                          fontSize={9} fill={nt.color} opacity={.8}
+                          fontFamily="'IBM Plex Sans',sans-serif">
+                          {e.label}
+                        </text>
+                      )}
+                      {/* Invisible hit area to click-remove */}
+                      <circle cx={mx} cy={my + 7} r={10}
+                        fill="transparent"
+                        style={{ pointerEvents: "all", cursor: "pointer" }}
+                        onClick={() => setEdges(prev => prev.filter(x => x.id !== e.id))}/>
                     </g>
                   );
                 })}
               </svg>
-              {nodes.map(node=>{
-                const nt=NODE_TYPES[node.type]||NODE_TYPES.uncertainty;
-                const isSel=selected===node.id, isSrc=linkSource===node.id;
+
+              {/* Node elements */}
+              {nodes.map(node => <NodeShape key={node.id} node={node}/>)}
+            </div>
+          </div>
+        )}
+
+        {/* ── IMPACT MATRIX VIEW ── */}
+        {view === "matrix" && (
+          <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: DS.ink, marginBottom: 3 }}>
+                Uncertainty Impact × Control Matrix
+              </div>
+              <div style={{ fontSize: 11, color: DS.inkTer }}>
+                Uncertainty nodes plotted by how much they matter vs how much control the team has.
+                Click any node to jump to the diagram.
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr",
+              gridTemplateRows: "1fr 1fr", gap: 4,
+              height: "calc(100% - 80px)", minHeight: 400 }}>
+              {[
+                { impact: "High", control: "High", label: "Manage Actively",
+                  sub: "High leverage — key levers you control", color: "#059669", bg: "#ecfdf5" },
+                { impact: "High", control: "Low", label: "Monitor Closely",
+                  sub: "Major impact, low control — external forces", color: "#d97706", bg: "#fffbeb" },
+                { impact: "Low", control: "High", label: "Exploit",
+                  sub: "Easy wins — you control these", color: "#2563eb", bg: "#eff4ff" },
+                { impact: "Low", control: "Low", label: "Accept / Track",
+                  sub: "Background noise — monitor but don't over-invest", color: "#6b7280", bg: "#f9fafb" },
+              ].map(q => {
+                const qNodes = nodes.filter(n =>
+                  n.type === "uncertainty" && n.impact === q.impact && n.control === q.control
+                );
                 return (
-                  <div key={node.id}
-                    style={{ position:"absolute", left:node.x, top:node.y, width:180,
-                      cursor:linkMode?"crosshair":"grab", userSelect:"none",
-                      zIndex:isSel||isSrc?10:1 }}
-                    onMouseDown={e=>onDragMouseDown(e,node.id)}
-                    onClick={e=>{ if(linkMode){e.stopPropagation();handleLink(node.id);} }}>
-                    <div style={{ padding:"10px 13px",
-                      background:isSrc?nt.color:nt.bg,
-                      border:"2px solid "+(isSel||isSrc?nt.color:nt.border),
-                      borderRadius:node.type==="uncertainty"?40:node.type==="value"?0:8,
-                      boxShadow:isSel?"0 0 0 3px "+nt.border+"80":"0 2px 8px rgba(0,0,0,.08)" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                        <span style={{ fontSize:11, color:isSrc?"#fff":nt.color }}>{nt.icon}</span>
-                        <span style={{ fontSize:11, fontWeight:700,
-                          color:isSrc?"#fff":nt.color, lineHeight:1.25 }}>{node.label}</span>
-                      </div>
-                      <div style={{ fontSize:9, color:isSrc?"rgba(255,255,255,.7)":"#6b7280",
-                        textTransform:"uppercase", letterSpacing:.5 }}>
-                        {nt.label}{node.type==="uncertainty"?" · "+node.impact+" impact":""}
-                      </div>
+                  <div key={q.label} style={{ background: q.bg,
+                    border: "1px solid " + q.color + "40", borderRadius: 10,
+                    padding: "14px 16px", overflow: "auto" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: q.color, marginBottom: 2 }}>
+                      {q.label}
                     </div>
-                    {isSel && !linkMode && (
-                      <div style={{ position:"absolute", top:-26, right:0, display:"flex", gap:4 }}>
-                        <button onMouseDown={e=>e.stopPropagation()}
-                          onClick={e=>{e.stopPropagation();setSelected(null);}}
-                          style={{ padding:"2px 7px", fontSize:9, fontWeight:700,
-                            background:nt.color, border:"none", borderRadius:3,
-                            color:"#fff", cursor:"pointer", fontFamily:"inherit" }}>
-                          {node.description?"Edit":"Edit"}
-                        </button>
-                        <button onMouseDown={e=>e.stopPropagation()}
-                          onClick={e=>{e.stopPropagation();removeNode(node.id);}}
-                          style={{ padding:"2px 7px", fontSize:9, fontWeight:700,
-                            background:"#dc2626", border:"none", borderRadius:3,
-                            color:"#fff", cursor:"pointer", fontFamily:"inherit" }}>×</button>
+                    <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 10 }}>{q.sub}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {qNodes.map(n => (
+                        <div key={n.id}
+                          onClick={() => { setView("diagram"); setSelected(n.id); }}
+                          style={{ padding: "7px 10px", background: "white",
+                            border: "1px solid " + q.color + "40", borderRadius: 6,
+                            cursor: "pointer", fontSize: 11, fontWeight: 600, color: q.color }}>
+                          {n.label}
+                          {n.description && (
+                            <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 400, marginTop: 2 }}>
+                              {n.description.slice(0, 60)}{n.description.length > 60 ? "…" : ""}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {qNodes.length === 0 && (
+                        <div style={{ fontSize: 11, color: "#9ca3af", fontStyle: "italic" }}>
+                          No uncertainties here yet
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, padding: "0 4px" }}>
+              <span style={{ fontSize: 10, color: DS.inkTer }}>← Low Control</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer }}>CONTROLLABILITY →</span>
+              <span style={{ fontSize: 10, color: DS.inkTer }}>High Control →</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── NODE REGISTRY VIEW ── */}
+        {view === "metadata" && (
+          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+            {/* Node list */}
+            <div style={{ width: 280, borderRight: "1px solid " + DS.canvasBdr,
+              overflowY: "auto", flexShrink: 0 }}>
+              {Object.entries(NODE_TYPES).map(([type, nt]) => {
+                const typeNodes = nodes.filter(n => n.type === type);
+                if (!typeNodes.length) return null;
+                return (
+                  <div key={type}>
+                    <div style={{ padding: "8px 14px 4px",
+                      fontSize: 9, fontWeight: 700, color: nt.color,
+                      letterSpacing: .6, textTransform: "uppercase",
+                      background: nt.bg, borderBottom: "1px solid " + nt.border }}>
+                      {nt.icon} {nt.label} ({typeNodes.length})
+                    </div>
+                    {typeNodes.map(n => (
+                      <button key={n.id}
+                        onClick={() => setMetaNode(n.id)}
+                        style={{ width: "100%", padding: "10px 14px", textAlign: "left",
+                          border: "none", borderBottom: "1px solid " + DS.canvasBdr,
+                          background: metaNode === n.id ? nt.bg : "transparent",
+                          cursor: "pointer", fontFamily: "inherit",
+                          borderLeft: "3px solid " + (metaNode === n.id ? nt.color : "transparent") }}>
+                        <div style={{ fontSize: 12, fontWeight: 600,
+                          color: nt.color, marginBottom: 2 }}>{n.label}</div>
+                        {n.description && (
+                          <div style={{ fontSize: 10, color: DS.inkTer }}>
+                            {n.description.slice(0, 45)}{n.description.length > 45 ? "…" : ""}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+              {nodes.length === 0 && (
+                <div style={{ padding: "32px 16px", textAlign: "center",
+                  color: DS.inkTer, fontSize: 12 }}>
+                  No nodes yet. Add them in the Diagram view.
+                </div>
+              )}
+            </div>
+
+            {/* Metadata editor */}
+            <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+              {metaNodeData ? (() => {
+                const nt = NODE_TYPES[metaNodeData.type] || NODE_TYPES.uncertainty;
+                return (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 6,
+                        background: nt.bg, border: "2px solid " + nt.color,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 14, color: nt.color }}>{nt.icon}</div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: nt.color }}>{metaNodeData.label}</div>
+                        <div style={{ fontSize: 10, color: DS.inkTer }}>{nt.label} · {nt.rule}</div>
+                      </div>
+                      <button onClick={() => removeNode(metaNodeData.id)}
+                        style={{ marginLeft: "auto", background: "none",
+                          border: "1px solid " + DS.dangerLine, borderRadius: 5,
+                          cursor: "pointer", color: DS.danger, fontSize: 11,
+                          padding: "3px 10px", fontFamily: "inherit", fontWeight: 700 }}>
+                        Remove
+                      </button>
+                    </div>
+
+                    {[
+                      { key: "label", label: "Label", type: "text", placeholder: "Node name" },
+                      { key: "description", label: "Description", type: "textarea", placeholder: "What does this node represent? What drives it?" },
+                      { key: "owner", label: "Owner", type: "text", placeholder: "Who owns this variable?" },
+                      { key: "assumptions", label: "Key Assumptions", type: "textarea", placeholder: "What are we assuming about this node?" },
+                    ].map(field => (
+                      <div key={field.key} style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                          letterSpacing: .5, textTransform: "uppercase", marginBottom: 5 }}>
+                          {field.label}
+                        </div>
+                        {field.type === "textarea" ? (
+                          <textarea value={metaNodeData[field.key] || ""}
+                            onChange={e => updateNode(metaNodeData.id, { [field.key]: e.target.value })}
+                            placeholder={field.placeholder} rows={3}
+                            style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                              fontFamily: "inherit", background: DS.canvasAlt,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                              color: DS.ink, outline: "none", resize: "vertical",
+                              lineHeight: 1.5, boxSizing: "border-box" }}
+                            onFocus={e => e.target.style.borderColor = nt.color}
+                            onBlur={e => e.target.style.borderColor = DS.canvasBdr}/>
+                        ) : (
+                          <input value={metaNodeData[field.key] || ""}
+                            onChange={e => updateNode(metaNodeData.id, { [field.key]: e.target.value })}
+                            placeholder={field.placeholder}
+                            style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                              fontFamily: "inherit", background: DS.canvasAlt,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                              color: DS.ink, outline: "none", boxSizing: "border-box" }}
+                            onFocus={e => e.target.style.borderColor = nt.color}
+                            onBlur={e => e.target.style.borderColor = DS.canvasBdr}/>
+                        )}
+                      </div>
+                    ))}
+
+                    {metaNodeData.type === "uncertainty" && (
+                      <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                            letterSpacing: .5, textTransform: "uppercase", marginBottom: 5 }}>
+                            Impact Level
+                          </div>
+                          <select value={metaNodeData.impact || "High"}
+                            onChange={e => updateNode(metaNodeData.id, { impact: e.target.value })}
+                            style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                              fontFamily: "inherit", background: DS.canvasAlt,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                              color: DS.ink, outline: "none" }}>
+                            {["Critical", "High", "Medium", "Low"].map(v => <option key={v}>{v}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                            letterSpacing: .5, textTransform: "uppercase", marginBottom: 5 }}>
+                            Controllability
+                          </div>
+                          <select value={metaNodeData.control || "Low"}
+                            onChange={e => updateNode(metaNodeData.id, { control: e.target.value })}
+                            style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                              fontFamily: "inherit", background: DS.canvasAlt,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                              color: DS.ink, outline: "none" }}>
+                            {["High", "Medium", "Low", "No Control"].map(v => <option key={v}>{v}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Connections summary */}
+                    {edges.filter(e => e.from === metaNodeData.id || e.to === metaNodeData.id).length > 0 && (
+                      <div style={{ padding: "12px 14px", background: DS.canvasAlt,
+                        border: "1px solid " + DS.canvasBdr, borderRadius: 8, marginTop: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                          textTransform: "uppercase", letterSpacing: .5, marginBottom: 8 }}>
+                          Connections
+                        </div>
+                        {edges.filter(e => e.from === metaNodeData.id).length > 0 && (
+                          <div style={{ marginBottom: 6 }}>
+                            <span style={{ fontSize: 10, color: DS.inkTer }}>Influences → </span>
+                            {edges.filter(e => e.from === metaNodeData.id).map(e => {
+                              const t = nodes.find(n => n.id === e.to);
+                              const tn = NODE_TYPES[t?.type] || NODE_TYPES.uncertainty;
+                              return t ? (
+                                <span key={e.id} style={{ fontSize: 10, fontWeight: 600,
+                                  color: tn.color, marginRight: 6 }}>
+                                  {tn.icon} {t.label}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+                        {edges.filter(e => e.to === metaNodeData.id).length > 0 && (
+                          <div>
+                            <span style={{ fontSize: 10, color: DS.inkTer }}>← Influenced by </span>
+                            {edges.filter(e => e.to === metaNodeData.id).map(e => {
+                              const s = nodes.find(n => n.id === e.from);
+                              const sn = NODE_TYPES[s?.type] || NODE_TYPES.uncertainty;
+                              return s ? (
+                                <span key={e.id} style={{ fontSize: 10, fontWeight: 600,
+                                  color: sn.color, marginRight: 6 }}>
+                                  {sn.icon} {s.label}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 );
-              })}
-              {nodes.length===0 && (
-                <div style={{ position:"absolute", top:"50%", left:"50%",
-                  transform:"translate(-50%,-50%)", textAlign:"center",
-                  color:DS.inkTer, pointerEvents:"none" }}>
-                  <div style={{ fontSize:32, marginBottom:10 }}>◎</div>
-                  <div style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>No nodes yet</div>
-                  <div style={{ fontSize:12 }}>Click "+ Add Node" or use "AI Generate" to build the diagram.</div>
+              })() : (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+                  height: "100%", color: DS.inkTer, fontSize: 13 }}>
+                  Select a node from the list to edit its metadata
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Impact Matrix view */}
-        {view==="matrix" && (
-          <div style={{ flex:1, overflow:"auto", padding:20 }}>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr",
-              gridTemplateRows:"1fr 1fr", gap:3, height:"calc(100% - 40px)", minHeight:400 }}>
-              {[
-                { impact:"High", control:"High", label:"Manage Actively", sub:"Key levers — high impact you control", color:"#059669", bg:"#ecfdf5" },
-                { impact:"High", control:"Low",  label:"Monitor Closely", sub:"External forces — major impact, low control", color:"#d97706", bg:"#fffbeb" },
-                { impact:"Low",  control:"High", label:"Exploit",         sub:"Easy wins — low stakes, you control them", color:"#2563eb", bg:"#eff4ff" },
-                { impact:"Low",  control:"Low",  label:"Accept / Track",  sub:"Background noise — monitor but don't over-invest", color:"#6b7280", bg:"#f9fafb" },
-              ].map(q=>{
-                const qNodes = nodes.filter(n=>n.type==="uncertainty"&&n.impact===q.impact&&n.control===q.control);
-                return (
-                  <div key={q.label} style={{ background:q.bg,
-                    border:"1px solid "+q.color+"30", borderRadius:10, padding:"14px 16px" }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:q.color, marginBottom:2 }}>{q.label}</div>
-                    <div style={{ fontSize:10, color:"#6b7280", marginBottom:10 }}>{q.sub}</div>
-                    {qNodes.map(n=>(
-                      <div key={n.id} onClick={()=>{setView("diagram");setSelected(n.id);}}
-                        style={{ padding:"7px 10px", marginBottom:6, background:"white",
-                          border:"1px solid "+q.color+"40", borderRadius:6,
-                          cursor:"pointer", fontSize:11, fontWeight:600, color:q.color }}>
-                        {n.label}
-                      </div>
-                    ))}
-                    {qNodes.length===0 && (
-                      <div style={{ fontSize:11, color:"#9ca3af", fontStyle:"italic" }}>None here yet</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Node list view */}
-        {view==="metadata" && (
-          <div style={{ flex:1, overflowY:"auto", padding:20 }}>
-            {nodes.length===0 ? (
-              <div style={{ textAlign:"center", color:DS.inkTer, padding:48, fontSize:13 }}>
-                No nodes yet. Add nodes in the Diagram view or use AI Generate.
-              </div>
-            ) : Object.entries(NODE_TYPES).map(([type,nt])=>{
-              const typeNodes = nodes.filter(n=>n.type===type);
-              if (!typeNodes.length) return null;
-              return (
-                <div key={type} style={{ marginBottom:16 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:nt.color,
-                    letterSpacing:.6, textTransform:"uppercase", marginBottom:8 }}>
-                    {nt.icon} {nt.label} ({typeNodes.length})
-                  </div>
-                  {typeNodes.map(n=>(
-                    <div key={n.id} style={{ padding:"12px 14px", marginBottom:7,
-                      background:nt.bg, border:"1px solid "+nt.border,
-                      borderRadius:8, borderLeft:"3px solid "+nt.color }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                        <input value={n.label} onChange={e=>updateNode(n.id,{label:e.target.value})}
-                          style={{ fontSize:12, fontWeight:700, color:nt.color,
-                            background:"transparent", border:"none", outline:"none",
-                            flex:1, fontFamily:"inherit" }}/>
-                        {n.type==="uncertainty" && (
-                          <>
-                            <select value={n.impact} onChange={e=>updateNode(n.id,{impact:e.target.value})}
-                              style={{ fontSize:10, padding:"2px 5px", border:"1px solid "+nt.border,
-                                borderRadius:4, background:nt.bg, color:nt.color, fontFamily:"inherit" }}>
-                              {["High","Medium","Low"].map(v=><option key={v}>{v} Impact</option>)}
-                            </select>
-                            <select value={n.control} onChange={e=>updateNode(n.id,{control:e.target.value})}
-                              style={{ fontSize:10, padding:"2px 5px", border:"1px solid "+nt.border,
-                                borderRadius:4, background:nt.bg, color:nt.color, fontFamily:"inherit" }}>
-                              {["High","Medium","Low","No Control"].map(v=><option key={v}>{v} Control</option>)}
-                            </select>
-                          </>
-                        )}
-                        <button onClick={()=>removeNode(n.id)}
-                          style={{ background:"none", border:"none",
-                            cursor:"pointer", color:"#9ca3af", fontSize:14 }}>×</button>
-                      </div>
-                      <textarea value={n.description||""}
-                        onChange={e=>updateNode(n.id,{description:e.target.value})}
-                        placeholder="Description or notes..."
-                        rows={2}
-                        style={{ width:"100%", fontSize:11, padding:"5px 7px",
-                          fontFamily:"inherit", background:"white",
-                          border:"1px solid "+nt.border, borderRadius:5,
-                          color:DS.inkSub, outline:"none", resize:"vertical",
-                          boxSizing:"border-box" }}/>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Validate view */}
-        {view==="validate" && (
-          <div style={{ flex:1, overflowY:"auto", padding:20 }}>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-              {Object.entries(NODE_TYPES).map(([type,nt])=>(
-                <div key={type} style={{ padding:"14px 16px",
-                  background:nt.bg, border:"1px solid "+nt.border, borderRadius:8,
-                  display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontSize:22 }}>{nt.icon}</span>
+        {/* ── VALIDATE VIEW ── */}
+        {view === "validate" && (
+          <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+            {/* Stats grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 20 }}>
+              {[...Object.entries(NODE_TYPES).map(([type, nt]) => ({
+                icon: nt.icon, color: nt.color, label: nt.label,
+                val: nodes.filter(n => n.type === type).length,
+              })), {
+                icon: "→", color: DS.accent, label: "Edges",
+                val: edges.length,
+              }].map((item, i) => (
+                <div key={i} style={{ padding: "14px 16px", borderRadius: 8,
+                  background: item.color + "12", border: "1px solid " + item.color + "30",
+                  display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>{item.icon}</span>
                   <div>
-                    <div style={{ fontSize:20, fontWeight:700, color:nt.color,
-                      fontFamily:"'Libre Baskerville',serif" }}>
-                      {nodes.filter(n=>n.type===type).length}
-                    </div>
-                    <div style={{ fontSize:11, color:"#6b7280" }}>{nt.label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: item.color,
+                      fontFamily: "'Libre Baskerville',serif" }}>{item.val}</div>
+                    <div style={{ fontSize: 10, color: "#6b7280" }}>{item.label}</div>
                   </div>
                 </div>
               ))}
-              <div style={{ padding:"14px 16px", background:DS.accentSoft,
-                border:"1px solid "+DS.accentLine, borderRadius:8,
-                display:"flex", alignItems:"center", gap:10 }}>
-                <span style={{ fontSize:22 }}>→</span>
-                <div>
-                  <div style={{ fontSize:20, fontWeight:700, color:DS.accent,
-                    fontFamily:"'Libre Baskerville',serif" }}>{edges.length}</div>
-                  <div style={{ fontSize:11, color:"#6b7280" }}>Influence edges</div>
-                </div>
-              </div>
             </div>
-            <Btn variant="primary" onClick={runValidation} style={{ marginBottom:16 }}>
-              Run Validation
+
+            <Btn variant="primary" onClick={runValidation} style={{ marginBottom: 16 }}>
+              Run Structural Validation
             </Btn>
+
             {validation && (
-              validation.length===0
-                ? <div style={{ padding:"16px", background:DS.successSoft,
-                    border:"1px solid "+DS.successLine, borderRadius:8,
-                    color:DS.success, fontWeight:700 }}>✓ Diagram passes all structural checks.</div>
-                : validation.map((v,i)=>(
-                  <div key={i} style={{ padding:"10px 14px", marginBottom:7,
-                    background:DS.dangerSoft, border:"1px solid "+DS.dangerLine,
-                    borderRadius:7, fontSize:12 }}>
-                    <strong>{v.node}:</strong> {v.msg}
+              <div style={{ marginBottom: 20 }}>
+                {validation.length === 0 ? (
+                  <div style={{ padding: "16px 18px", background: DS.successSoft,
+                    border: "1px solid " + DS.successLine, borderRadius: 8,
+                    color: DS.success, fontWeight: 700, fontSize: 13 }}>
+                    ✓ Diagram passes all structural checks. No orphans, disconnected nodes, or duplicate labels.
                   </div>
-                ))
+                ) : validation.map((v, i) => (
+                  <div key={i} style={{ padding: "11px 14px", marginBottom: 8,
+                    background: DS.dangerSoft, border: "1px solid " + DS.dangerLine,
+                    borderRadius: 8, display: "flex", gap: 10 }}>
+                    <span style={{ color: DS.danger, fontSize: 16, flexShrink: 0 }}>⚠</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: DS.ink, marginBottom: 2 }}>
+                        {v.node}
+                      </div>
+                      <div style={{ fontSize: 11, color: DS.inkSub }}>{v.msg}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
+
+            {/* DQ principles */}
+            <div style={{ padding: "16px 18px", background: DS.canvasAlt,
+              border: "1px solid " + DS.canvasBdr, borderRadius: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 10 }}>
+                Influence Diagram DQ Principles
+              </div>
+              {[
+                "Decision nodes must have at least one outgoing influence — they must affect something.",
+                "Value/Outcome nodes must have at least one incoming influence — something must drive the outcome.",
+                "Value/Outcome nodes should not influence upstream nodes — they are terminal.",
+                "No circular dependencies — influence must flow in one direction only.",
+                "Every uncertainty should ultimately connect to a value node (directly or indirectly).",
+                "Orphan nodes (no connections) are not contributing to the model — link or remove them.",
+                "Duplicate node labels suggest redundant thinking — consolidate into one node.",
+                "Every diagram needs at least one value node — what is this decision optimising for?",
+              ].map((rule, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6,
+                  fontSize: 11, color: DS.inkSub, lineHeight: 1.5 }}>
+                  <span style={{ color: DS.accent, flexShrink: 0 }}>·</span>
+                  <span>{rule}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
       </div>
     </div>
   );
