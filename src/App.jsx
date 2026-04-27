@@ -9042,8 +9042,8 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
   };
 
   // ── Timeline canvas ───────────────────────────────────────────────────────
-  const CANVAS_W = 1200 * zoom;
-  const LANE_H = 64;
+  const CANVAS_W = 1400 * zoom;
+  const LANE_H = 80;
   const LANES = [
     { id:"gates",         label:"Decision Gates",          types:["gate"],        color:"#2563eb" },
     { id:"triggers",      label:"Triggers & Milestones",   types:["trigger","milestone"], color:"#7c3aed" },
@@ -9179,7 +9179,7 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                   {/* Lane backgrounds */}
                   {LANES.map((lane,li)=>(
                     <g key={lane.id}>
-                      <rect x={120} y={40+li*LANE_H} width={CANVAS_W}
+                      <rect x={140} y={40+li*LANE_H} width={CANVAS_W}
                         height={LANE_H}
                         fill={li%2===0?"#f8f9fb":"#f2f4f7"} stroke="#e5e7eb" strokeWidth={0.5}/>
                       {/* Lane label */}
@@ -9200,7 +9200,7 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                     const isYear = tick.getMonth()===0;
                     return (
                       <g key={ti}>
-                        <line x1={x} y1={40} x2={x} y2={40+LANES.length*LANE_H}
+                        <line x1={x} y1={36} x2={x} y2={40+LANES.length*LANE_H}
                           stroke={isYear?"#9ca3af":"#e5e7eb"}
                           strokeWidth={isYear?1:0.5}
                           strokeDasharray={isYear?"none":"4,2"}/>
@@ -9246,10 +9246,13 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                           height={LANE_H-8} rx={4}
                           fill={col} fillOpacity={selected===rk.id?0.4:0.18}
                           stroke={col} strokeWidth={selected===rk.id?2:1}/>
-                        <text x={x1+6} y={laneY+LANE_H/2+4}
-                          fontSize={9} fontWeight={600} fill={col}>
-                          {rk.label.slice(0,25)}{rk.label.length>25?"…":""}
-                        </text>
+                        {(x2-x1) > 30 && (
+                          <text x={Math.min(x1+6, x1+(x2-x1)/2)} y={laneY+LANE_H/2+4}
+                            fontSize={8} fontWeight={600} fill={col}
+                            clipPath={"url(#clip-"+rk.id+")"}>
+                            {rk.label.slice(0, Math.max(5, Math.floor((x2-x1)/6)))}{rk.label.length > Math.floor((x2-x1)/6) ? "…" : ""}
+                          </text>
+                        )}
                       </g>
                     );
                   })}
@@ -9270,16 +9273,16 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                         <g key={ev.id} style={{ cursor:"pointer" }}
                           onClick={()=>setSelected(sel=>sel===ev.id?null:ev.id)}>
                           {/* Vertical line */}
-                          <line x1={x} y1={40} x2={x} y2={40+LANES.length*LANE_H}
+                          <line x1={x} y1={36} x2={x} y2={40+LANES.length*LANE_H}
                             stroke={ot.color} strokeWidth={isSel?2:1.5}
                             strokeDasharray="5,3" opacity={0.6}/>
                           {/* Diamond */}
                           <polygon points={x+","+laneY+" "+(x+10)+","+(laneY+LANE_H/2)+" "+x+","+(laneY+LANE_H)+" "+(x-10)+","+(laneY+LANE_H/2)}
                             fill={isSel?ot.color:ot.bg} stroke={ot.color} strokeWidth={2}/>
-                          {/* Label above */}
-                          <text x={x} y={laneY-6} textAnchor="middle"
-                            fontSize={9} fontWeight={700} fill={ot.color}>
-                            {ev.label.slice(0,15)}{ev.label.length>15?"…":""}
+                          {/* Label - staggered by index to prevent overlap */}
+                          <text x={x} y={laneY - 8 - (events.filter(e=>e.type==="gate").indexOf(ev) % 3) * 14}
+                            textAnchor="middle" fontSize={9} fontWeight={700} fill={ot.color}>
+                            {ev.label.slice(0,18)}{ev.label.length>18?"…":""}
                           </text>
                           {/* Readiness badge */}
                           <rect x={x-12} y={laneY+LANE_H} width={24} height={12}
@@ -9299,9 +9302,9 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                           fill={isSel?ot.color:ot.bg} stroke={ot.color} strokeWidth={2}/>
                         <text x={x} y={laneY+LANE_H/2+3.5} textAnchor="middle"
                           fontSize={8} fill={isSel?"white":ot.color}>{ot.icon}</text>
-                        <text x={x+14} y={laneY+LANE_H/2+4}
-                          fontSize={9} fontWeight={600} fill={ot.color}>
-                          {ev.label.slice(0,20)}{ev.label.length>20?"…":""}
+                        <text x={x} y={laneY+LANE_H-4}
+                          textAnchor="middle" fontSize={8} fontWeight={600} fill={ot.color}>
+                          {ev.label.slice(0,16)}{ev.label.length>16?"…":""}
                         </text>
                       </g>
                     );
@@ -10378,7 +10381,6 @@ export default function App() {
             {module==="scorecard"  && <ModuleDQScorecard          {...moduleProps.scorecard}/>}
             {module==="export"     && <ModuleExport               {...moduleProps.export}/>}
             {module==="influence"  && <ModuleInfluenceMap         {...moduleProps.influence}/>}
-            {module==="timeline"   && <ModuleTimeline             {...moduleProps.timeline}/>}
             {module==="timeline"   && <ModuleTimeline             {...moduleProps.timeline}/>}
 
             {/* Custom workspace tabs */}
