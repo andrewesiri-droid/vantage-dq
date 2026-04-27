@@ -9200,10 +9200,7 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                           <div style={{ fontSize:8, fontWeight:800, color:lane.color,
                             letterSpacing:.8, textTransform:"uppercase",
                             textAlign:"center", lineHeight:1.4 }}>
-                            {lane.label.split("
-").map((l,i)=>(
-                              <div key={i}>{l}</div>
-                            ))}
+                            <div>{lane.label1}</div><div>{lane.label2}</div>
                           </div>
                         </div>
 
