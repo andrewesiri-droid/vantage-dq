@@ -1340,6 +1340,188 @@ Return ONLY JSON:
     { id:"heatmap",     label:"Heat Map",           count: null },
   ];
 
+  // ── Build Financial Model ────────────────────────────────────────────────
+  const buildFinancialModel = () => {
+    setBuildingModel(true);
+    const valNodes   = nodes.filter(n => n.type === "value");
+    const decNodes   = nodes.filter(n => n.type === "decision");
+    const uncNodes   = nodes.filter(n => n.type === "uncertainty");
+    const detNodes   = nodes.filter(n => n.type === "deterministic");
+
+    // Build a structured description of the diagram for the AI
+    const diagramDesc =
+      "VALUE NODES (outcomes to model): " + valNodes.map(n => n.label + (n.description?" ["+n.description+"]":"")).join(", ") + ". " +
+      "DECISION NODES (controllable inputs): " + decNodes.map(n => n.label).join(", ") + ". " +
+      "UNCERTAINTY NODES (scenario drivers): " + uncNodes.map(n => n.label + " (impact:"+n.impact+", control:"+n.control+")").join(", ") + ". " +
+      "DETERMINISTIC NODES (calculated lines): " + detNodes.map(n => n.label).join(", ") + ". " +
+      "INFLUENCE EDGES: " + edges.map(e => {
+        const s = nodes.find(n=>n.id===e.from), t = nodes.find(n=>n.id===e.to);
+        return s&&t ? s.label+" → "+t.label : null;
+      }).filter(Boolean).join(", ");
+
+    const params = modelParams;
+
+    aiCall(
+      "You are a financial modelling expert. Build a complete financial model structure for this decision. " +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
+      "Influence diagram structure: " + diagramDesc + ". " +
+      "Model parameters: " +
+      "Time horizon: "+params.horizon+" years. " +
+      "Discount rate: "+params.discount+"%. " +
+      "Currency: "+params.currency+" "+params.revenueUnit+". " +
+      "Initial investment: "+params.investment+" "+params.currency+" "+params.revenueUnit+". " +
+      "Base case Year 1 revenue: "+params.baseRevenue+" "+params.currency+" "+params.revenueUnit+". " +
+      "Annual revenue growth rate: "+params.growthRate+"%. " +
+      "Cost as % of revenue: "+params.costMargin+"%. " +
+      "Build a COMPLETE financial model with three scenarios (Low/Base/High) driven by the uncertainty nodes. " +
+      "Return ONLY JSON with this structure: " +
+      '{"modelTitle":"title","assumptions":[{"name":"param","low":0,"base":0,"high":0,"unit":"desc","driver":"which uncertainty drives this"}],' +
+      '"incomeStatement":{"years":["Y1","Y2","Y3","Y4","Y5"],' +
+      '"revenue":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0],"formula":"=prior*(1+growthRate)"},' +
+      '"costs":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0],"formula":"=revenue*costMargin"},' +
+      '"ebitda":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0],"formula":"=revenue-costs"},' +
+      '"additionalLines":[{"name":"line item","low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0],"formula":"description","driver":"which node drives this"}]},' +
+      '"valuation":{"npv":{"low":0,"base":0,"high":0},"irr":{"low":0,"base":0,"high":0},"payback":{"low":0,"base":0,"high":0}},' +
+      '"scenarioNarrative":{"low":"what happens in the downside","base":"central case","high":"upside case"},' +
+      '"keyRisks":["risk 1 from uncertainty nodes"],' +
+      '"modellingNotes":"key assumptions and limitations"}',
+    (r) => {
+      let result = r;
+      if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setBuildingModel(false); onAIMsg({role:"ai",text:"Could not parse model response."}); return; } }
+      if (result.error) { setBuildingModel(false); onAIMsg({role:"ai",text:"Model error: "+result.error}); return; }
+
+      // Build the Excel file via API call to the server-side generator
+      // For now, pass the model data to a downloadable JSON that gets rendered
+      generateExcelModel(result);
+      setBuildingModel(false);
+      setShowModelModal(false);
+    });
+  };
+
+  const generateExcelModel = (modelData) => {
+    // Create a downloadable data structure
+    // The actual Excel is built in the browser using the SheetJS approach
+    const exportData = {
+      meta: {
+        title: modelData.modelTitle || (problem?.decisionStatement || "Financial Model"),
+        generated: new Date().toISOString().slice(0,10),
+        decision: problem?.decisionStatement || "",
+        params: modelParams,
+      },
+      nodes: { value: nodes.filter(n=>n.type==="value"), decision: nodes.filter(n=>n.type==="decision"),
+               uncertainty: nodes.filter(n=>n.type==="uncertainty"), deterministic: nodes.filter(n=>n.type==="deterministic") },
+      edges,
+      model: modelData,
+    };
+
+    // Trigger download of the model data as JSON (analysts can import to Excel)
+    // Better: open a new window with the model rendered as HTML table
+    const modelWindow = window.open("", "_blank");
+    if (!modelWindow) { onAIMsg({role:"ai",text:"Please allow popups to view the financial model."}); return; }
+
+    const yrs = modelData.incomeStatement?.years || ["Y1","Y2","Y3","Y4","Y5"];
+    const inc = modelData.incomeStatement || {};
+    const val = modelData.valuation || {};
+    const assum = modelData.assumptions || [];
+    const scenarios = ["low","base","high"];
+    const scenColors = { low:"#fef2f2", base:"#eff6ff", high:"#f0fdf4" };
+    const scenLabels = { low:"⬇ Low Case", base:"◆ Base Case", high:"⬆ High Case" };
+
+    const fmtNum = (n) => {
+      if (n === undefined || n === null) return "—";
+      if (typeof n === "number") return n >= 1000 ? n.toLocaleString("en-US",{maximumFractionDigits:0}) : n.toFixed(1);
+      return n;
+    };
+
+    const rows = [
+      { label:"Revenue", key:"revenue", bold:true },
+      { label:"Costs",   key:"costs",   bold:false },
+      { label:"EBITDA",  key:"ebitda",  bold:true, separator:true },
+      ...(inc.additionalLines||[]).map(l=>({ label:l.name, key:null, bold:false, data:l })),
+    ];
+
+    const html = `<!DOCTYPE html><html><head>
+<title>${exportData.meta.title}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Arial,sans-serif; font-size:11px; color:#1e2433; background:#f8f9fb; padding:24px; }
+  h1 { font-size:20px; font-weight:700; color:#1e2433; margin-bottom:4px; }
+  h2 { font-size:13px; font-weight:700; color:#2563eb; margin:20px 0 8px; border-bottom:2px solid #2563eb; padding-bottom:4px; }
+  h3 { font-size:11px; font-weight:700; color:#374151; margin:12px 0 6px; }
+  .meta { font-size:10px; color:#6b7280; margin-bottom:16px; }
+  table { width:100%; border-collapse:collapse; margin-bottom:16px; }
+  th { padding:7px 10px; background:#1e2433; color:#fff; font-weight:700; font-size:10px; text-align:left; }
+  th.num { text-align:right; }
+  td { padding:6px 10px; border-bottom:1px solid #e5e7eb; }
+  td.num { text-align:right; font-family:monospace; }
+  tr.bold td { font-weight:700; background:#f1f5f9; }
+  tr.sep td { border-top:2px solid #374151; }
+  tr.low { background:#fef2f2; }
+  tr.base { background:#eff6ff; }
+  tr.high { background:#f0fdf4; }
+  .scenario-header { padding:4px 10px; font-weight:700; font-size:10px; }
+  .tag { display:inline-block; padding:2px 7px; border-radius:4px; font-size:9px; font-weight:700; margin-left:4px; }
+  .tag-unc { background:#fef3c7; color:#92400e; }
+  .tag-dec { background:#dbeafe; color:#1d4ed8; }
+  .narrative { padding:10px 14px; border-radius:6px; margin-bottom:8px; font-size:11px; line-height:1.6; }
+  .risk { padding:5px 10px; border-left:3px solid #dc2626; background:#fef2f2; margin-bottom:4px; font-size:10px; }
+  .print-btn { position:fixed; top:16px; right:16px; padding:8px 18px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:700; font-size:12px; }
+  @media print { .print-btn { display:none; } }
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
+
+<h1>${exportData.meta.title}</h1>
+<div class="meta">Generated by Vantage DQ · Decision Quality Platform · ${exportData.meta.generated} · 
+Horizon: ${exportData.meta.params.horizon} years · Discount rate: ${exportData.meta.params.discount}% · Currency: ${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit}</div>
+
+<h2>Model Assumptions</h2>
+<table>
+<tr><th style="width:200px">Parameter</th><th class="num">Low Case</th><th class="num">Base Case</th><th class="num">High Case</th><th>Unit</th><th>Uncertainty Driver</th></tr>
+<tr><td>Initial Investment</td><td class="num">${exportData.meta.params.investment}</td><td class="num">${exportData.meta.params.investment}</td><td class="num">${exportData.meta.params.investment}</td><td>${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit}</td><td>—</td></tr>
+<tr><td>Base Revenue (Yr 1)</td><td class="num">—</td><td class="num">${exportData.meta.params.baseRevenue}</td><td class="num">—</td><td>${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit}</td><td>—</td></tr>
+<tr><td>Revenue Growth Rate</td><td class="num">—</td><td class="num">${exportData.meta.params.growthRate}%</td><td class="num">—</td><td>% p.a.</td><td>—</td></tr>
+<tr><td>Cost Margin</td><td class="num">—</td><td class="num">${exportData.meta.params.costMargin}%</td><td class="num">—</td><td>% of revenue</td><td>—</td></tr>
+${assum.map(a => `<tr><td>${a.name}</td><td class="num">${fmtNum(a.low)}</td><td class="num">${fmtNum(a.base)}</td><td class="num">${fmtNum(a.high)}</td><td>${a.unit||""}</td><td><span class="tag tag-unc">${a.driver||""}</span></td></tr>`).join("")}
+</table>
+
+<h2>Income Statement — Three Scenarios</h2>
+${scenarios.map(sc => `
+<h3 style="color:${sc==="low"?"#dc2626":sc==="high"?"#059669":"#2563eb"}">${scenLabels[sc]}</h3>
+<p style="font-size:10px;color:#6b7280;margin-bottom:6px">${modelData.scenarioNarrative?.[sc]||""}</p>
+<table>
+<tr><th style="width:200px">Line Item</th>${yrs.map(y=>`<th class="num">${y}</th>`).join("")}<th>Formula Driver</th></tr>
+${rows.map(row => {
+  const vals = row.data ? row.data[sc] : (inc[row.key]?.[sc] || []);
+  const fmla = row.data ? row.data.formula : (inc[row.key]?.formula || "");
+  const driver = row.data?.driver || "";
+  return `<tr class="${row.bold?"bold":""} ${row.separator?"sep":""}">
+    <td>${row.label}</td>
+    ${yrs.map((_,i) => `<td class="num">${fmtNum(vals?.[i])}</td>`).join("")}
+    <td style="font-size:9px;color:#6b7280">${fmla}${driver?` <span class="tag tag-unc">${driver}</span>`:""}</td>
+  </tr>`;
+}).join("")}
+</table>`).join("")}
+
+<h2>Valuation Summary</h2>
+<table>
+<tr><th style="width:200px">Metric</th><th class="num">⬇ Low Case</th><th class="num">◆ Base Case</th><th class="num">⬆ High Case</th></tr>
+<tr class="bold"><td>NPV (${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit})</td><td class="num" style="color:#dc2626">${fmtNum(val.npv?.low)}</td><td class="num" style="color:#2563eb">${fmtNum(val.npv?.base)}</td><td class="num" style="color:#059669">${fmtNum(val.npv?.high)}</td></tr>
+<tr><td>IRR (%)</td><td class="num">${fmtNum(val.irr?.low)}%</td><td class="num">${fmtNum(val.irr?.base)}%</td><td class="num">${fmtNum(val.irr?.high)}%</td></tr>
+<tr><td>Payback Period (years)</td><td class="num">${fmtNum(val.payback?.low)}</td><td class="num">${fmtNum(val.payback?.base)}</td><td class="num">${fmtNum(val.payback?.high)}</td></tr>
+</table>
+
+<h2>Key Risks from Uncertainty Nodes</h2>
+${(modelData.keyRisks||[]).map(r=>`<div class="risk">${r}</div>`).join("")}
+
+${modelData.modellingNotes?`<h2>Modelling Notes</h2><p style="font-size:11px;color:#4b5563;line-height:1.7">${modelData.modellingNotes}</p>`:""}
+
+</body></html>`;
+
+    modelWindow.document.write(html);
+    modelWindow.document.close();
+    onAIMsg({role:"ai", text:"Financial model built — opened in a new tab. Use Print/Save PDF to export."});
+  };
+
   // ── RENDER ───────────────────────────────────────────────────────────────────
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
@@ -5901,6 +6083,13 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   const [validation, setValidation] = useState(null);
   const [zoom, setZoom]             = useState(1);
   const [metaNode, setMetaNode]     = useState(null); // node being edited in metadata panel
+  const [showModelModal, setShowModelModal] = useState(false);
+  const [modelParams, setModelParams] = useState({
+    horizon: "5", discount: "10", currency: "USD",
+    revenueUnit: "millions", investment: "",
+    baseRevenue: "", growthRate: "", costMargin: "",
+  });
+  const [buildingModel, setBuildingModel] = useState(false);
 
   const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
 
@@ -6235,6 +6424,11 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
             {linkMode ? (linkSource ? "→ Click target node" : "→ Click source node") : "Draw Links"}
           </Btn>
           <Btn variant="secondary" size="sm" onClick={runValidation}>Validate</Btn>
+          <Btn variant="secondary" size="sm"
+            onClick={()=>setShowModelModal(true)}
+            disabled={nodes.length===0}>
+            📊 Financial Model
+          </Btn>
           <Btn variant="primary" icon="spark" size="sm"
             onClick={generateNodes} disabled={aiBusy || generating}>
             {generating ? "Generating…" : "AI Generate"}
@@ -6766,6 +6960,92 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
           </div>
         )}
 
+
+      {/* Financial Model Modal */}
+      {showModelModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)",
+          display:"flex", alignItems:"center", justifyContent:"center", zIndex:9000 }}
+          onClick={e=>{ if(e.target===e.currentTarget) setShowModelModal(false); }}>
+          <div style={{ width:"100%", maxWidth:560, background:DS.canvas,
+            borderRadius:14, boxShadow:"0 24px 64px rgba(0,0,0,.25)", overflow:"hidden" }}>
+            <div style={{ padding:"20px 24px", borderBottom:"1px solid "+DS.canvasBdr,
+              background:"linear-gradient(135deg, #1e2433 0%, #2d3748 100%)" }}>
+              <div style={{ fontSize:17, fontWeight:700, color:"#fff", marginBottom:3 }}>
+                📊 Build Financial Model
+              </div>
+              <div style={{ fontSize:11, color:"#93c5fd" }}>
+                AI uses your influence diagram to build a 3-scenario financial model
+              </div>
+            </div>
+            <div style={{ padding:"10px 24px", background:DS.accentSoft,
+              borderBottom:"1px solid "+DS.accentLine,
+              display:"flex", gap:16, flexWrap:"wrap", alignItems:"center" }}>
+              {[
+                { label:"Decisions", val:nodes.filter(n=>n.type==="decision").length, color:"#2563eb" },
+                { label:"Uncertainties", val:nodes.filter(n=>n.type==="uncertainty").length, color:"#d97706" },
+                { label:"Deterministic", val:nodes.filter(n=>n.type==="deterministic").length, color:"#7c3aed" },
+                { label:"Value nodes", val:nodes.filter(n=>n.type==="value").length, color:"#059669" },
+              ].map(item=>(
+                <div key={item.label} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                  <span style={{ fontSize:14, fontWeight:700, color:item.color }}>{item.val}</span>
+                  <span style={{ fontSize:10, color:DS.inkTer }}>{item.label}</span>
+                </div>
+              ))}
+              <span style={{ fontSize:10, color:DS.inkTer, marginLeft:"auto" }}>{edges.length} edges</span>
+            </div>
+            <div style={{ padding:"18px 24px" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:12 }}>
+                Enter 5 parameters — AI handles the rest
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                {[
+                  { key:"investment",  label:"Total Investment",      placeholder:"e.g. 50",   suffix:"(base currency)" },
+                  { key:"baseRevenue", label:"Year 1 Revenue (Base)", placeholder:"e.g. 12",   suffix:"" },
+                  { key:"growthRate",  label:"Annual Revenue Growth", placeholder:"e.g. 35",   suffix:"%" },
+                  { key:"costMargin",  label:"Cost % of Revenue",     placeholder:"e.g. 65",   suffix:"%" },
+                  { key:"discount",    label:"Discount Rate (WACC)",  placeholder:"e.g. 10",   suffix:"%" },
+                  { key:"horizon",     label:"Model Horizon",         placeholder:"e.g. 5",    suffix:"years" },
+                  { key:"currency",    label:"Currency",              placeholder:"e.g. USD",  suffix:"" },
+                  { key:"revenueUnit", label:"Revenue Unit",          placeholder:"e.g. millions", suffix:"" },
+                ].map(field=>(
+                  <div key={field.key}>
+                    <div style={{ fontSize:9, fontWeight:700, color:DS.inkTer,
+                      letterSpacing:.5, textTransform:"uppercase", marginBottom:3 }}>
+                      {field.label}
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                      <input value={modelParams[field.key]}
+                        onChange={e=>setModelParams(p=>({...p,[field.key]:e.target.value}))}
+                        placeholder={field.placeholder}
+                        style={{ flex:1, padding:"6px 9px", fontSize:12,
+                          fontFamily:"inherit", background:DS.canvasAlt,
+                          border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                          color:DS.ink, outline:"none" }}
+                        onFocus={e=>{e.target.style.borderColor=DS.accent;}}
+                        onBlur={e=>{e.target.style.borderColor=DS.canvasBdr;}}/>
+                      {field.suffix && <span style={{ fontSize:10, color:DS.inkTer, whiteSpace:"nowrap" }}>{field.suffix}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop:12, padding:"9px 12px",
+                background:"#fffbeb", border:"1px solid #fde68a",
+                borderRadius:6, fontSize:10, color:"#92400e", lineHeight:1.5 }}>
+                ⚡ The AI traces causal paths from your uncertainty nodes through to value nodes,
+                builds Low/Base/High scenarios, and calculates NPV/IRR. Opens in a new tab — print to PDF.
+              </div>
+            </div>
+            <div style={{ padding:"13px 24px", borderTop:"1px solid "+DS.canvasBdr,
+              display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <Btn variant="secondary" onClick={()=>setShowModelModal(false)}>Cancel</Btn>
+              <Btn variant="primary" onClick={buildFinancialModel}
+                disabled={buildingModel||!modelParams.investment||!modelParams.baseRevenue}>
+                {buildingModel?"Building model…":"Build Financial Model →"}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
