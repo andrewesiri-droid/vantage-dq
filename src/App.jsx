@@ -7436,6 +7436,7 @@ const PHASE1 = [
 ];
 const PHASE2 = [
   { id:"influence",  num:"08", label:"Influence Map",          sub:"Uncertainty analysis",      icon:"⊕" },
+  { id:"timeline",   num:"09", label:"Decision Risk Timeline", sub:"Time, gates & risk",       icon:"⊳" },
 ];
 const MODULES = [...PHASE1, ...PHASE2];
 
@@ -8904,6 +8905,717 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
 
 
 
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MODULE 09 — DECISION RISK TIMELINE
+───────────────────────────────────────────────────────────────────────────── */
+
+function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy, onAIMsg }) {
+
+  // ── Object types per spec ─────────────────────────────────────────────────
+  const OBJECT_TYPES = {
+    gate:        { label:"Decision Gate",           color:"#2563eb", bg:"#eff4ff", icon:"▼", desc:"A critical decision point requiring readiness" },
+    risk:        { label:"Risk Window",             color:"#dc2626", bg:"#fef2f2", icon:"▬", desc:"A period of elevated risk exposure" },
+    uncertainty: { label:"Uncertainty Reduction",   color:"#d97706", bg:"#fffbeb", icon:"◎", desc:"Activity that reduces uncertainty before commitment" },
+    trigger:     { label:"Trigger Event",           color:"#7c3aed", bg:"#f5f3ff", icon:"⚡", desc:"An event that activates a decision or path" },
+    milestone:   { label:"Milestone",               color:"#059669", bg:"#ecfdf5", icon:"◆", desc:"A key achievement or delivery point" },
+  };
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [view, setView]           = useState("timeline"); // timeline | readiness | lanes
+  const [events, setEvents]       = useState([]);
+  const [risks, setRisks]         = useState([]);
+  const [selected, setSelected]   = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [showAdd, setShowAdd]     = useState(false);
+  const [addType, setAddType]     = useState("gate");
+  const [addLabel, setAddLabel]   = useState("");
+  const [addDate, setAddDate]     = useState("");
+  const [addEnd, setAddEnd]       = useState("");
+  const [zoom, setZoom]           = useState(1);
+  const canvasRef = useRef(null);
+
+  const selectedEvent = events.find(e=>e.id===selected) || risks.find(r=>r.id===selected);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const getDateRange = () => {
+    const allDates = [
+      ...events.map(e=>e.date),
+      ...risks.map(r=>r.startDate),
+      ...risks.map(r=>r.endDate),
+    ].filter(Boolean).map(d=>new Date(d));
+    if (allDates.length === 0) {
+      const now = new Date();
+      return { min: now, max: new Date(now.getFullYear()+3, 0, 1) };
+    }
+    const min = new Date(Math.min(...allDates));
+    const max = new Date(Math.max(...allDates));
+    // Add padding
+    min.setMonth(min.getMonth()-2);
+    max.setMonth(max.getMonth()+3);
+    return { min, max };
+  };
+
+  const dateToX = (dateStr, canvasW) => {
+    const { min, max } = getDateRange();
+    const d = new Date(dateStr);
+    const total = max - min;
+    return total > 0 ? ((d - min) / total) * canvasW : 0;
+  };
+
+  const addEvent = () => {
+    if (!addLabel.trim() || !addDate) return;
+    const ev = {
+      id: uid("ev"), type: addType, label: addLabel.trim(),
+      date: addDate, endDate: addEnd||null,
+      description: "", owner: "", readinessScore: 50,
+      unresolvedUncertainties: [], dependencies: [],
+    };
+    if (addType === "risk") {
+      setRisks(prev=>[...prev, {...ev, startDate:addDate}]);
+    } else {
+      setEvents(prev=>[...prev, ev]);
+    }
+    setAddLabel(""); setAddDate(""); setAddEnd("");
+    setShowAdd(false);
+  };
+
+  const updateEvent = (id, patch) => {
+    setEvents(prev=>prev.map(e=>e.id===id?{...e,...patch}:e));
+    setRisks(prev=>prev.map(r=>r.id===id?{...r,...patch}:r));
+  };
+
+  const removeEvent = (id) => {
+    setEvents(prev=>prev.filter(e=>e.id!==id));
+    setRisks(prev=>prev.filter(r=>r.id!==id));
+    if (selected===id) setSelected(null);
+  };
+
+  // ── AI Generate ───────────────────────────────────────────────────────────
+  const generateTimeline = () => {
+    setGenerating(true);
+    const decList = decisions.filter(d=>d.tier==="focus").map(d=>d.label).join(", ");
+    const issueList = issues.filter(i=>i.severity==="Critical"||i.severity==="High")
+      .slice(0,5).map(i=>i.text.slice(0,60)).join("; ");
+    const today = new Date().toISOString().slice(0,10);
+
+    aiCall(
+      "You are a decision risk analyst building a Decision Risk Timeline. " +
+      "Decision: " + (problem.decisionStatement||"Not defined") + ". " +
+      "Focus decisions: " + (decList||"none") + ". " +
+      "Key risks: " + (issueList||"none") + ". " +
+      "Today is: " + today + ". " +
+      "Generate a realistic decision risk timeline for the next 18-36 months. Include: " +
+      "3-5 decision gates (critical go/no-go points), " +
+      "2-4 risk windows (periods of elevated exposure), " +
+      "2-3 uncertainty reduction activities, " +
+      "1-2 trigger events. " +
+      "Use realistic dates starting from today. " +
+      'Return ONLY JSON: {"events":[{"type":"gate","label":"FID","date":"2026-06-01","description":"Final investment decision","owner":"CEO","readinessScore":45}],' +
+      '"risks":[{"type":"risk","label":"Regulatory Risk Window","startDate":"2026-01-01","endDate":"2026-04-01","description":"Election period creates regulatory uncertainty","severity":"high"}],' +
+      '"insight":"Key observation about the timeline"}',
+    (r)=>{
+      let result = r;
+      if (r._raw) { try { result=JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setGenerating(false); onAIMsg({role:"ai",text:"Could not parse timeline response."}); return; } }
+      if (result.error) { setGenerating(false); onAIMsg({role:"ai",text:"AI error: "+result.error}); return; }
+      if (result.events?.length) {
+        const newEvs = result.events.map(e=>({
+          id:uid("ev"), type:e.type||"gate", label:e.label,
+          date:e.date, description:e.description||"",
+          owner:e.owner||"", readinessScore:e.readinessScore||50,
+          unresolvedUncertainties:[], dependencies:[],
+        }));
+        setEvents(prev=>[...prev,...newEvs]);
+      }
+      if (result.risks?.length) {
+        const newRisks = result.risks.map(r=>({
+          id:uid("rk"), type:"risk", label:r.label,
+          startDate:r.startDate, endDate:r.endDate,
+          description:r.description||"",
+          severity:r.severity||"medium",
+        }));
+        setRisks(prev=>[...prev,...newRisks]);
+      }
+      onAIMsg({role:"ai",text:result.insight||("Timeline generated with "+( result.events?.length||0)+" events and "+(result.risks?.length||0)+" risk windows.")});
+      setGenerating(false);
+    });
+  };
+
+  // ── Timeline canvas ───────────────────────────────────────────────────────
+  const CANVAS_W = 1200 * zoom;
+  const LANE_H = 64;
+  const LANES = [
+    { id:"gates",         label:"Decision Gates",          types:["gate"],        color:"#2563eb" },
+    { id:"triggers",      label:"Triggers & Milestones",   types:["trigger","milestone"], color:"#7c3aed" },
+    { id:"uncertainty",   label:"Uncertainty Reduction",   types:["uncertainty"], color:"#d97706" },
+    { id:"risks",         label:"Risk Windows",            types:["risk"],        color:"#dc2626" },
+  ];
+
+  const { min: dateMin, max: dateMax } = getDateRange();
+  const totalMs = dateMax - dateMin;
+
+  const getX = (dateStr) => {
+    if (!dateStr) return 0;
+    const d = new Date(dateStr);
+    return totalMs > 0 ? ((d - dateMin) / totalMs) * CANVAS_W : 0;
+  };
+
+  // Generate month ticks
+  const monthTicks = [];
+  const cursor = new Date(dateMin);
+  cursor.setDate(1);
+  while (cursor < dateMax) {
+    monthTicks.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth()+1);
+  }
+
+  const svgH = LANES.length * LANE_H + 60; // 60 for header
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
+
+      {/* Header */}
+      <div style={{ padding:"14px 24px", background:DS.canvas,
+        borderBottom:"1px solid "+DS.canvasBdr,
+        display:"flex", alignItems:"center", gap:12, flexShrink:0, flexWrap:"wrap" }}>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:10, color:DS.inkTer, letterSpacing:1,
+            textTransform:"uppercase", fontWeight:700, marginBottom:2 }}>Module 09</div>
+          <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif",
+            fontSize:20, fontWeight:700, color:DS.ink }}>Decision Risk Timeline</div>
+        </div>
+
+        {/* View tabs */}
+        <div style={{ display:"flex", border:"1px solid "+DS.canvasBdr,
+          borderRadius:7, overflow:"hidden" }}>
+          {[{id:"timeline",label:"Timeline"},{id:"readiness",label:"Readiness"},{id:"register",label:"Event Register"}].map(v=>(
+            <button key={v.id} onClick={()=>setView(v.id)}
+              style={{ padding:"6px 12px", fontSize:11, fontWeight:700,
+                fontFamily:"inherit", cursor:"pointer", border:"none",
+                background:view===v.id?DS.accent:"transparent",
+                color:view===v.id?"#fff":DS.inkSub,
+                transition:"all .12s" }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Zoom */}
+        {view==="timeline" && (
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <button onClick={()=>setZoom(z=>Math.max(0.5,z-0.25))}
+              style={{ width:24,height:24,borderRadius:4,border:"1px solid "+DS.canvasBdr,
+                background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:14 }}>−</button>
+            <span style={{ fontSize:10,color:DS.inkTer,width:36,textAlign:"center" }}>{Math.round(zoom*100)}%</span>
+            <button onClick={()=>setZoom(z=>Math.min(2.5,z+0.25))}
+              style={{ width:24,height:24,borderRadius:4,border:"1px solid "+DS.canvasBdr,
+                background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:14 }}>+</button>
+          </div>
+        )}
+
+        <Btn variant="secondary" size="sm" onClick={()=>setShowAdd(p=>!p)}>+ Add Event</Btn>
+        <Btn variant="primary" icon="spark" size="sm"
+          onClick={generateTimeline} disabled={aiBusy||generating}>
+          {generating?"Generating…":"AI Generate"}
+        </Btn>
+      </div>
+
+      {/* Add event panel */}
+      {showAdd && (
+        <div style={{ padding:"12px 24px", background:DS.accentSoft,
+          borderBottom:"1px solid "+DS.accentLine,
+          display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:DS.accent }}>Type:</span>
+          {Object.entries(OBJECT_TYPES).map(([key,ot])=>(
+            <button key={key} onClick={()=>setAddType(key)}
+              style={{ padding:"3px 10px", fontSize:10, fontWeight:700,
+                fontFamily:"inherit", cursor:"pointer",
+                border:"1.5px solid "+(addType===key?ot.color:DS.canvasBdr),
+                borderRadius:5, background:addType===key?ot.bg:"transparent",
+                color:addType===key?ot.color:DS.inkSub }}>
+              {ot.icon} {ot.label}
+            </button>
+          ))}
+          <input value={addLabel} onChange={e=>setAddLabel(e.target.value)}
+            placeholder="Label..."
+            style={{ padding:"5px 9px", fontSize:11, fontFamily:"inherit",
+              background:DS.canvas, border:"1px solid "+DS.accentLine,
+              borderRadius:5, color:DS.ink, outline:"none", width:180 }}/>
+          <input type="date" value={addDate} onChange={e=>setAddDate(e.target.value)}
+            style={{ padding:"5px 9px", fontSize:11, fontFamily:"inherit",
+              background:DS.canvas, border:"1px solid "+DS.accentLine,
+              borderRadius:5, color:DS.ink, outline:"none" }}/>
+          {(addType==="risk") && (
+            <input type="date" value={addEnd} onChange={e=>setAddEnd(e.target.value)}
+              placeholder="End date"
+              style={{ padding:"5px 9px", fontSize:11, fontFamily:"inherit",
+                background:DS.canvas, border:"1px solid "+DS.accentLine,
+                borderRadius:5, color:DS.ink, outline:"none" }}/>
+          )}
+          <Btn variant="primary" size="sm" onClick={addEvent}>Add</Btn>
+          <Btn variant="secondary" size="sm" onClick={()=>setShowAdd(false)}>Cancel</Btn>
+        </div>
+      )}
+
+      {/* Main content */}
+      <div style={{ flex:1, overflow:"hidden", display:"flex" }}>
+
+        {/* ── TIMELINE VIEW ─────────────────────────────────────────── */}
+        {view==="timeline" && (
+          <div style={{ flex:1, overflow:"auto", background:"#fafbfc" }}>
+            {events.length===0 && risks.length===0 ? (
+              <div style={{ display:"flex", flexDirection:"column",
+                alignItems:"center", justifyContent:"center",
+                height:"100%", color:DS.inkTer, gap:12 }}>
+                <div style={{ fontSize:32 }}>⊳</div>
+                <div style={{ fontSize:14, fontWeight:600 }}>No timeline events yet</div>
+                <div style={{ fontSize:12 }}>Click "+ Add Event" or use "AI Generate" to build your timeline.</div>
+              </div>
+            ) : (
+              <div style={{ minWidth:CANVAS_W+200, padding:"0 0 24px" }}>
+                <svg width={CANVAS_W+200} height={svgH}
+                  style={{ display:"block", fontFamily:"'IBM Plex Sans',sans-serif" }}>
+
+                  {/* Lane backgrounds */}
+                  {LANES.map((lane,li)=>(
+                    <g key={lane.id}>
+                      <rect x={120} y={40+li*LANE_H} width={CANVAS_W}
+                        height={LANE_H}
+                        fill={li%2===0?"#f8f9fb":"#f2f4f7"} stroke="#e5e7eb" strokeWidth={0.5}/>
+                      {/* Lane label */}
+                      <text x={8} y={40+li*LANE_H+LANE_H/2+5}
+                        fontSize={9} fontWeight={700} fill={lane.color}
+                        textAnchor="start"
+                        style={{ textTransform:"uppercase", letterSpacing:0.5 }}>
+                        {lane.label.split(" ").map((w,wi)=>(
+                          <tspan key={wi} x={8} dy={wi===0?(li===0?0:-5):12}>{w}</tspan>
+                        ))}
+                      </text>
+                    </g>
+                  ))}
+
+                  {/* Month ticks */}
+                  {monthTicks.map((tick,ti)=>{
+                    const x = 120 + ((tick - dateMin) / totalMs) * CANVAS_W;
+                    const isYear = tick.getMonth()===0;
+                    return (
+                      <g key={ti}>
+                        <line x1={x} y1={40} x2={x} y2={40+LANES.length*LANE_H}
+                          stroke={isYear?"#9ca3af":"#e5e7eb"}
+                          strokeWidth={isYear?1:0.5}
+                          strokeDasharray={isYear?"none":"4,2"}/>
+                        <text x={x} y={32} textAnchor="middle"
+                          fontSize={isYear?10:8}
+                          fontWeight={isYear?700:400}
+                          fill={isYear?"#374151":"#9ca3af"}>
+                          {isYear
+                            ? tick.getFullYear()
+                            : tick.toLocaleString("default",{month:"short"})}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Today line */}
+                  {(()=>{
+                    const todayX = 120 + getX(new Date().toISOString().slice(0,10));
+                    return (
+                      <g>
+                        <line x1={todayX} y1={36} x2={todayX}
+                          y2={40+LANES.length*LANE_H}
+                          stroke="#2563eb" strokeWidth={2}/>
+                        <text x={todayX} y={15} textAnchor="middle"
+                          fontSize={9} fontWeight={700} fill="#2563eb">TODAY</text>
+                        <rect x={todayX-18} y={18} width={36} height={14}
+                          rx={3} fill="#2563eb" opacity={0.1}/>
+                      </g>
+                    );
+                  })()}
+
+                  {/* Risk windows */}
+                  {risks.map(rk=>{
+                    const x1 = 120 + getX(rk.startDate);
+                    const x2 = 120 + getX(rk.endDate||rk.startDate);
+                    const laneY = 40 + 3*LANE_H; // risks lane
+                    const sev = rk.severity;
+                    const col = sev==="high"?"#dc2626":sev==="medium"?"#d97706":"#059669";
+                    return (
+                      <g key={rk.id} style={{ cursor:"pointer" }}
+                        onClick={()=>setSelected(sel=>sel===rk.id?null:rk.id)}>
+                        <rect x={x1} y={laneY+4} width={Math.max(8,x2-x1)}
+                          height={LANE_H-8} rx={4}
+                          fill={col} fillOpacity={selected===rk.id?0.4:0.18}
+                          stroke={col} strokeWidth={selected===rk.id?2:1}/>
+                        <text x={x1+6} y={laneY+LANE_H/2+4}
+                          fontSize={9} fontWeight={600} fill={col}>
+                          {rk.label.slice(0,25)}{rk.label.length>25?"…":""}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Events */}
+                  {events.map(ev=>{
+                    const ot = OBJECT_TYPES[ev.type]||OBJECT_TYPES.milestone;
+                    const laneIdx = LANES.findIndex(l=>l.types.includes(ev.type));
+                    const laneY = 40 + (laneIdx>=0?laneIdx:0)*LANE_H;
+                    const x = 120 + getX(ev.date);
+                    const isSel = selected===ev.id;
+
+                    if (ev.type==="gate") {
+                      // Diamond marker for gates
+                      const r = ev.readinessScore||0;
+                      const color = r>=70?DS.success:r>=40?DS.warning:DS.danger;
+                      return (
+                        <g key={ev.id} style={{ cursor:"pointer" }}
+                          onClick={()=>setSelected(sel=>sel===ev.id?null:ev.id)}>
+                          {/* Vertical line */}
+                          <line x1={x} y1={40} x2={x} y2={40+LANES.length*LANE_H}
+                            stroke={ot.color} strokeWidth={isSel?2:1.5}
+                            strokeDasharray="5,3" opacity={0.6}/>
+                          {/* Diamond */}
+                          <polygon points={x+","+laneY+" "+(x+10)+","+(laneY+LANE_H/2)+" "+x+","+(laneY+LANE_H)+" "+(x-10)+","+(laneY+LANE_H/2)}
+                            fill={isSel?ot.color:ot.bg} stroke={ot.color} strokeWidth={2}/>
+                          {/* Label above */}
+                          <text x={x} y={laneY-6} textAnchor="middle"
+                            fontSize={9} fontWeight={700} fill={ot.color}>
+                            {ev.label.slice(0,15)}{ev.label.length>15?"…":""}
+                          </text>
+                          {/* Readiness badge */}
+                          <rect x={x-12} y={laneY+LANE_H} width={24} height={12}
+                            rx={3} fill={color} opacity={0.9}/>
+                          <text x={x} y={laneY+LANE_H+9} textAnchor="middle"
+                            fontSize={8} fontWeight={700} fill="white">
+                            {r}%
+                          </text>
+                        </g>
+                      );
+                    }
+
+                    return (
+                      <g key={ev.id} style={{ cursor:"pointer" }}
+                        onClick={()=>setSelected(sel=>sel===ev.id?null:ev.id)}>
+                        <circle cx={x} cy={laneY+LANE_H/2} r={isSel?10:7}
+                          fill={isSel?ot.color:ot.bg} stroke={ot.color} strokeWidth={2}/>
+                        <text x={x} y={laneY+LANE_H/2+3.5} textAnchor="middle"
+                          fontSize={8} fill={isSel?"white":ot.color}>{ot.icon}</text>
+                        <text x={x+14} y={laneY+LANE_H/2+4}
+                          fontSize={9} fontWeight={600} fill={ot.color}>
+                          {ev.label.slice(0,20)}{ev.label.length>20?"…":""}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                </svg>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── READINESS VIEW ─────────────────────────────────────────── */}
+        {view==="readiness" && (
+          <div style={{ flex:1, overflowY:"auto", padding:24 }}>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:4 }}>
+                Decision Gate Readiness
+              </div>
+              <div style={{ fontSize:11, color:DS.inkTer }}>
+                How ready is each decision gate? Track unresolved uncertainties and confidence levels.
+              </div>
+            </div>
+            {events.filter(e=>e.type==="gate").length===0 ? (
+              <div style={{ padding:"40px", textAlign:"center", color:DS.inkTer, fontSize:13,
+                border:"1.5px dashed "+DS.canvasMid, borderRadius:10 }}>
+                No decision gates yet. Add gates in the Timeline view or use AI Generate.
+              </div>
+            ) : events.filter(e=>e.type==="gate").map(gate=>{
+              const r = gate.readinessScore||0;
+              const color = r>=70?DS.success:r>=40?DS.warning:DS.danger;
+              const ot = OBJECT_TYPES.gate;
+              return (
+                <div key={gate.id} style={{ padding:"18px 20px", marginBottom:14,
+                  background:DS.canvas, border:"1px solid "+DS.canvasBdr,
+                  borderRadius:10, borderLeft:"4px solid "+color }}>
+                  <div style={{ display:"flex", alignItems:"flex-start",
+                    gap:14, marginBottom:12 }}>
+                    <div style={{ textAlign:"center", flexShrink:0 }}>
+                      <div style={{ fontFamily:"'Libre Baskerville',serif",
+                        fontSize:28, fontWeight:700, color,
+                        lineHeight:1 }}>{r}%</div>
+                      <div style={{ fontSize:9, color:DS.inkTer,
+                        fontWeight:700, textTransform:"uppercase" }}>Ready</div>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:14, fontWeight:700, color:DS.ink,
+                        marginBottom:3 }}>{gate.label}</div>
+                      <div style={{ fontSize:11, color:DS.inkTer }}>
+                        {gate.date ? new Date(gate.date).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}) : "No date set"}
+                        {gate.owner ? " · Owner: "+gate.owner : ""}
+                      </div>
+                    </div>
+                    {/* Readiness slider */}
+                    <div style={{ display:"flex", flexDirection:"column",
+                      alignItems:"center", gap:4, flexShrink:0 }}>
+                      <input type="range" min={0} max={100}
+                        value={gate.readinessScore||0}
+                        onChange={e=>updateEvent(gate.id,{readinessScore:+e.target.value})}
+                        style={{ width:100 }}/>
+                      <span style={{ fontSize:9, color:DS.inkTer }}>Adjust readiness</span>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ height:6, background:DS.canvasBdr,
+                    borderRadius:3, overflow:"hidden", marginBottom:12 }}>
+                    <div style={{ width:r+"%", height:"100%", background:color,
+                      borderRadius:3, transition:"width .3s" }}/>
+                  </div>
+
+                  {/* Description */}
+                  <textarea value={gate.description||""}
+                    onChange={e=>updateEvent(gate.id,{description:e.target.value})}
+                    placeholder="What inputs and conditions are required for this gate? What remains unresolved?"
+                    rows={2}
+                    style={{ width:"100%", padding:"7px 9px", fontSize:11,
+                      fontFamily:"inherit", background:DS.canvasAlt,
+                      border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                      color:DS.ink, outline:"none", resize:"none",
+                      lineHeight:1.5, boxSizing:"border-box", marginBottom:10 }}/>
+
+                  {/* Status badge */}
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <span style={{ fontSize:10, padding:"2px 9px", borderRadius:4,
+                      fontWeight:700, background:color+"20", color,
+                      border:"1px solid "+color+"40" }}>
+                      {r>=70?"READY TO DECIDE":r>=40?"IN PROGRESS":"NOT READY"}
+                    </span>
+                    {r < 50 && (
+                      <span style={{ fontSize:10, color:DS.danger }}>
+                        ⚠ High uncertainty — resolve critical unknowns before committing
+                      </span>
+                    )}
+                    <button onClick={()=>removeEvent(gate.id)}
+                      style={{ marginLeft:"auto", background:"none", border:"none",
+                        cursor:"pointer", color:"#9ca3af", fontSize:12 }}>
+                      Remove gate
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── EVENT REGISTER VIEW ─────────────────────────────────────── */}
+        {view==="register" && (
+          <div style={{ flex:1, overflowY:"auto", padding:24 }}>
+            {[...events, ...risks].length===0 ? (
+              <div style={{ padding:"40px", textAlign:"center", color:DS.inkTer,
+                fontSize:13, border:"1.5px dashed "+DS.canvasMid, borderRadius:10 }}>
+                No events yet. Add events or use AI Generate.
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {/* Group by type */}
+                {Object.entries(OBJECT_TYPES).map(([type,ot])=>{
+                  const typeEvs = type==="risk"
+                    ? risks
+                    : events.filter(e=>e.type===type);
+                  if (typeEvs.length===0) return null;
+                  return (
+                    <div key={type}>
+                      <div style={{ fontSize:10, fontWeight:700, color:ot.color,
+                        letterSpacing:.6, textTransform:"uppercase",
+                        marginBottom:6, display:"flex", alignItems:"center", gap:6 }}>
+                        {ot.icon} {ot.label} ({typeEvs.length})
+                      </div>
+                      {typeEvs.map(ev=>(
+                        <div key={ev.id} style={{ padding:"12px 16px", marginBottom:6,
+                          background:ot.bg, border:"1px solid "+ot.color+"30",
+                          borderRadius:8, borderLeft:"3px solid "+ot.color,
+                          display:"flex", alignItems:"flex-start", gap:12 }}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:12, fontWeight:700,
+                              color:ot.color, marginBottom:2 }}>{ev.label}</div>
+                            <div style={{ fontSize:10, color:DS.inkTer }}>
+                              {ev.date||ev.startDate
+                                ? new Date(ev.date||ev.startDate).toLocaleDateString("en-GB",{month:"short",year:"numeric"})
+                                : "No date"}
+                              {ev.endDate
+                                ? " → "+new Date(ev.endDate).toLocaleDateString("en-GB",{month:"short",year:"numeric"})
+                                : ""}
+                              {ev.owner ? " · "+ev.owner : ""}
+                              {ev.severity ? " · "+ev.severity+" severity" : ""}
+                            </div>
+                            {ev.description && (
+                              <div style={{ fontSize:11, color:DS.inkSub,
+                                marginTop:3 }}>{ev.description}</div>
+                            )}
+                          </div>
+                          {ev.type==="gate" && (
+                            <div style={{ fontSize:12, fontWeight:700,
+                              color:ev.readinessScore>=70?DS.success:ev.readinessScore>=40?DS.warning:DS.danger,
+                              flexShrink:0 }}>
+                              {ev.readinessScore||0}% ready
+                            </div>
+                          )}
+                          <button onClick={()=>removeEvent(ev.id)}
+                            style={{ background:"none", border:"none",
+                              cursor:"pointer", color:"#9ca3af",
+                              fontSize:14, flexShrink:0 }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+
+      {/* Detail panel - slides in when event selected */}
+      {selected && selectedEvent && (
+        <div style={{ position:"absolute", right:0, top:0, bottom:0, width:280,
+          background:DS.canvas, borderLeft:"1px solid "+DS.canvasBdr,
+          boxShadow:"-4px 0 20px rgba(0,0,0,.08)",
+          display:"flex", flexDirection:"column",
+          zIndex:10, overflowY:"auto" }}>
+          <div style={{ padding:"14px 16px", borderBottom:"1px solid "+DS.canvasBdr,
+            display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ flex:1, fontSize:13, fontWeight:700, color:DS.ink }}>
+              {selectedEvent.label}
+            </div>
+            <button onClick={()=>setSelected(null)}
+              style={{ background:"none", border:"none",
+                cursor:"pointer", color:DS.inkTer, fontSize:16 }}>×</button>
+          </div>
+          <div style={{ padding:"14px 16px", flex:1 }}>
+            {(() => {
+              const ot = OBJECT_TYPES[selectedEvent.type]||OBJECT_TYPES.milestone;
+              return (
+                <div>
+                  <div style={{ fontSize:9, fontWeight:700, color:ot.color,
+                    letterSpacing:.6, textTransform:"uppercase",
+                    marginBottom:12 }}>{ot.icon} {ot.label}</div>
+
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                      marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Label</div>
+                    <input value={selectedEvent.label}
+                      onChange={e=>updateEvent(selected,{label:e.target.value})}
+                      style={{ width:"100%", padding:"6px 8px", fontSize:12,
+                        fontFamily:"inherit", background:DS.canvasAlt,
+                        border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                        color:DS.ink, outline:"none", boxSizing:"border-box" }}/>
+                  </div>
+
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                      marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Date</div>
+                    <input type="date"
+                      value={selectedEvent.date||selectedEvent.startDate||""}
+                      onChange={e=>updateEvent(selected,{date:e.target.value,startDate:e.target.value})}
+                      style={{ width:"100%", padding:"6px 8px", fontSize:12,
+                        fontFamily:"inherit", background:DS.canvasAlt,
+                        border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                        color:DS.ink, outline:"none" }}/>
+                  </div>
+
+                  {selectedEvent.type==="risk" && (
+                    <div style={{ marginBottom:10 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                        marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>End Date</div>
+                      <input type="date" value={selectedEvent.endDate||""}
+                        onChange={e=>updateEvent(selected,{endDate:e.target.value})}
+                        style={{ width:"100%", padding:"6px 8px", fontSize:12,
+                          fontFamily:"inherit", background:DS.canvasAlt,
+                          border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                          color:DS.ink, outline:"none" }}/>
+                    </div>
+                  )}
+
+                  {selectedEvent.type==="gate" && (
+                    <div style={{ marginBottom:10 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                        marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>
+                        Readiness Score
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <input type="range" min={0} max={100}
+                          value={selectedEvent.readinessScore||0}
+                          onChange={e=>updateEvent(selected,{readinessScore:+e.target.value})}
+                          style={{ flex:1 }}/>
+                        <span style={{ fontSize:12, fontWeight:700,
+                          color:selectedEvent.readinessScore>=70?DS.success:selectedEvent.readinessScore>=40?DS.warning:DS.danger }}>
+                          {selectedEvent.readinessScore||0}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedEvent.type==="risk" && (
+                    <div style={{ marginBottom:10 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                        marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Severity</div>
+                      <select value={selectedEvent.severity||"medium"}
+                        onChange={e=>updateEvent(selected,{severity:e.target.value})}
+                        style={{ width:"100%", padding:"6px 8px", fontSize:12,
+                          fontFamily:"inherit", background:DS.canvasAlt,
+                          border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                          color:DS.ink, outline:"none" }}>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                      marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Owner</div>
+                    <input value={selectedEvent.owner||""}
+                      onChange={e=>updateEvent(selected,{owner:e.target.value})}
+                      placeholder="Decision owner..."
+                      style={{ width:"100%", padding:"6px 8px", fontSize:12,
+                        fontFamily:"inherit", background:DS.canvasAlt,
+                        border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                        color:DS.ink, outline:"none", boxSizing:"border-box" }}/>
+                  </div>
+
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                      marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Description</div>
+                    <textarea value={selectedEvent.description||""}
+                      onChange={e=>updateEvent(selected,{description:e.target.value})}
+                      placeholder="Context, criteria, dependencies..."
+                      rows={4}
+                      style={{ width:"100%", padding:"6px 8px", fontSize:11,
+                        fontFamily:"inherit", background:DS.canvasAlt,
+                        border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                        color:DS.ink, outline:"none", resize:"vertical",
+                        lineHeight:1.5, boxSizing:"border-box" }}/>
+                  </div>
+
+                  <button onClick={()=>removeEvent(selected)}
+                    style={{ width:"100%", padding:"7px", fontSize:11,
+                      fontFamily:"inherit", background:"transparent",
+                      border:"1px solid "+DS.dangerLine, borderRadius:6,
+                      color:DS.danger, cursor:"pointer", fontWeight:700 }}>
+                    Remove Event
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CrossModuleAI({ problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, aiCall, aiBusy, onClose }) {
   const [running, setRunning] = useState(false);
   const [insights, setInsights] = useState(null);
@@ -9198,6 +9910,7 @@ export default function App() {
     scorecard: { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     export:    { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, aiCall, aiBusy, onAIMsg:pushAIMsg },
     influence: { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    timeline:  { decisions, strategies, issues, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
   };
 
   return (
@@ -9665,6 +10378,8 @@ export default function App() {
             {module==="scorecard"  && <ModuleDQScorecard          {...moduleProps.scorecard}/>}
             {module==="export"     && <ModuleExport               {...moduleProps.export}/>}
             {module==="influence"  && <ModuleInfluenceMap         {...moduleProps.influence}/>}
+            {module==="timeline"   && <ModuleTimeline             {...moduleProps.timeline}/>}
+            {module==="timeline"   && <ModuleTimeline             {...moduleProps.timeline}/>}
 
             {/* Custom workspace tabs */}
             {customTabs.map(tab => {
