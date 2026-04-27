@@ -8727,6 +8727,18 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
 
 
 const HARDCODED_API_KEY = null;
+
+const SESSION_KEY = "vantage_dq_session";
+const saveSession = (data) => {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); } catch(e) {}
+};
+const loadSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+};
+
 export default function App() {
   const [module, setModule]               = useState("problem");
   const [customTabs, setCustomTabs]       = useState([]);
