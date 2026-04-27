@@ -2575,11 +2575,7 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
     }));
   };
 
-  const chosen = (s, decId, optIdx) => {
-    const v = s.selections[decId];
-    if (Array.isArray(v)) return v.includes(optIdx);
-    return v === optIdx;
-  };
+
 
   const hasSel = (s, decId) => {
     const v = s.selections[decId];
@@ -3005,7 +3001,7 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
                                   <div style={{ display: "flex",
                                     flexDirection: "column", gap: 6 }}>
                                     {d.choices.map((choice, ri) => {
-                                      const chosen = isChosen(s, d.id, ri);
+                                      const cellChosen = isChosen(s, d.id, ri);
                                       // Other strategies that also chose this option
                                       const others = strategies.filter(
                                         st => st.id !== s.id && st.selections[d.id] === ri
@@ -3015,31 +3011,31 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
                                           onClick={() => selectCell(s.id, d.id, ri)}
                                           style={{ padding: "9px 12px",
                                             borderRadius: 7,
-                                            border: chosen
+                                            border: cellChosen
                                               ? "2px solid " + col.fill
                                               : "1.5px solid " + DS.canvasBdr,
-                                            background: chosen ? col.fill : "transparent",
+                                            background: cellChosen ? col.fill : "transparent",
                                             cursor: "pointer",
                                             display: "flex",
                                             alignItems: "center", gap: 8,
                                             transition: "all .1s",
-                                            opacity: chosen ? 1 : 0.65 }}>
-                                          {/* Filled circle when chosen */}
+                                            opacity: cellChosen ? 1 : 0.65 }}>
+                                          {/* Filled circle when cellChosen */}
                                           <div style={{ width: 14, height: 14,
                                             borderRadius: "50%", flexShrink: 0,
-                                            background: chosen ? "#fff" : "transparent",
-                                            border: "2px solid " + (chosen ? "#fff" : col.fill + "60"),
+                                            background: cellChosen ? "#fff" : "transparent",
+                                            border: "2px solid " + (cellChosen ? "#fff" : col.fill + "60"),
                                             display: "flex", alignItems: "center",
                                             justifyContent: "center" }}>
-                                            {chosen && (
+                                            {cellChosen && (
                                               <div style={{ width: 6, height: 6,
                                                 borderRadius: "50%",
                                                 background: col.fill }}/>
                                             )}
                                           </div>
                                           <span style={{ fontSize: 12, flex: 1,
-                                            fontWeight: chosen ? 700 : 400,
-                                            color: chosen ? "#fff" : DS.inkSub,
+                                            fontWeight: cellChosen ? 700 : 400,
+                                            color: cellChosen ? "#fff" : DS.inkSub,
                                             lineHeight: 1.3 }}>
                                             {choice}
                                           </span>
