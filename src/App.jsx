@@ -9205,7 +9205,7 @@ export default function App() {
     assessment:{ strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     scorecard: { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     export:    { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    timeline: { decisions, strategies, issues, problem, aiCall:call, aiBusy, onAIMsg:pushMsg },
+    timeline: { decisions, strategies, issues, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
     influence: { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg },
   };
 
@@ -9529,7 +9529,7 @@ export default function App() {
             {module==="assessment" && <ModuleQualitativeAssessment {...moduleProps.assessment}/>}
             {module==="scorecard"  && <ModuleDQScorecard          {...moduleProps.scorecard}/>}
             {module==="export"     && <ModuleExport               {...moduleProps.export}/>}
-            {module==="timeline" && <ModuleTimeline decisions={decisions} strategies={strategies} issues={issues} problem={problem} aiCall={call} aiBusy={aiBusy} onAIMsg={pushMsg}/>}
+            {module==="timeline" && <ModuleTimeline decisions={decisions} strategies={strategies} issues={issues} problem={problem} aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>}
             {module==="influence"  && <ModuleInfluenceMap         {...moduleProps.influence}/>}
           </div>
 
