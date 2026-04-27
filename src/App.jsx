@@ -8900,13 +8900,7 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
    QUICK START — AI DEEP DIVE ENTRY SCREEN
 ───────────────────────────────────────────────────────────────────────────── */
 
-const ANALYSIS_STEPS = [
-  { id:"frame",     label:"Extracting decision frame",      icon:"◎", module:"Problem Definition" },
-  { id:"issues",    label:"Identifying issues & risks",     icon:"◈", module:"Issue Raising" },
-  { id:"hierarchy", label:"Structuring decision hierarchy", icon:"◧", module:"Decision Hierarchy" },
-  { id:"criteria",  label:"Inferring decision criteria",    icon:"◫", module:"Decision Criteria" },
-  { id:"strategy",  label:"Drafting initial strategies",    icon:"⊞", module:"Strategy Table" },
-];
+
 
 
 
