@@ -2523,8 +2523,8 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
   const activeSData = strategies.find(s => s.id === activeS) || null;
 
   // ── Mutations ──────────────────────────────────────────────────────────────
-  const [newDecLabel, setNewDecLabel] = React.useState("");
-  const [showAddDec, setShowAddDec] = React.useState(false);
+  const [newDecLabel, setNewDecLabel] = useState("");
+  const [showAddDec, setShowAddDec] = useState(false);
 
   const addFocusDecision = () => {
     const label = newDecLabel.trim();
