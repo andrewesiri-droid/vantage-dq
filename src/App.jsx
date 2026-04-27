@@ -2505,7 +2505,7 @@ const defaultStrategies = () => ([
   { id:uid("s"), colorIdx:1, name:"Beta", description:"Asset-light partnership model", selections:{}, rationale:{} },
 ]);
 
-function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, problem, onAIMsg }) {
+function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCall, aiBusy, problem, onAIMsg }) {
   const [mode, setMode] = useState("builder"); // builder | compare | workshop | review
   const [compareSelected, setCompareSelected] = useState({});
   const [_activeSId, _setActiveSId] = useState(null);
@@ -2523,6 +2523,22 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
   const activeSData = strategies.find(s => s.id === activeS) || null;
 
   // ── Mutations ──────────────────────────────────────────────────────────────
+  const [newDecLabel, setNewDecLabel] = React.useState("");
+  const [showAddDec, setShowAddDec] = React.useState(false);
+
+  const addFocusDecision = () => {
+    const label = newDecLabel.trim();
+    if (!label) return;
+    const nd = {
+      id: uid("d"), label,
+      tier: "focus", owner: "", rationale: "",
+      choices: ["Option A", "Option B", "Option C"],
+    };
+    onChange2([...decisions, nd]);
+    setNewDecLabel("");
+    setShowAddDec(false);
+  };
+
   const addStrategy = () => {
     const used = strategies.map(s => s.colorIdx);
     const colorIdx = [0,1,2,3,4,5].find(i => !used.includes(i)) ?? strategies.length % 6;
@@ -2547,15 +2563,43 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
     onChange(strategies.map(s => {
       if (s.id !== stratId) return s;
       const sel = { ...s.selections };
-      if (sel[decId] === optIdx) delete sel[decId];
-      else sel[decId] = optIdx;
+      const cur = Array.isArray(sel[decId]) ? sel[decId] : (sel[decId] !== undefined ? [sel[decId]] : []);
+      if (cur.includes(optIdx)) {
+        const next = cur.filter(i => i !== optIdx);
+        if (next.length === 0) delete sel[decId];
+        else sel[decId] = next.length === 1 ? next[0] : next;
+      } else {
+        sel[decId] = cur.length === 0 ? optIdx : [...cur, optIdx];
+      }
       return { ...s, selections: sel };
     }));
   };
 
+  const chosen = (s, decId, optIdx) => {
+    const v = s.selections[decId];
+    if (Array.isArray(v)) return v.includes(optIdx);
+    return v === optIdx;
+  };
+
+  const hasSel = (s, decId) => {
+    const v = s.selections[decId];
+    return Array.isArray(v) ? v.length > 0 : v !== undefined;
+  };
+
+  const isChosen = (s, decId, optIdx) => {
+    const v = s.selections[decId];
+    if (Array.isArray(v)) return v.includes(optIdx);
+    return v === optIdx;
+  };
+
+  const hasSel = (s, decId) => {
+    const v = s.selections[decId];
+    return Array.isArray(v) ? v.length > 0 : v !== undefined;
+  };
+
   const completeness = s => {
     if (nowDecisions.length === 0) return 0;
-    const filled = nowDecisions.filter(d => s.selections[d.id] !== undefined).length;
+    const filled = nowDecisions.filter(d => hasSel(s, d.id)).length;
     return Math.round((filled / nowDecisions.length) * 100);
   };
 
@@ -2584,14 +2628,21 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
       '{"strategies":[{"name":"name","description":"one sentence","objective":"what it aims to achieve","selections":[0,1,0],"rationale":"why coherent"}],' +
       '"coherenceFlags":[{"strategy":"name","issue":"desc"}],"insight":"key observation"}'
     ), (r) => {
-      if (r.strategies) {
+      // Handle _raw fallback
+      let result = r;
+      if (r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
+        catch(e) { onAIMsg({ role:"ai", text:"Could not parse AI response. Try again." }); setSuggesting(false); return; }
+      }
+      if (result.error) { onAIMsg({ role:"ai", text:"AI error: " + result.error }); setSuggesting(false); return; }
+      if (result.strategies?.length) {
         const used = strategies.map(s => s.colorIdx);
-        const newSs = r.strategies.map((s, i) => {
+        const newSs = result.strategies.map((s, i) => {
           const colorIdx = [0,1,2,3,4,5].find(c => !used.includes(c)) ?? (strategies.length + i) % 6;
           used.push(colorIdx);
           const selections = {};
-          (s.selections || []).forEach((idx, j) => {
-            if (nowDecisions[j]) selections[nowDecisions[j].id] = idx;
+          (s.selections || []).forEach((optIdx, j) => {
+            if (nowDecisions[j]) selections[nowDecisions[j].id] = optIdx;
           });
           return {
             id: uid("s"), colorIdx,
@@ -2603,8 +2654,10 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
           };
         });
         onChange([...strategies, ...newSs]);
-        if (r.coherenceFlags?.length) setValidation({ coherenceFlags: r.coherenceFlags, insight: r.insight });
-        onAIMsg({ role: "ai", text: r.insight || ("Added " + newSs.length + " new strategies.") });
+        if (result.coherenceFlags?.length) setValidation({ coherenceFlags: result.coherenceFlags, insight: result.insight });
+        onAIMsg({ role: "ai", text: result.insight || ("Added " + newSs.length + " new strategies.") });
+      } else {
+        onAIMsg({ role:"ai", text:"No strategies returned. Try again with more focus decisions defined." });
       }
       setSuggesting(false);
     });
@@ -2636,14 +2689,19 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
       '"distinctiveness":"high|medium|low","distinctivenessNote":"explanation",' +
       '"recommendations":["rec 1"]}'
     ), (r) => {
-      if (r.error) {
-        onAIMsg({ role: "ai", text: "Validation failed: " + r.error });
+      let result = r;
+      if (r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
+        catch(e) { onAIMsg({ role:"ai", text:"Could not parse validation response. Try again." }); setValidating(false); return; }
+      }
+      if (result.error) {
+        onAIMsg({ role: "ai", text: "Validation failed: " + result.error });
         setValidating(false);
         return;
       }
-      setValidation(r);
-      const msg = "Validation: " + (r.overall || "complete") + ". Distinctiveness: " +
-        (r.distinctiveness || "—") + ". " + (r.recommendations?.[0] || "");
+      setValidation(result);
+      const msg = "Validation: " + (result.overall || "complete") + ". Distinctiveness: " +
+        (result.distinctiveness || "—") + ". " + (result.recommendations?.[0] || "");
       onAIMsg({ role: "ai", text: msg });
       setValidating(false);
     });
@@ -2737,6 +2795,25 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
           );
         })}
         <Btn variant="secondary" icon="plus" size="sm" onClick={addStrategy}>New Strategy</Btn>
+        <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6 }}>
+          {showAddDec ? (
+            <>
+              <input
+                autoFocus
+                value={newDecLabel}
+                onChange={e=>setNewDecLabel(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter") addFocusDecision(); if(e.key==="Escape") setShowAddDec(false); }}
+                placeholder="New focus decision label..."
+                style={{ padding:"5px 10px", fontSize:11, fontFamily:"inherit",
+                  background:DS.canvas, border:"1px solid "+DS.accent,
+                  borderRadius:5, color:DS.ink, outline:"none", width:220 }}/>
+              <Btn variant="primary" size="sm" onClick={addFocusDecision}>Add</Btn>
+              <Btn variant="secondary" size="sm" onClick={()=>setShowAddDec(false)}>Cancel</Btn>
+            </>
+          ) : (
+            <Btn variant="secondary" size="sm" onClick={()=>setShowAddDec(true)}>+ Add Focus Decision</Btn>
+          )}
+        </div>
       </div>
 
       {/* ── Mode content ───────────────────────────────────────────────── */}
@@ -2921,20 +2998,18 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
 
                             {/* DECISION CELLS — one per focus decision */}
                             {nowDecisions.map(d => {
-                              const selectedIdx = s.selections[d.id];
-
                               return (
                                 <td key={d.id}
                                   style={{ padding: "12px 14px",
                                     verticalAlign: "top",
                                     borderLeft: "1px solid " + DS.canvasBdr,
-                                    background: selectedIdx !== undefined
+                                    background: hasSel(s, d.id)
                                       ? col.soft
                                       : DS.canvas }}>
                                   <div style={{ display: "flex",
                                     flexDirection: "column", gap: 6 }}>
                                     {d.choices.map((choice, ri) => {
-                                      const isChosen = selectedIdx === ri;
+                                      const chosen = isChosen(s, d.id, ri);
                                       // Other strategies that also chose this option
                                       const others = strategies.filter(
                                         st => st.id !== s.id && st.selections[d.id] === ri
@@ -2944,31 +3019,31 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
                                           onClick={() => selectCell(s.id, d.id, ri)}
                                           style={{ padding: "9px 12px",
                                             borderRadius: 7,
-                                            border: isChosen
+                                            border: chosen
                                               ? "2px solid " + col.fill
                                               : "1.5px solid " + DS.canvasBdr,
-                                            background: isChosen ? col.fill : "transparent",
+                                            background: chosen ? col.fill : "transparent",
                                             cursor: "pointer",
                                             display: "flex",
                                             alignItems: "center", gap: 8,
                                             transition: "all .1s",
-                                            opacity: isChosen ? 1 : 0.65 }}>
+                                            opacity: chosen ? 1 : 0.65 }}>
                                           {/* Filled circle when chosen */}
                                           <div style={{ width: 14, height: 14,
                                             borderRadius: "50%", flexShrink: 0,
-                                            background: isChosen ? "#fff" : "transparent",
-                                            border: "2px solid " + (isChosen ? "#fff" : col.fill + "60"),
+                                            background: chosen ? "#fff" : "transparent",
+                                            border: "2px solid " + (chosen ? "#fff" : col.fill + "60"),
                                             display: "flex", alignItems: "center",
                                             justifyContent: "center" }}>
-                                            {isChosen && (
+                                            {chosen && (
                                               <div style={{ width: 6, height: 6,
                                                 borderRadius: "50%",
                                                 background: col.fill }}/>
                                             )}
                                           </div>
                                           <span style={{ fontSize: 12, flex: 1,
-                                            fontWeight: isChosen ? 700 : 400,
-                                            color: isChosen ? "#fff" : DS.inkSub,
+                                            fontWeight: chosen ? 700 : 400,
+                                            color: chosen ? "#fff" : DS.inkSub,
                                             lineHeight: 1.3 }}>
                                             {choice}
                                           </span>
@@ -3663,14 +3738,19 @@ function ModuleQualitativeAssessment({
 
     aiCall(dqPrompt(prompt),
     (r) => {
-      if (r.error) {
-        onAIMsg({ role:"ai", text:"Assessment failed: " + r.error });
+      let result = r;
+      if (r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
+        catch(e) { onAIMsg({ role:"ai", text:"Could not parse assessment response. Try again." }); setAssessing(false); return; }
+      }
+      if (result.error) {
+        onAIMsg({ role:"ai", text:"Assessment failed: " + result.error });
         setAssessing(false);
         return;
       }
-      if (r.scores?.length) {
+      if (result.scores?.length) {
         const newScores = { ...scores };
-        r.scores.forEach(item => {
+        result.scores.forEach(item => {
           const strat = strategies.find(s =>
             (DS.sNames[s.colorIdx]||s.name).toLowerCase() === item.strategyName?.toLowerCase() ||
             s.name?.toLowerCase() === item.strategyName?.toLowerCase()
@@ -3683,7 +3763,9 @@ function ModuleQualitativeAssessment({
           }
         });
         onScores(newScores);
-        onAIMsg({ role:"ai", text: r.overallInsight || `Initial assessment complete — ${r.scores.length} scores generated.` });
+        onAIMsg({ role:"ai", text: result.overallInsight || ("Initial assessment complete — " + result.scores.length + " scores generated.") });
+      } else {
+        onAIMsg({ role:"ai", text:"No scores returned. Make sure strategies and criteria are defined." });
       }
       setAssessing(false);
     });
@@ -8852,7 +8934,7 @@ export default function App() {
     problem: { data:problem, onChange:setProblem, aiCall, aiBusy, messages:aiMessages, onAIMsg:pushAIMsg, onAISend:handleAISend },
     issues:  { issues, onChange:setIssues, decisions, onDecisions:setDecisions, criteria, onCriteria:setCriteria, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
     hierarchy:{ decisions, criteria, onDecisions:setDecisions, onCriteria:setCriteria, issues, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    strategy: { decisions, strategies, onChange:setStrategies, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
+    strategy: { decisions, strategies, onChange:setStrategies, onChange2:setDecisions, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
     assessment:{ strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, brief, onBrief:setBriefState, aiCall, aiBusy, onAIMsg:pushAIMsg },
     scorecard: { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     export:    { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, aiCall, aiBusy, onAIMsg:pushAIMsg },
