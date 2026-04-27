@@ -9128,14 +9128,10 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
               while (tc <= tMax) { ticks.push(new Date(tc)); tc.setMonth(tc.getMonth()+1); }
 
               const LANE_DEFS = [
-                { id:"gates",       label:"DECISION
-GATES",       color:"#2563eb", types:["gate"] },
-                { id:"triggers",    label:"TRIGGERS &
-MILESTONES", color:"#7c3aed", types:["trigger","milestone"] },
-                { id:"uncertainty", label:"UNCERTAINTY
-REDUCTION", color:"#d97706", types:["uncertainty"] },
-                { id:"risks",       label:"RISK
-WINDOWS",         color:"#dc2626", types:["risk"] },
+                { id:"gates",       label1:"DECISION",    label2:"GATES",      color:"#2563eb", types:["gate"] },
+                { id:"triggers",    label1:"TRIGGERS",    label2:"MILESTONES", color:"#7c3aed", types:["trigger","milestone"] },
+                { id:"uncertainty", label1:"UNCERTAINTY", label2:"REDUCTION",  color:"#d97706", types:["uncertainty"] },
+                { id:"risks",       label1:"RISK",        label2:"WINDOWS",    color:"#dc2626", types:["risk"] },
               ];
 
               const todayX = toX(new Date().toISOString().slice(0,10));
