@@ -7266,37 +7266,73 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
           </div>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:32 }}>
+        {/* Four start paths */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:24 }}>
           {[
-            { mode:"paste", emoji:"📄", title:"Paste or drop text",
-              desc:"Board paper, strategy memo, brief, case study, email thread, or any description of the decision problem." },
-            { mode:"guided", emoji:"🗂", title:"Answer 5 questions",
-              desc:"No document? Answer five quick questions about the decision and we'll structure the draft from your answers." },
+            { mode:"paste",  icon:"📄", title:"AI Deep Dive",
+              sub:"Best for most sessions",
+              desc:"Paste any brief, memo or document. AI populates all modules in seconds.",
+              accent:DS.accent },
+            { mode:"guided", icon:"🗂", title:"Guided Questions",
+              sub:"No document? Start here",
+              desc:"Answer 5 structured questions and we build your first draft.",
+              accent:"#7c3aed" },
           ].map(opt => (
-            <button key={opt.mode} onClick={()=>{ setInputMode(opt.mode); setPhase("input"); }}
-              style={{ padding:"22px 22px", background:DS.chromeMid, border:`1.5px solid ${DS.borderMid}`,
-                borderRadius:10, cursor:"pointer", textAlign:"left", transition:"all .15s", fontFamily:"inherit" }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=DS.accent; e.currentTarget.style.background=DS.chromeSub;}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.borderMid; e.currentTarget.style.background=DS.chromeMid;}}>
-              <div style={{ fontSize:24, marginBottom:11 }}>{opt.emoji}</div>
-              <div style={{ fontSize:13, fontWeight:700, color:DS.textPri, marginBottom:6 }}>{opt.title}</div>
-              <div style={{ fontSize:11, color:DS.textTer, lineHeight:1.55 }}>{opt.desc}</div>
+            <button key={opt.mode}
+              onClick={()=>{ setInputMode(opt.mode); setPhase("input"); }}
+              style={{ padding:"18px 16px", background:DS.chromeMid,
+                border:"1.5px solid "+DS.borderMid,
+                borderRadius:10, cursor:"pointer", textAlign:"left",
+                transition:"all .15s", fontFamily:"inherit" }}
+              onMouseEnter={e=>{ e.currentTarget.style.borderColor=opt.accent; e.currentTarget.style.background=DS.chromeSub; }}
+              onMouseLeave={e=>{ e.currentTarget.style.borderColor=DS.borderMid; e.currentTarget.style.background=DS.chromeMid; }}>
+              <div style={{ fontSize:20, marginBottom:8 }}>{opt.icon}</div>
+              <div style={{ fontSize:12, fontWeight:700, color:DS.textPri, marginBottom:2 }}>{opt.title}</div>
+              <div style={{ fontSize:9, fontWeight:700, color:opt.accent,
+                letterSpacing:.5, textTransform:"uppercase", marginBottom:8 }}>{opt.sub}</div>
+              <div style={{ fontSize:10, color:DS.textTer, lineHeight:1.6 }}>{opt.desc}</div>
             </button>
           ))}
+
+          {/* Start Clean */}
+          <button
+            onClick={()=>{ if(window.confirm("Start with completely empty modules?")) onSkip("clean"); }}
+            style={{ padding:"18px 16px", background:"transparent",
+              border:"1.5px dashed "+DS.border, borderRadius:10,
+              cursor:"pointer", textAlign:"left", transition:"all .15s",
+              fontFamily:"inherit" }}
+            onMouseEnter={e=>{ e.currentTarget.style.borderColor=DS.textSec; e.currentTarget.style.background=DS.chromeMid; }}
+            onMouseLeave={e=>{ e.currentTarget.style.borderColor=DS.border; e.currentTarget.style.background="transparent"; }}>
+            <div style={{ fontSize:20, marginBottom:8 }}>◎</div>
+            <div style={{ fontSize:12, fontWeight:700, color:DS.textPri, marginBottom:2 }}>Start Clean</div>
+            <div style={{ fontSize:9, fontWeight:700, color:DS.textTer,
+              letterSpacing:.5, textTransform:"uppercase", marginBottom:8 }}>Blank canvas</div>
+            <div style={{ fontSize:10, color:DS.textTer, lineHeight:1.6 }}>
+              Begin with empty modules and build everything from scratch.
+            </div>
+          </button>
         </div>
 
-        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-          <button onClick={onSkip}
-            style={{ background:"none", border:"none", cursor:"pointer", color:DS.textTer,
-              fontSize:12, fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
-              padding:"8px 0" }}>
-            <Svg path={ICONS.chevR} size={13} color={DS.textTer}/>
-            Skip — start with the example project
+        {/* Load example */}
+        <div style={{ padding:"13px 16px", background:DS.chromeMid,
+          border:"1px solid "+DS.border, borderRadius:8,
+          display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
+          <div style={{ fontSize:18, flexShrink:0 }}>🏢</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:DS.textPri, marginBottom:2 }}>
+              Load Pre-built Example
+            </div>
+            <div style={{ fontSize:10, color:DS.textTer }}>
+              APAC market entry case — fully populated with frame, issues, decisions, strategies and assessment.
+            </div>
+          </div>
+          <button onClick={()=>onSkip("example")}
+            style={{ padding:"7px 16px", background:DS.accent, border:"none",
+              borderRadius:6, color:"#fff", fontSize:11, fontWeight:700,
+              cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
+            Load Example →
           </button>
-          <div style={{ height:1, flex:1, background:DS.border }}/>
-          <div style={{ fontSize:10, color:DS.textTer }}>Pre-loaded with an APAC market entry case</div>
-        </div>
-      </div>
+        </div>      </div>
     </div>
   );
 
@@ -9431,15 +9467,7 @@ export default function App() {
       {/* ── MAIN CONTENT ── */}
       <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
 
-        {/* API key warning */}
-        {!false && !HARDCODED_API_KEY && (
-          <div style={{ padding:"8px 16px", background:"#7c3aed22", borderBottom:"1px solid #7c3aed44",
-            display:"flex", alignItems:"center", gap:8, flexShrink:0, fontSize:11, color:"#a78bfa" }}>
-            <span>⚠</span>
-            <span><strong>API key not configured.</strong> Create a <code style={{background:"#1c2030",padding:"1px 5px",borderRadius:3}}>.env</code> file in your project root with <code style={{background:"#1c2030",padding:"1px 5px",borderRadius:3}}>VITE_ANTHROPIC_API_KEY=your_key</code> then restart <code style={{background:"#1c2030",padding:"1px 5px",borderRadius:3}}>npm run dev</code>.</span>
-          </div>
-        )}
-        {/* ── TOP BAR ── */}
+                {/* ── TOP BAR ── */}
         <div style={{ height:46, background:DS.chromeAlt, borderBottom:`1px solid ${DS.border}`,
           display:"flex", alignItems:"center", padding:"0 16px", gap:8, flexShrink:0 }}>
 
@@ -9487,11 +9515,14 @@ export default function App() {
               <Svg path={ICONS.export} size={12} color="currentColor"/> PDF
             </button>
 
-            {/* Cross-Module AI */}
-            <CrossModuleAI problem={problem} issues={issues} decisions={decisions}
-              criteria={criteria} strategies={strategies}
-              assessmentScores={assessmentScores} dqScores={dqScores}
-              aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
+            {/* Cross-Module AI modal */}
+            {showCrossModule && (
+              <CrossModuleAI problem={problem} issues={issues} decisions={decisions}
+                criteria={criteria} strategies={strategies}
+                assessmentScores={assessmentScores} dqScores={dqScores}
+                aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}
+                onClose={()=>setShowCrossModule(false)}/>
+            )}
 
             {/* Tools dropdown */}
             <button onClick={()=>setShowCrossModule(true)} style={{ padding:"5px 13px", border:"1px solid "+DS.border, borderRadius:6, background:"transparent", color:DS.textSec, cursor:"pointer", fontSize:11, fontWeight:700, fontFamily:"inherit" }}>✦ Cross-Module AI</button>
