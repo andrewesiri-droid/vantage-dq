@@ -9102,67 +9102,9 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
 
         {/* Zoom */}
         {view==="timeline" && (
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <button onClick={()=>setZoom(z=>Math.max(0.5,z-0.25))}
-              style={{ width:24,height:24,borderRadius:4,border:"1px solid "+DS.canvasBdr,
-                background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:14 }}>−</button>
-            <span style={{ fontSize:10,color:DS.inkTer,width:36,textAlign:"center" }}>{Math.round(zoom*100)}%</span>
-            <button onClick={()=>setZoom(z=>Math.min(2.5,z+0.25))}
-              style={{ width:24,height:24,borderRadius:4,border:"1px solid "+DS.canvasBdr,
-                background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:14 }}>+</button>
-          </div>
-        )}
-
-        <Btn variant="secondary" size="sm" onClick={()=>setShowAdd(p=>!p)}>+ Add Event</Btn>
-        <Btn variant="primary" icon="spark" size="sm"
-          onClick={generateTimeline} disabled={aiBusy||generating}>
-          {generating?"Generating…":"AI Generate"}
-        </Btn>
-      </div>
-
-      {/* Add event panel */}
-      {showAdd && (
-        <div style={{ padding:"12px 24px", background:DS.accentSoft,
-          borderBottom:"1px solid "+DS.accentLine,
-          display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-          <span style={{ fontSize:11, fontWeight:700, color:DS.accent }}>Type:</span>
-          {Object.entries(OBJECT_TYPES).map(([key,ot])=>(
-            <button key={key} onClick={()=>setAddType(key)}
-              style={{ padding:"3px 10px", fontSize:10, fontWeight:700,
-                fontFamily:"inherit", cursor:"pointer",
-                border:"1.5px solid "+(addType===key?ot.color:DS.canvasBdr),
-                borderRadius:5, background:addType===key?ot.bg:"transparent",
-                color:addType===key?ot.color:DS.inkSub }}>
-              {ot.icon} {ot.label}
-            </button>
-          ))}
-          <input value={addLabel} onChange={e=>setAddLabel(e.target.value)}
-            placeholder="Label..."
-            style={{ padding:"5px 9px", fontSize:11, fontFamily:"inherit",
-              background:DS.canvas, border:"1px solid "+DS.accentLine,
-              borderRadius:5, color:DS.ink, outline:"none", width:180 }}/>
-          <input type="date" value={addDate} onChange={e=>setAddDate(e.target.value)}
-            style={{ padding:"5px 9px", fontSize:11, fontFamily:"inherit",
-              background:DS.canvas, border:"1px solid "+DS.accentLine,
-              borderRadius:5, color:DS.ink, outline:"none" }}/>
-          {(addType==="risk") && (
-            <input type="date" value={addEnd} onChange={e=>setAddEnd(e.target.value)}
-              placeholder="End date"
-              style={{ padding:"5px 9px", fontSize:11, fontFamily:"inherit",
-                background:DS.canvas, border:"1px solid "+DS.accentLine,
-                borderRadius:5, color:DS.ink, outline:"none" }}/>
-          )}
-          <Btn variant="primary" size="sm" onClick={addEvent}>Add</Btn>
-          <Btn variant="secondary" size="sm" onClick={()=>setShowAdd(false)}>Cancel</Btn>
-        </div>
-      )}
-
-      {/* Main content */}
-      <div style={{ flex:1, overflow:"hidden", display:"flex" }}>
-
-        {/* ── TIMELINE VIEW ─────────────────────────────────────────── */}
-        {view==="timeline" && (
-          <div style={{ flex:1, overflow:"auto", background:"#fafbfc" }}>
+          <div style={{ flex:1, overflow:"auto", background:"#f8f9fb",
+            backgroundImage:"linear-gradient(#e8eaf0 1px, transparent 1px)",
+            backgroundSize:"100% 80px" }}>
             {events.length===0 && risks.length===0 ? (
               <div style={{ display:"flex", flexDirection:"column",
                 alignItems:"center", justifyContent:"center",
@@ -9171,148 +9113,241 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                 <div style={{ fontSize:14, fontWeight:600 }}>No timeline events yet</div>
                 <div style={{ fontSize:12 }}>Click "+ Add Event" or use "AI Generate" to build your timeline.</div>
               </div>
-            ) : (
-              <div style={{ minWidth:CANVAS_W+200, padding:"0 0 24px" }}>
-                <svg width={CANVAS_W+200} height={svgH}
-                  style={{ display:"block", fontFamily:"'IBM Plex Sans',sans-serif" }}>
+            ) : (() => {
+              const TOTAL_W = Math.max(1400, 1400 * zoom);
+              const LEFT_W = 150; // lane label area
+              const ROW_H = 90;
+              const HDR_H = 40;
+              const { min: tMin, max: tMax } = getDateRange();
+              const span = tMax - tMin || 1;
+              const toX = (d) => LEFT_W + ((new Date(d) - tMin) / span) * TOTAL_W;
 
-                  {/* Lane backgrounds */}
-                  {LANES.map((lane,li)=>(
-                    <g key={lane.id}>
-                      <rect x={140} y={40+li*LANE_H} width={CANVAS_W}
-                        height={LANE_H}
-                        fill={li%2===0?"#f8f9fb":"#f2f4f7"} stroke="#e5e7eb" strokeWidth={0.5}/>
-                      {/* Lane label */}
-                      <text x={8} y={40+li*LANE_H+LANE_H/2+5}
-                        fontSize={9} fontWeight={700} fill={lane.color}
-                        textAnchor="start"
-                        style={{ textTransform:"uppercase", letterSpacing:0.5 }}>
-                        {lane.label.split(" ").map((w,wi)=>(
-                          <tspan key={wi} x={8} dy={wi===0?(li===0?0:-5):12}>{w}</tspan>
-                        ))}
-                      </text>
-                    </g>
-                  ))}
+              // Month tick marks
+              const ticks = [];
+              const tc = new Date(tMin); tc.setDate(1);
+              while (tc <= tMax) { ticks.push(new Date(tc)); tc.setMonth(tc.getMonth()+1); }
 
-                  {/* Month ticks */}
-                  {monthTicks.map((tick,ti)=>{
-                    const x = 120 + ((tick - dateMin) / totalMs) * CANVAS_W;
-                    const isYear = tick.getMonth()===0;
+              const LANE_DEFS = [
+                { id:"gates",       label:"DECISION
+GATES",       color:"#2563eb", types:["gate"] },
+                { id:"triggers",    label:"TRIGGERS &
+MILESTONES", color:"#7c3aed", types:["trigger","milestone"] },
+                { id:"uncertainty", label:"UNCERTAINTY
+REDUCTION", color:"#d97706", types:["uncertainty"] },
+                { id:"risks",       label:"RISK
+WINDOWS",         color:"#dc2626", types:["risk"] },
+              ];
+
+              const todayX = toX(new Date().toISOString().slice(0,10));
+
+              return (
+                <div style={{ minWidth:LEFT_W+TOTAL_W+40, paddingBottom:24 }}>
+                  {/* Header row - month ticks */}
+                  <div style={{ display:"flex", position:"sticky", top:0, zIndex:5,
+                    background:"#f8f9fb", borderBottom:"2px solid #d1d5db",
+                    height:HDR_H, alignItems:"flex-end" }}>
+                    <div style={{ width:LEFT_W, flexShrink:0,
+                      fontSize:9, fontWeight:700, color:DS.inkTer,
+                      padding:"0 10px 6px", letterSpacing:.5 }}>
+                      MODULE 09
+                    </div>
+                    <div style={{ flex:1, position:"relative", height:HDR_H }}>
+                      {ticks.map((tick,ti)=>{
+                        const x = ((tick - tMin) / span) * TOTAL_W;
+                        const isYear = tick.getMonth()===0;
+                        const isQ = tick.getMonth()%3===0;
+                        return (
+                          <div key={ti} style={{ position:"absolute", left:x,
+                            top:0, height:HDR_H,
+                            borderLeft:`1px solid ${isYear?"#6b7280":isQ?"#d1d5db":"#e5e7eb"}` }}>
+                            <div style={{ position:"absolute", bottom:6, left:4,
+                              fontSize: isYear?11:isQ?9:8,
+                              fontWeight: isYear?700:isQ?600:400,
+                              color: isYear?"#1f2937":isQ?"#4b5563":"#9ca3af",
+                              whiteSpace:"nowrap" }}>
+                              {isYear
+                                ? tick.getFullYear()
+                                : tick.toLocaleString("default",{month:"short"})}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {/* Today line in header */}
+                      <div style={{ position:"absolute", left:todayX-LEFT_W,
+                        top:0, bottom:0, width:2, background:"#2563eb",
+                        display:"flex", alignItems:"flex-start" }}>
+                        <div style={{ background:"#2563eb", color:"#fff",
+                          fontSize:8, fontWeight:700, padding:"2px 5px",
+                          borderRadius:"0 0 4px 4px", whiteSpace:"nowrap" }}>
+                          TODAY
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lanes */}
+                  {LANE_DEFS.map((lane, li)=>{
+                    const laneEvents = lane.id==="risks"
+                      ? risks
+                      : events.filter(e=>lane.types.includes(e.type));
+
                     return (
-                      <g key={ti}>
-                        <line x1={x} y1={36} x2={x} y2={40+LANES.length*LANE_H}
-                          stroke={isYear?"#9ca3af":"#e5e7eb"}
-                          strokeWidth={isYear?1:0.5}
-                          strokeDasharray={isYear?"none":"4,2"}/>
-                        <text x={x} y={32} textAnchor="middle"
-                          fontSize={isYear?10:8}
-                          fontWeight={isYear?700:400}
-                          fill={isYear?"#374151":"#9ca3af"}>
-                          {isYear
-                            ? tick.getFullYear()
-                            : tick.toLocaleString("default",{month:"short"})}
-                        </text>
-                      </g>
+                      <div key={lane.id} style={{ display:"flex",
+                        borderBottom:"1px solid #e5e7eb",
+                        minHeight:ROW_H,
+                        background:li%2===0?"#f8f9fb":"#f1f3f7" }}>
+
+                        {/* Lane label */}
+                        <div style={{ width:LEFT_W, flexShrink:0,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          padding:"8px 10px", borderRight:"2px solid #d1d5db" }}>
+                          <div style={{ fontSize:8, fontWeight:800, color:lane.color,
+                            letterSpacing:.8, textTransform:"uppercase",
+                            textAlign:"center", lineHeight:1.4 }}>
+                            {lane.label.split("
+").map((l,i)=>(
+                              <div key={i}>{l}</div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Lane content */}
+                        <div style={{ flex:1, position:"relative",
+                          minHeight:ROW_H }}>
+                          {/* Today line */}
+                          <div style={{ position:"absolute",
+                            left:todayX-LEFT_W, top:0, bottom:0,
+                            width:2, background:"#2563eb22",
+                            pointerEvents:"none" }}/>
+
+                          {/* Risk windows (bands) */}
+                          {lane.id==="risks" && risks.map((rk,ri)=>{
+                            const x1 = toX(rk.startDate) - LEFT_W;
+                            const x2 = toX(rk.endDate||rk.startDate) - LEFT_W;
+                            const w = Math.max(20, x2-x1);
+                            const sev = rk.severity;
+                            const col = sev==="high"?"#dc2626":sev==="medium"?"#f59e0b":"#10b981";
+                            const bg = sev==="high"?"#fef2f2":sev==="medium"?"#fffbeb":"#ecfdf5";
+                            // Stagger rows to avoid overlap
+                            const row = ri % 3;
+                            const bandH = 22;
+                            const top = 8 + row * 26;
+                            return (
+                              <div key={rk.id}
+                                onClick={()=>setSelected(s=>s===rk.id?null:rk.id)}
+                                style={{ position:"absolute",
+                                  left:x1, top, width:w, height:bandH,
+                                  background:bg, border:`1.5px solid ${col}`,
+                                  borderRadius:4,
+                                  boxShadow:selected===rk.id?`0 0 0 2px ${col}`:"none",
+                                  cursor:"pointer", overflow:"hidden",
+                                  display:"flex", alignItems:"center",
+                                  paddingInline:6, gap:4 }}>
+                                <div style={{ width:6, height:6, borderRadius:"50%",
+                                  background:col, flexShrink:0 }}/>
+                                <div style={{ fontSize:9, fontWeight:700,
+                                  color:col, whiteSpace:"nowrap",
+                                  overflow:"hidden", textOverflow:"ellipsis" }}>
+                                  {rk.label}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Decision gates */}
+                          {lane.id==="gates" && events.filter(e=>e.type==="gate").map((ev,gi)=>{
+                            const x = toX(ev.date) - LEFT_W;
+                            const r = ev.readinessScore||0;
+                            const col = r>=70?"#059669":r>=40?"#d97706":"#dc2626";
+                            const ot = OBJECT_TYPES.gate;
+                            // Stagger label rows
+                            const labelRow = gi % 2;
+                            return (
+                              <div key={ev.id} style={{ position:"absolute",
+                                left:x-1, top:0, bottom:0 }}>
+                                {/* Vertical dashed line */}
+                                <div style={{ position:"absolute", left:0,
+                                  top:0, bottom:0, width:1,
+                                  borderLeft:"2px dashed "+ot.color+"80" }}/>
+                                {/* Diamond */}
+                                <svg width={24} height={ROW_H-4}
+                                  style={{ position:"absolute",
+                                    left:-12, top:2,
+                                    overflow:"visible" }}>
+                                  <polygon
+                                    points={"12,4 22,"+(ROW_H/2-2)+" 12,"+(ROW_H-8)+" 2,"+(ROW_H/2-2)}
+                                    fill={selected===ev.id?ot.color:ot.bg}
+                                    stroke={ot.color} strokeWidth={2}
+                                    style={{ cursor:"pointer" }}
+                                    onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}/>
+                                </svg>
+                                {/* Label - alternating above/at top */}
+                                <div onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}
+                                  style={{ position:"absolute",
+                                    left:14, top:labelRow===0?4:24,
+                                    background:"white",
+                                    border:"1px solid "+ot.color+"60",
+                                    borderRadius:4, padding:"2px 7px",
+                                    fontSize:9, fontWeight:700,
+                                    color:ot.color, whiteSpace:"nowrap",
+                                    cursor:"pointer",
+                                    boxShadow:"0 1px 4px rgba(0,0,0,.08)" }}>
+                                  {ev.label}
+                                </div>
+                                {/* Readiness badge */}
+                                <div style={{ position:"absolute",
+                                  left:-14, bottom:6,
+                                  background:col, color:"#fff",
+                                  fontSize:8, fontWeight:700,
+                                  padding:"1px 5px", borderRadius:3,
+                                  whiteSpace:"nowrap" }}>
+                                  {r}%
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Other events (triggers, milestones, uncertainty) */}
+                          {lane.id!=="gates" && lane.id!=="risks" && laneEvents.map((ev,ei)=>{
+                            const x = toX(ev.date) - LEFT_W;
+                            const ot = OBJECT_TYPES[ev.type]||OBJECT_TYPES.milestone;
+                            const row = ei % 2;
+                            return (
+                              <div key={ev.id}
+                                onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}
+                                style={{ position:"absolute",
+                                  left:x-60, top:row===0?8:38,
+                                  display:"flex", alignItems:"center", gap:5,
+                                  background:"white",
+                                  border:"1.5px solid "+ot.color+"60",
+                                  borderRadius:5, padding:"3px 9px",
+                                  cursor:"pointer",
+                                  boxShadow:selected===ev.id?"0 0 0 2px "+ot.color:"0 1px 4px rgba(0,0,0,.07)" }}>
+                                <div style={{ width:7, height:7, borderRadius:"50%",
+                                  background:ot.color, flexShrink:0 }}/>
+                                <div style={{ fontSize:9, fontWeight:700,
+                                  color:ot.color, whiteSpace:"nowrap" }}>
+                                  {ev.label.slice(0,22)}{ev.label.length>22?"…":""}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Empty lane hint */}
+                          {laneEvents.length===0 && (
+                            <div style={{ position:"absolute",
+                              left:8, top:"50%", transform:"translateY(-50%)",
+                              fontSize:10, color:"#d1d5db", fontStyle:"italic" }}>
+                              No events
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
-
-                  {/* Today line */}
-                  {(()=>{
-                    const todayX = 120 + getX(new Date().toISOString().slice(0,10));
-                    return (
-                      <g>
-                        <line x1={todayX} y1={36} x2={todayX}
-                          y2={40+LANES.length*LANE_H}
-                          stroke="#2563eb" strokeWidth={2}/>
-                        <text x={todayX} y={15} textAnchor="middle"
-                          fontSize={9} fontWeight={700} fill="#2563eb">TODAY</text>
-                        <rect x={todayX-18} y={18} width={36} height={14}
-                          rx={3} fill="#2563eb" opacity={0.1}/>
-                      </g>
-                    );
-                  })()}
-
-                  {/* Risk windows */}
-                  {risks.map(rk=>{
-                    const x1 = 120 + getX(rk.startDate);
-                    const x2 = 120 + getX(rk.endDate||rk.startDate);
-                    const laneY = 40 + 3*LANE_H; // risks lane
-                    const sev = rk.severity;
-                    const col = sev==="high"?"#dc2626":sev==="medium"?"#d97706":"#059669";
-                    return (
-                      <g key={rk.id} style={{ cursor:"pointer" }}
-                        onClick={()=>setSelected(sel=>sel===rk.id?null:rk.id)}>
-                        <rect x={x1} y={laneY+4} width={Math.max(8,x2-x1)}
-                          height={LANE_H-8} rx={4}
-                          fill={col} fillOpacity={selected===rk.id?0.4:0.18}
-                          stroke={col} strokeWidth={selected===rk.id?2:1}/>
-                        {(x2-x1) > 30 && (
-                          <text x={Math.min(x1+6, x1+(x2-x1)/2)} y={laneY+LANE_H/2+4}
-                            fontSize={8} fontWeight={600} fill={col}
-                            clipPath={"url(#clip-"+rk.id+")"}>
-                            {rk.label.slice(0, Math.max(5, Math.floor((x2-x1)/6)))}{rk.label.length > Math.floor((x2-x1)/6) ? "…" : ""}
-                          </text>
-                        )}
-                      </g>
-                    );
-                  })}
-
-                  {/* Events */}
-                  {events.map(ev=>{
-                    const ot = OBJECT_TYPES[ev.type]||OBJECT_TYPES.milestone;
-                    const laneIdx = LANES.findIndex(l=>l.types.includes(ev.type));
-                    const laneY = 40 + (laneIdx>=0?laneIdx:0)*LANE_H;
-                    const x = 120 + getX(ev.date);
-                    const isSel = selected===ev.id;
-
-                    if (ev.type==="gate") {
-                      // Diamond marker for gates
-                      const r = ev.readinessScore||0;
-                      const color = r>=70?DS.success:r>=40?DS.warning:DS.danger;
-                      return (
-                        <g key={ev.id} style={{ cursor:"pointer" }}
-                          onClick={()=>setSelected(sel=>sel===ev.id?null:ev.id)}>
-                          {/* Vertical line */}
-                          <line x1={x} y1={36} x2={x} y2={40+LANES.length*LANE_H}
-                            stroke={ot.color} strokeWidth={isSel?2:1.5}
-                            strokeDasharray="5,3" opacity={0.6}/>
-                          {/* Diamond */}
-                          <polygon points={x+","+laneY+" "+(x+10)+","+(laneY+LANE_H/2)+" "+x+","+(laneY+LANE_H)+" "+(x-10)+","+(laneY+LANE_H/2)}
-                            fill={isSel?ot.color:ot.bg} stroke={ot.color} strokeWidth={2}/>
-                          {/* Label - staggered by index to prevent overlap */}
-                          <text x={x} y={laneY - 8 - (events.filter(e=>e.type==="gate").indexOf(ev) % 3) * 14}
-                            textAnchor="middle" fontSize={9} fontWeight={700} fill={ot.color}>
-                            {ev.label.slice(0,18)}{ev.label.length>18?"…":""}
-                          </text>
-                          {/* Readiness badge */}
-                          <rect x={x-12} y={laneY+LANE_H} width={24} height={12}
-                            rx={3} fill={color} opacity={0.9}/>
-                          <text x={x} y={laneY+LANE_H+9} textAnchor="middle"
-                            fontSize={8} fontWeight={700} fill="white">
-                            {r}%
-                          </text>
-                        </g>
-                      );
-                    }
-
-                    return (
-                      <g key={ev.id} style={{ cursor:"pointer" }}
-                        onClick={()=>setSelected(sel=>sel===ev.id?null:ev.id)}>
-                        <circle cx={x} cy={laneY+LANE_H/2} r={isSel?10:7}
-                          fill={isSel?ot.color:ot.bg} stroke={ot.color} strokeWidth={2}/>
-                        <text x={x} y={laneY+LANE_H/2+3.5} textAnchor="middle"
-                          fontSize={8} fill={isSel?"white":ot.color}>{ot.icon}</text>
-                        <text x={x} y={laneY+LANE_H-4}
-                          textAnchor="middle" fontSize={8} fontWeight={600} fill={ot.color}>
-                          {ev.label.slice(0,16)}{ev.label.length>16?"…":""}
-                        </text>
-                      </g>
-                    );
-                  })}
-
-                </svg>
-              </div>
-            )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
