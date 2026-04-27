@@ -5857,855 +5857,488 @@ const CONTROL_LEVELS     = ["High Control","Some Control","Low Control","No Cont
 const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Competitive","Operational","Political","Stakeholder"];
 
 
-function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg }) {
-  const [view, setView]           = useState("matrix");   // matrix | diagram | drivers
-  const [items, setItems]         = useState([]);
-  const [generating, setGenerating] = useState(false);
-  const [analyzing, setAnalyzing]   = useState(false);
-  const [drivers, setDrivers]       = useState(null);
-  const [selected, setSelected]     = useState(null);
-  const [links, setLinks]           = useState([]);
-  const [linkMode, setLinkMode]     = useState(false);
+function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg, problem }) {
+  const NODE_TYPES = {
+    decision:      { label:"Decision",        shape:"rect",    color:"#2563eb", bg:"#eff4ff", border:"#bfcfff", icon:"▣" },
+    uncertainty:   { label:"Uncertainty",     shape:"oval",    color:"#d97706", bg:"#fffbeb", border:"#fde68a", icon:"◎" },
+    value:         { label:"Value / Outcome", shape:"diamond", color:"#059669", bg:"#ecfdf5", border:"#a7f3d0", icon:"◆" },
+    deterministic: { label:"Deterministic",   shape:"hex",     color:"#7c3aed", bg:"#f5f3ff", border:"#ddd6fe", icon:"⬡" },
+  };
+
+  const [view, setView]           = useState("diagram");
+  const [nodes, setNodes]         = useState([]);
+  const [edges, setEdges]         = useState([]);
+  const [selected, setSelected]   = useState(null);
+  const [linkMode, setLinkMode]   = useState(false);
   const [linkSource, setLinkSource] = useState(null);
+  const [addType, setAddType]     = useState("uncertainty");
+  const [generating, setGenerating] = useState(false);
+  const [validation, setValidation] = useState(null);
+  const [showAdd, setShowAdd]     = useState(false);
+  const [newLabel, setNewLabel]   = useState("");
 
-  // Seed from uncertainty issues on first load
-  useEffect(() => {
-    if (items.length > 0) return;
-    const uncertainIssues = issues.filter(i =>
-      i.category === "uncertainty-external" || i.category === "uncertainty-internal"
-    );
-    if (uncertainIssues.length > 0) {
-      setItems(uncertainIssues.map(i => ({
-        id: i.id,
-        label: i.text.length > 60 ? i.text.slice(0, 60) + "…" : i.text,
-        type: i.category === "uncertainty-external" ? "Market" : "Operational",
-        impact: i.severity === "Critical" ? "Critical" : i.severity || "Medium",
-        control: i.category === "uncertainty-external" ? "No Control" : "Some Control",
-        description: i.text,
-        source: "issue",
-        x: 300 + Math.random() * 300,
-        y: 100 + Math.random() * 300,
-      })));
+  const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
+
+  const onDragMouseDown = (e, id) => {
+    if (linkMode || e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const n = nodes.find(n=>n.id===id);
+    if (!n) return;
+    dragRef.current = { dragging:true, id, startX:e.clientX, startY:e.clientY, origX:n.x, origY:n.y };
+  };
+  const onDragMouseMove = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    setNodes(prev=>prev.map(n=>n.id===d.id
+      ? {...n, x:Math.max(20,d.origX+(e.clientX-d.startX)), y:Math.max(20,d.origY+(e.clientY-d.startY))}
+      : n));
+  };
+  const onDragMouseUp = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    const dx = Math.abs(e.clientX-d.startX), dy = Math.abs(e.clientY-d.startY);
+    if (dx<5&&dy<5) {
+      if (linkMode) handleLink(d.id);
+      else setSelected(s=>s===d.id?null:d.id);
     }
-  }, [issues]);
+    dragRef.current = {...dragRef.current, dragging:false};
+  };
 
-  const add = (item) => setItems(p => [...p, { id: uid("u"), x:300, y:200, ...item }]);
-  const upd = (id, key, val) => setItems(p => p.map(u => u.id===id ? {...u,[key]:val} : u));
-  const remove = (id) => {
-    setItems(p => p.filter(u => u.id!==id));
-    setLinks(l => l.filter(lk => lk.from!==id && lk.to!==id));
+  const handleLink = (targetId) => {
+    if (!linkSource) { setLinkSource(targetId); return; }
+    if (linkSource===targetId) { setLinkSource(null); return; }
+    const src = nodes.find(n=>n.id===linkSource);
+    if (src?.type==="value") {
+      onAIMsg({ role:"ai", text:"Value nodes cannot influence upstream — they are terminal." });
+      setLinkSource(null); return;
+    }
+    if (edges.find(e=>e.from===linkSource&&e.to===targetId)) { setLinkSource(null); return; }
+    setEdges(prev=>[...prev, { id:uid("e"), from:linkSource, to:targetId }]);
+    setLinkSource(null);
+  };
+
+  const addNode = () => {
+    if (!newLabel.trim()) return;
+    const n = { id:uid("n"), type:addType, label:newLabel.trim(),
+      x:200+Math.random()*400, y:150+Math.random()*300,
+      description:"", owner:"", impact:"High", control:"Low" };
+    setNodes(prev=>[...prev,n]);
+    setNewLabel(""); setShowAdd(false); setSelected(n.id);
+  };
+
+  const updateNode = (id, patch) => setNodes(prev=>prev.map(n=>n.id===id?{...n,...patch}:n));
+  const removeNode = (id) => {
+    setNodes(prev=>prev.filter(n=>n.id!==id));
+    setEdges(prev=>prev.filter(e=>e.from!==id&&e.to!==id));
     if (selected===id) setSelected(null);
   };
 
-  const generateUncertainties = () => {
+  useEffect(()=>{
+    if (nodes.length>0) return;
+    const uIssues = issues.filter(i=>i.category==="uncertainty-external"||i.category==="uncertainty-internal");
+    if (uIssues.length>0) setNodes(uIssues.slice(0,6).map((i,idx)=>({
+      id:uid("n"), type:"uncertainty", label:i.text.slice(0,50),
+      description:i.text, owner:"", impact:i.severity==="Critical"?"High":"Medium", control:"Low",
+      x:200+idx%3*220, y:120+Math.floor(idx/3)*200,
+    })));
+  }, [issues.length]);
+
+  const runValidation = () => {
+    const v = [];
+    nodes.forEach(n=>{ if (!edges.some(e=>e.from===n.id||e.to===n.id)) v.push({node:n.label,msg:"Orphan node — not connected to anything."}); });
+    nodes.filter(n=>n.type==="value").forEach(n=>{ if (!edges.some(e=>e.to===n.id)) v.push({node:n.label,msg:"Value node has no incoming influence."}); });
+    nodes.filter(n=>n.type==="decision").forEach(n=>{ if (!edges.some(e=>e.from===n.id)) v.push({node:n.label,msg:"Decision node has no outgoing influence."}); });
+    setValidation(v);
+  };
+
+  const generateNodes = () => {
     setGenerating(true);
-    const focusDecs = decisions.filter(d=>d.tier==="focus").map(d=>d.label).join(", ");
-    const existingLabels = items.map(i=>i.label).join("; ");
-    aiCall(`You are a DQ uncertainty analyst. Identify key uncertainties for this decision.
-
-Focus decisions: ${focusDecs}
-Existing uncertainties already captured: ${existingLabels||"none"}
-
-Generate 6-8 specific, distinct uncertainties NOT already listed. For each identify:
-- Whether the team has control over it (high/some/low/no)  
-- Its potential impact if it resolves badly
-- Which type it is
-
-Return ONLY JSON:
-{"uncertainties":[{
-  "label":"concise uncertainty name (max 50 chars)",
-  "description":"one sentence explanation",
-  "type":"${UNCERTAINTY_TYPES.join('|')}",
-  "impact":"Critical|High|Medium|Low",
-  "control":"High Control|Some Control|Low Control|No Control"
-}]}`,
-    (r) => {
-      if (r.uncertainties) {
-        const newItems = r.uncertainties.map((u, i) => ({
-          id: uid("u"), ...u,
-          source: "ai",
-          x: 80 + (i % 4) * 220,
-          y: 80 + Math.floor(i / 4) * 180,
+    const decList = decisions.filter(d=>d.tier==="focus").map(d=>d.label).join(", ");
+    const existing = nodes.map(n=>n.label).join(", ");
+    aiCall(
+      "You are a decision analyst building an influence diagram. " +
+      "Decision: " + (problem?.decisionStatement||"") + ". Focus decisions: " + (decList||"none") + ". " +
+      "Existing nodes (do not duplicate): " + (existing||"none") + ". " +
+      "Generate 5-8 nodes (mix of decision, uncertainty, value types) and suggest influence edges. " +
+      'Return ONLY JSON: {"nodes":[{"type":"uncertainty","label":"Oil Price","description":"desc","impact":"High","control":"Low"}],' +
+      '"edges":[{"from":"Oil Price","to":"Revenue"}],"insight":"observation"}',
+    (r)=>{
+      let result = r;
+      if (r._raw) { try { result=JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setGenerating(false); return; } }
+      if (result.nodes?.length) {
+        const newNodes = result.nodes.map((n,i)=>({
+          id:uid("n"), type:n.type||"uncertainty", label:n.label,
+          description:n.description||"", owner:"", impact:n.impact||"Medium", control:n.control||"Low",
+          x:150+i%4*220, y:120+Math.floor(i/4)*200,
         }));
-        setItems(p => [...p, ...newItems]);
-        onAIMsg({ role:"ai", text:`Added ${newItems.length} uncertainties. Use the Impact × Controllability matrix to prioritise.` });
+        setNodes(prev=>[...prev,...newNodes]);
+        if (result.edges?.length) {
+          const all = [...nodes, ...newNodes];
+          const newEdges = result.edges.map(e=>{
+            const s = all.find(n=>n.label.toLowerCase()===e.from?.toLowerCase());
+            const t = all.find(n=>n.label.toLowerCase()===e.to?.toLowerCase());
+            return s&&t ? {id:uid("e"),from:s.id,to:t.id} : null;
+          }).filter(Boolean);
+          setEdges(prev=>[...prev,...newEdges]);
+        }
+        onAIMsg({role:"ai",text:result.insight||("Added "+result.nodes.length+" nodes.")});
       }
       setGenerating(false);
     });
   };
 
-  const analyzeDrivers = () => {
-    setAnalyzing(true);
-    const ctx = items.map(u => `"${u.label}" [impact:${u.impact}, control:${u.control}, type:${u.type}]`).join("\n");
-    const strats = strategies.map(s => DS.sNames[s.colorIdx]||s.name).join(", ");
-    aiCall(`You are a DQ uncertainty expert. Analyse these uncertainties for this decision.
-
-Uncertainties:\n${ctx}
-Strategies being evaluated: ${strats}
-
-Identify:
-1. The 2-3 KEY DRIVERS — uncertainties that most affect strategy value and are partially resolvable
-2. Uncertainties worth quantitative modelling
-3. Which uncertainties create "deal-breaker" scenarios for specific strategies
-4. The recommended sequencing (which to resolve first)
-
-Return ONLY JSON:
-{
-  "keyDrivers":[{"id":"matching label","reason":"why this is the key driver","resolutionPath":"how to resolve or reduce this uncertainty"}],
-  "modellingCandidates":["uncertainty label"],
-  "dealBreakers":[{"uncertainty":"label","strategy":"strategy name","scenario":"what bad resolution looks like"}],
-  "resolutionSequence":["step 1","step 2","step 3"],
-  "overallInsight":"2-sentence synthesis of the uncertainty landscape"
-}`,
-    (r) => {
-      if (!r.error) {
-        setDrivers(r);
-        onAIMsg({ role:"ai", text: r.overallInsight || "Uncertainty analysis complete. Review key drivers and deal-breakers." });
-      }
-      setAnalyzing(false);
-    });
-  };
-
-  const handleLink = (id) => {
-    if (!linkMode) return;
-    if (!linkSource) { setLinkSource(id); return; }
-    if (linkSource === id) { setLinkSource(null); return; }
-    const exists = links.find(l => (l.from===linkSource&&l.to===id)||(l.from===id&&l.to===linkSource));
-    if (!exists) setLinks(l => [...l, { id:uid("lk"), from:linkSource, to:id, label:"influences" }]);
-    setLinkSource(null);
-  };
-
-  const quadrant = (item) => {
-    const highImpact = item.impact==="Critical"||item.impact==="High";
-    const highControl = item.control==="High Control"||item.control==="Some Control";
-    if (highImpact && highControl)  return { key:"resolve",  label:"Resolve First",  color:DS.danger,   bg:DS.dangerSoft,  desc:"High impact + controllable — prioritise resolving these" };
-    if (highImpact && !highControl) return { key:"monitor",  label:"Monitor Closely", color:DS.warning,  bg:DS.warnSoft,   desc:"High impact but uncontrollable — build contingencies" };
-    if (!highImpact && highControl) return { key:"manage",   label:"Manage",         color:DS.accent,   bg:DS.accentSoft, desc:"Controllable but lower impact — manage efficiently" };
-    return                                 { key:"watch",    label:"Watch",          color:DS.success,  bg:DS.successSoft, desc:"Low impact + uncontrollable — monitor periodically" };
-  };
-
-  const impactColor = { Critical:DS.danger, High:DS.warning, Medium:DS.accent, Low:DS.success };
-  const controlColor = { "High Control":DS.success, "Some Control":DS.accent, "Low Control":DS.warning, "No Control":DS.danger };
-
-  const TABS = [
-    { id:"matrix",  label:"Impact × Control Matrix" },
-    { id:"diagram", label:"Influence Diagram" },
-    { id:"drivers", label:"Key Driver Analysis", highlight:!!drivers },
-  ];
-
-  const quadrants = [
-    { key:"resolve",  label:"Resolve First",   sublabel:"High impact · Controllable",   color:DS.danger,  bg:"#fff0f0", items: items.filter(i=>quadrant(i).key==="resolve") },
-    { key:"monitor",  label:"Monitor Closely", sublabel:"High impact · Uncontrollable",  color:DS.warning, bg:"#fffbeb", items: items.filter(i=>quadrant(i).key==="monitor") },
-    { key:"manage",   label:"Manage",          sublabel:"Lower impact · Controllable",   color:DS.accent,  bg:"#eff4ff", items: items.filter(i=>quadrant(i).key==="manage") },
-    { key:"watch",    label:"Watch",           sublabel:"Lower impact · Uncontrollable", color:DS.success, bg:"#f0fdf4", items: items.filter(i=>quadrant(i).key==="watch") },
-  ];
+  const CANVAS_W = Math.max(1000, nodes.reduce((m,n)=>Math.max(m,(n.x||0)+240),1000));
+  const CANVAS_H = Math.max(700,  nodes.reduce((m,n)=>Math.max(m,(n.y||0)+160),700));
+  const sel = nodes.find(n=>n.id===selected);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
-      <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
-        display:"flex", alignItems:"center", gap:12, flexShrink:0, flexWrap:"wrap" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
+      {/* Header */}
+      <div style={{ padding:"12px 20px", background:DS.canvas,
+        borderBottom:"1px solid "+DS.canvasBdr,
+        display:"flex", alignItems:"center", gap:10, flexShrink:0, flexWrap:"wrap" }}>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:11, color:DS.inkTer, letterSpacing:1, textTransform:"uppercase", fontWeight:700, marginBottom:3 }}>Phase 2 · Module 08</div>
-          <div style={{ fontFamily:"'Libre Baskerville', Georgia, serif", fontSize:22, fontWeight:700, color:DS.ink, letterSpacing:-.3 }}>Influence Map</div>
+          <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase", fontWeight:700, letterSpacing:1 }}>Module 08</div>
+          <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:18, fontWeight:700, color:DS.ink }}>Influence Diagram</div>
         </div>
-        <Badge variant="default">{items.length} uncertainties</Badge>
-        <Badge variant="danger">{items.filter(i=>quadrant(i).key==="resolve").length} resolve first</Badge>
-        <Badge variant="warn">{items.filter(i=>quadrant(i).key==="monitor").length} monitor</Badge>
-        <Btn variant="secondary" icon="spark" size="sm" onClick={analyzeDrivers} disabled={aiBusy||analyzing||items.length<3}>
-          {analyzing?"Analysing…":"AI Key Drivers"}
-        </Btn>
-        <Btn variant="primary" icon="spark" size="sm" onClick={generateUncertainties} disabled={aiBusy||generating}>
-          {generating?"Generating…":"AI Generate"}
-        </Btn>
-      </div>
-
-      <div style={{ display:"flex", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`, flexShrink:0, paddingLeft:28 }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={()=>setView(t.id)}
-            style={{ padding:"10px 18px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-              cursor:"pointer", border:"none", background:"transparent",
-              borderBottom:`2px solid ${view===t.id?DS.accent:"transparent"}`,
-              color:view===t.id?DS.accent:DS.inkTer, letterSpacing:.4,
-              display:"flex", alignItems:"center", gap:6 }}>
-            {t.label}
-            {t.highlight && <span style={{ width:6,height:6,borderRadius:"50%",background:DS.success,display:"inline-block" }}/>}
-          </button>
-        ))}
-      </div>
-
-      {/* ── MATRIX VIEW ── */}
-      {view==="matrix" && (
-        <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
-          {items.length === 0 ? (
-            <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10, color:DS.inkTer, fontSize:13, margin:"20px 0" }}>
-              No uncertainties yet. Use AI Generate or uncertainties will be seeded from your Issue Raising module automatically.
-            </div>
-          ) : (
-            <div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:24 }}>
-                {quadrants.map(q => (
-                  <div key={q.key} style={{ border:`1.5px solid ${q.color}30`, borderRadius:9, overflow:"hidden" }}>
-                    <div style={{ padding:"11px 16px", background:q.bg, borderBottom:`2px solid ${q.color}` }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:q.color }}>{q.label}</div>
-                      <div style={{ fontSize:10, color:DS.inkTer, marginTop:2 }}>{q.sublabel}</div>
-                      <div style={{ fontSize:10, color:q.color, marginTop:4 }}>{q.items.length} uncertainties</div>
-                    </div>
-                    <div style={{ background:DS.canvas, padding:"10px", minHeight:100, display:"flex", flexDirection:"column", gap:7 }}>
-                      {q.items.length === 0 ? (
-                        <div style={{ fontSize:11, color:DS.inkDis, textAlign:"center", padding:"14px 0", fontStyle:"italic" }}>None</div>
-                      ) : q.items.map(item => (
-                        <div key={item.id} onClick={()=>setSelected(selected===item.id?null:item.id)}
-                          style={{ padding:"9px 12px", borderRadius:7,
-                            border:`1px solid ${selected===item.id?q.color:DS.canvasBdr}`,
-                            background:selected===item.id?q.bg:DS.canvas, cursor:"pointer",
-                            transition:"all .12s" }}>
-                          <div style={{ fontSize:12, fontWeight:600, color:DS.ink, marginBottom:5, lineHeight:1.4 }}>{item.label}</div>
-                          <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                            <Badge variant="default" size="xs">{item.type}</Badge>
-                            <span style={{ fontSize:10, fontWeight:700, color:impactColor[item.impact]||DS.inkSub,
-                              padding:"1px 6px", borderRadius:3, background:impactColor[item.impact]+"18" }}>
-                              {item.impact} impact
-                            </span>
-                            <span style={{ fontSize:10, fontWeight:700, color:controlColor[item.control]||DS.inkSub,
-                              padding:"1px 6px", borderRadius:3, background:controlColor[item.control]+"18" }}>
-                              {item.control}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add uncertainty inline */}
-              <AddUncertaintyForm onAdd={add} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── DIAGRAM VIEW ── */}
-      {view==="diagram" && (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-          <div style={{ padding:"8px 20px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`,
-            display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
-            <button onClick={()=>setLinkMode(l=>!l)}
-              style={{ padding:"5px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-                border:`1px solid ${linkMode?DS.accent:DS.canvasBdr}`, borderRadius:5,
-                background:linkMode?DS.accentSoft:"transparent",
-                color:linkMode?DS.accent:DS.inkSub, cursor:"pointer" }}>
-              {linkMode ? (linkSource?"Click target to link…":"Click source to start link") : "Draw Influence Links"}
-            </button>
-            {linkMode && <span style={{ fontSize:11, color:DS.accent }}>Click two nodes to draw an influence arrow</span>}
-            <span style={{ marginLeft:"auto", fontSize:11, color:DS.inkTer }}>{items.length} nodes · {links.length} links</span>
-          </div>
-          <div style={{ flex:1, overflow:"auto", position:"relative", background:"#fafaf8" }}>
-            <svg style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", pointerEvents:"none" }}>
-              <defs>
-                <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                  <path d="M0,0 L0,6 L8,3 z" fill={DS.accent}/>
-                </marker>
-              </defs>
-              {links.map(lk => {
-                const from = items.find(i=>i.id===lk.from);
-                const to   = items.find(i=>i.id===lk.to);
-                if (!from||!to) return null;
-                const fx=from.x+90, fy=from.y+28, tx=to.x+90, ty=to.y+28;
-                const mx=(fx+tx)/2, my=(fy+ty)/2;
-                return (
-                  <g key={lk.id}>
-                    <line x1={fx} y1={fy} x2={tx} y2={ty} stroke={DS.accent}
-                      strokeWidth={2} strokeDasharray="5,3" markerEnd="url(#arrow)" opacity={.6}/>
-                    <text x={mx} y={my-6} textAnchor="middle" fontSize="9" fill={DS.accent}
-                      fontFamily="'IBM Plex Sans',sans-serif">influences</text>
-                  </g>
-                );
-              })}
-            </svg>
-            {items.map(item => {
-              const q = quadrant(item);
-              const isSrc = linkSource===item.id;
-              return (
-                <div key={item.id}
-                  onClick={()=>{ if(linkMode) handleLink(item.id); else setSelected(selected===item.id?null:item.id); }}
-                  style={{ position:"absolute", left:item.x, top:item.y,
-                    width:180, padding:"10px 12px", borderRadius:8, cursor:"pointer",
-                    border:`2px solid ${isSrc?DS.accent:q.color}`,
-                    background:selected===item.id||isSrc?q.bg:DS.canvas,
-                    boxShadow:isSrc?`0 0 0 3px ${DS.accentLine}`:"0 2px 8px rgba(0,0,0,.08)",
-                    userSelect:"none", transition:"all .12s" }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:q.color, marginBottom:4, lineHeight:1.35 }}>{item.label}</div>
-                  <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                    <span style={{ fontSize:9, fontWeight:700, color:q.color,
-                      padding:"1px 5px", borderRadius:3, background:q.color+"18" }}>{q.label}</span>
-                    <span style={{ fontSize:9, color:DS.inkTer }}>{item.type}</span>
-                  </div>
-                  {selected===item.id && (
-                    <button onClick={e=>{e.stopPropagation();remove(item.id);}}
-                      style={{ position:"absolute", top:4, right:4, background:"none", border:"none",
-                        cursor:"pointer", color:DS.danger, fontSize:12, lineHeight:1 }}>×</button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── DRIVERS VIEW ── */}
-      {view==="drivers" && (
-        <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
-          {!drivers ? (
-            <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10, color:DS.inkTer, fontSize:13 }}>
-              <div style={{ marginBottom:16 }}>Map your uncertainties in the matrix first, then run AI Key Driver Analysis.</div>
-              <Btn variant="primary" icon="spark" onClick={analyzeDrivers} disabled={aiBusy||analyzing||items.length<3}>
-                {analyzing?"Analysing…":"Run AI Key Driver Analysis"}
-              </Btn>
-            </div>
-          ) : (
-            <div style={{ maxWidth:860, margin:"0 auto" }}>
-              {drivers.overallInsight && (
-                <div style={{ marginBottom:24, padding:"16px 20px", background:DS.accentSoft,
-                  border:`1px solid ${DS.accentLine}`, borderRadius:9 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:DS.accent, letterSpacing:.8,
-                    textTransform:"uppercase", marginBottom:6 }}>Uncertainty Landscape</div>
-                  <div style={{ fontSize:13, color:DS.ink, lineHeight:1.65 }}>{drivers.overallInsight}</div>
-                </div>
-              )}
-
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
-                {/* Key drivers */}
-                {drivers.keyDrivers?.length > 0 && (
-                  <div>
-                    <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:15, fontWeight:700, color:DS.ink, marginBottom:12 }}>Key Drivers</div>
-                    {drivers.keyDrivers.map((d,i) => (
-                      <div key={i} style={{ padding:"14px 16px", background:DS.dangerSoft,
-                        border:`1px solid ${DS.dangerLine}`, borderRadius:8, marginBottom:10 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:DS.danger, marginBottom:5 }}>{d.id}</div>
-                        <div style={{ fontSize:12, color:DS.ink, lineHeight:1.55, marginBottom:8 }}>{d.reason}</div>
-                        <div style={{ fontSize:11, color:DS.inkSub, fontStyle:"italic" }}>Resolution path: {d.resolutionPath}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Deal breakers */}
-                {drivers.dealBreakers?.length > 0 && (
-                  <div>
-                    <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:15, fontWeight:700, color:DS.ink, marginBottom:12 }}>Deal-Breaker Scenarios</div>
-                    {drivers.dealBreakers.map((db,i) => (
-                      <div key={i} style={{ padding:"14px 16px", background:DS.warnSoft,
-                        border:`1px solid ${DS.warnLine}`, borderRadius:8, marginBottom:10 }}>
-                        <div style={{ display:"flex", gap:8, marginBottom:5, flexWrap:"wrap" }}>
-                          <Badge variant="warn" size="xs">{db.uncertainty}</Badge>
-                          <span style={{ fontSize:11, color:DS.inkTer }}>→</span>
-                          <Badge variant="default" size="xs">{db.strategy}</Badge>
-                        </div>
-                        <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>{db.scenario}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Resolution sequence */}
-              {drivers.resolutionSequence?.length > 0 && (
-                <div style={{ padding:"16px 20px", background:DS.successSoft,
-                  border:`1px solid ${DS.successLine}`, borderRadius:9 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:DS.success,
-                    letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>Recommended Resolution Sequence</div>
-                  {drivers.resolutionSequence.map((step,i) => (
-                    <div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}>
-                      <span style={{ width:22,height:22,borderRadius:5,background:DS.success,color:"#fff",
-                        fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",
-                        justifyContent:"center",flexShrink:0 }}>{i+1}</span>
-                      <span style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>{step}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Modelling candidates */}
-              {drivers.modellingCandidates?.length > 0 && (
-                <div style={{ marginTop:16, padding:"12px 16px", background:DS.canvasAlt,
-                  border:`1px solid ${DS.canvasBdr}`, borderRadius:8 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
-                    letterSpacing:.8, textTransform:"uppercase", marginBottom:6 }}>Worth Quantitative Modelling</div>
-                  <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
-                    {drivers.modellingCandidates.map((c,i)=>(
-                      <Badge key={i} variant="blue">{c}</Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AddUncertaintyForm({ onAdd }) {
-  const [label,   setLabel]   = useState("");
-  const [type,    setType]    = useState("Market");
-  const [impact,  setImpact]  = useState("High");
-  const [control, setControl] = useState("Some Control");
-  const submit = () => {
-    if (!label.trim()) return;
-    onAdd({ label:label.trim(), type, impact, control, description:label.trim(), source:"manual" });
-    setLabel("");
-  };
-  return (
-    <div style={{ display:"flex", gap:8, flexWrap:"wrap", padding:"14px 16px",
-      background:DS.canvasAlt, borderRadius:9, border:`1px solid ${DS.canvasBdr}` }}>
-      <input value={label} onChange={e=>setLabel(e.target.value)}
-        onKeyDown={e=>e.key==="Enter"&&submit()}
-        placeholder="Add an uncertainty…"
-        style={{ flex:1, minWidth:200, padding:"8px 12px", fontSize:12, fontFamily:"inherit",
-          background:DS.canvas, border:`1px solid ${DS.canvasBdr}`, borderRadius:6,
-          color:DS.ink, outline:"none" }}
-        onFocusCapture={e=>e.target.style.borderColor=DS.accent}
-        onBlurCapture={e=>e.target.style.borderColor=DS.canvasBdr}/>
-      <Select value={type} onChange={setType} options={UNCERTAINTY_TYPES.map(t=>({value:t,label:t}))} style={{ width:130 }}/>
-      <Select value={impact} onChange={setImpact} options={IMPACT_LEVELS.map(t=>({value:t,label:t+" impact"}))} style={{ width:140 }}/>
-      <Select value={control} onChange={setControl} options={CONTROL_LEVELS.map(t=>({value:t,label:t}))} style={{ width:150 }}/>
-      <Btn variant="primary" icon="plus" onClick={submit}>Add</Btn>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   PHASE 2 — WORKSHOP MODE OVERLAY
-───────────────────────────────────────────────────────────────────────────── */
-
-function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssues, onExit }) {
-  const [wsView, setWsView]         = useState("facilitor"); // facilitor | participant | brainstorm | vote
-  const [timer, setTimer]           = useState(null);
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [input, setInput]           = useState("");
-  const [newCat, setNewCat]         = useState("uncertainty-external");
-  const [locked, setLocked]         = useState(false);
-  const [selectedStrat, setSelectedStrat] = useState(null);
-  const [revealAll, setRevealAll]   = useState(true);
-  const [wsNotes, setWsNotes]       = useState("");
-
-  useEffect(() => {
-    let interval;
-    if (timerRunning && timerSeconds > 0) {
-      interval = setInterval(() => setTimerSeconds(s => {
-        if (s <= 1) { setTimerRunning(false); return 0; }
-        return s - 1;
-      }), 1000);
-    }
-    return () => clearInterval(interval);
-  }, [timerRunning, timerSeconds]);
-
-  const addIssue = () => {
-    if (!input.trim()) return;
-    onIssues(prev => [...prev, { id:uid("iss"), text:input.trim(), category:newCat, severity:"Medium", status:"Open", owner:"Workshop", votes:0 }]);
-    setInput("");
-  };
-
-  const vote = (id) => onIssues(prev => prev.map(i => i.id===id ? {...i, votes:(i.votes||0)+1} : i));
-  const sorted = [...issues].sort((a,b)=>(b.votes||0)-(a.votes||0));
-
-  const fmtTime = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:DS.ink, zIndex:300,
-      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif", color:DS.textPri,
-      display:"flex", flexDirection:"column" }}>
-      <style>{`@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}`}</style>
-
-      {/* Workshop top bar */}
-      <div style={{ padding:"12px 24px", borderBottom:`1px solid ${DS.border}`,
-        display:"flex", alignItems:"center", gap:12, flexShrink:0, background:DS.chromeAlt }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <div style={{ width:8,height:8,borderRadius:"50%",background:"#22c55e",animation:"pulse 2s infinite" }}/>
-          <span style={{ fontSize:13, fontWeight:700, color:DS.textPri }}>Workshop Mode</span>
-          <Badge variant="chrome" size="xs">{problem.decisionStatement?.slice(0,40)}…</Badge>
-        </div>
-
-        {/* Timer */}
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginLeft:16 }}>
-          <span style={{ fontSize:22, fontWeight:700,
-            fontFamily:"'Libre Baskerville',Georgia,serif",
-            color: timerSeconds<60&&timerSeconds>0 ? DS.danger : DS.textPri }}>
-            {fmtTime(timerSeconds)}
-          </span>
-          <div style={{ display:"flex", gap:4 }}>
-            {[5,10,15,20].map(m => (
-              <button key={m} onClick={()=>{setTimerSeconds(m*60);setTimerRunning(false);}}
-                style={{ padding:"3px 8px", fontSize:10, fontWeight:700, fontFamily:"inherit",
-                  border:`1px solid ${DS.border}`, borderRadius:4, background:"transparent",
-                  color:DS.textSec, cursor:"pointer" }}>{m}m</button>
-            ))}
-            <button onClick={()=>setTimerRunning(r=>!r)} style={{ padding:"4px 10px", fontSize:11,
-              fontWeight:700, fontFamily:"inherit", border:`1px solid ${timerRunning?DS.danger:DS.success}`,
-              borderRadius:4, background:timerRunning?DS.dangerSoft:DS.successSoft,
-              color:timerRunning?DS.danger:DS.success, cursor:"pointer" }}>
-              {timerRunning?"Pause":"Start"}
-            </button>
-          </div>
-        </div>
-
-        {/* View switcher */}
-        <div style={{ display:"flex", gap:5, marginLeft:"auto" }}>
-          {[
-            {id:"facilitor", label:"Facilitator"},
-            {id:"brainstorm",label:"Brainstorm"},
-            {id:"vote",      label:"Vote"},
-            {id:"strategies",label:"Strategies"},
-          ].map(v => (
-            <button key={v.id} onClick={()=>setWsView(v.id)}
-              style={{ padding:"5px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-                cursor:"pointer", border:`1px solid ${wsView===v.id?DS.accent:DS.border}`,
-                borderRadius:5, background:wsView===v.id?DS.accent:"transparent",
-                color:wsView===v.id?"#fff":DS.textSec }}>
+        <div style={{ display:"flex", border:"1px solid "+DS.canvasBdr, borderRadius:6, overflow:"hidden" }}>
+          {[{id:"diagram",label:"Diagram"},{id:"matrix",label:"Impact Matrix"},{id:"metadata",label:"Node List"},{id:"validate",label:"Validate"}].map(v=>(
+            <button key={v.id} onClick={()=>setView(v.id)}
+              style={{ padding:"5px 11px", fontSize:11, fontWeight:700, fontFamily:"inherit",
+                cursor:"pointer", border:"none",
+                background:view===v.id?DS.accent:"transparent",
+                color:view===v.id?"#fff":DS.inkSub }}>
               {v.label}
             </button>
           ))}
         </div>
-        <Btn variant="secondary" size="sm" onClick={onExit}>Exit Workshop</Btn>
+        <Btn variant="secondary" size="sm" onClick={()=>setShowAdd(p=>!p)}>+ Add Node</Btn>
+        <Btn variant="secondary" size="sm"
+          onClick={()=>{ setLinkMode(l=>!l); setLinkSource(null); }}
+          style={{ background:linkMode?DS.accentSoft:"transparent",
+            border:"1px solid "+(linkMode?DS.accent:DS.canvasBdr),
+            color:linkMode?DS.accent:DS.inkSub }}>
+          {linkMode?(linkSource?"Click target…":"Click source…"):"Draw Links"}
+        </Btn>
+        <Btn variant="secondary" size="sm" onClick={runValidation}>Validate</Btn>
+        <Btn variant="primary" icon="spark" size="sm" onClick={generateNodes} disabled={aiBusy||generating}>
+          {generating?"Generating…":"AI Generate"}
+        </Btn>
       </div>
 
-      {/* ── FACILITATOR VIEW ── */}
-      {wsView==="facilitor" && (
-        <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:20 }}>
-            {[
-              { label:"Issues Raised", value:issues.length, color:DS.accent },
-              { label:"Critical Issues", value:issues.filter(i=>i.severity==="Critical").length, color:DS.danger },
-              { label:"Top Voted", value:sorted[0]?.votes||0, sub:sorted[0]?.text?.slice(0,30)||"—", color:DS.success },
-            ].map((stat,i)=>(
-              <div key={i} style={{ padding:"16px 18px", background:DS.chromeMid, borderRadius:9,
-                border:`1px solid ${DS.border}` }}>
-                <div style={{ fontSize:11, color:DS.textTer, marginBottom:6 }}>{stat.label}</div>
-                <div style={{ fontSize:28, fontWeight:700, color:stat.color,
-                  fontFamily:"'Libre Baskerville',Georgia,serif" }}>{stat.value}</div>
-                {stat.sub && <div style={{ fontSize:11, color:DS.textTer, marginTop:4 }}>{stat.sub}</div>}
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-            {/* Issue feed */}
-            <div style={{ background:DS.chromeMid, borderRadius:9, border:`1px solid ${DS.border}`, overflow:"hidden" }}>
-              <div style={{ padding:"11px 16px", background:DS.chromeSub, borderBottom:`1px solid ${DS.border}`,
-                fontSize:11, fontWeight:700, color:DS.textSec }}>Live Issue Feed</div>
-              <div style={{ maxHeight:320, overflowY:"auto", padding:"10px" }}>
-                {sorted.slice(0,8).map(issue => {
-                  const cat = ISSUE_CATEGORIES?.find(c=>c.key===issue.category);
-                  return (
-                    <div key={issue.id} style={{ padding:"8px 10px", borderRadius:6, marginBottom:6,
-                      background:DS.chromeSub, border:`1px solid ${DS.border}` }}>
-                      <div style={{ fontSize:11, color:DS.textSec, lineHeight:1.4, marginBottom:4 }}>{issue.text}</div>
-                      <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-                        {cat && <span style={{ fontSize:9, fontWeight:700, color:cat.color,
-                          padding:"1px 5px", borderRadius:3, background:cat.color+"22" }}>{cat.icon} {cat.short}</span>}
-                        <span style={{ fontSize:10, color:DS.accent }}>▲ {issue.votes||0}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Facilitator notes */}
-            <div style={{ background:DS.chromeMid, borderRadius:9, border:`1px solid ${DS.border}`, overflow:"hidden" }}>
-              <div style={{ padding:"11px 16px", background:DS.chromeSub, borderBottom:`1px solid ${DS.border}`,
-                fontSize:11, fontWeight:700, color:DS.textSec }}>Session Notes</div>
-              <textarea value={wsNotes} onChange={e=>setWsNotes(e.target.value)}
-                placeholder="Record key observations, tensions, decisions made in the room…"
-                style={{ width:"100%", height:280, padding:"12px 14px", fontSize:12, fontFamily:"inherit",
-                  background:"transparent", border:"none", color:DS.textSec, outline:"none",
-                  resize:"none", lineHeight:1.6, boxSizing:"border-box" }}/>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── BRAINSTORM VIEW ── */}
-      {wsView==="brainstorm" && (
-        <div style={{ flex:1, display:"flex", flexDirection:"column" }}>
-          <div style={{ padding:"20px 28px", borderBottom:`1px solid ${DS.border}`,
-            display:"flex", gap:10, flexShrink:0 }}>
-            <input value={input} onChange={e=>setInput(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&addIssue()}
-              placeholder={locked?"Session locked — no new submissions":"Submit an issue, risk, or question…"}
-              disabled={locked}
-              style={{ flex:1, padding:"14px 18px", fontSize:16, fontFamily:"inherit",
-                background:DS.chromeMid, border:`1px solid ${locked?DS.border:DS.accent}`,
-                borderRadius:8, color:DS.textPri, outline:"none" }}/>
-            <Select value={newCat} onChange={setNewCat}
-              options={ISSUE_CATEGORIES.map(c=>({value:c.key,label:`${c.icon} ${c.label}`}))}
-              style={{ width:200 }}/>
-            <Btn variant="primary" onClick={addIssue} disabled={locked}>Submit</Btn>
-            <button onClick={()=>setLocked(l=>!l)}
-              style={{ padding:"8px 14px", border:`1px solid ${locked?DS.danger:DS.border}`,
-                borderRadius:7, background:locked?DS.dangerSoft:"transparent",
-                color:locked?DS.danger:DS.textSec, cursor:"pointer", fontFamily:"inherit",
-                fontSize:11, fontWeight:700 }}>
-              {locked?"🔒 Locked":"🔓 Lock"}
+      {/* Add node panel */}
+      {showAdd && (
+        <div style={{ padding:"10px 20px", background:DS.accentSoft,
+          borderBottom:"1px solid "+DS.accentLine,
+          display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+          {Object.entries(NODE_TYPES).map(([key,nt])=>(
+            <button key={key} onClick={()=>setAddType(key)}
+              style={{ padding:"3px 10px", fontSize:10, fontWeight:700, fontFamily:"inherit",
+                cursor:"pointer", border:"1.5px solid "+(addType===key?nt.color:DS.canvasBdr),
+                borderRadius:5, background:addType===key?nt.bg:"transparent",
+                color:addType===key?nt.color:DS.inkSub }}>
+              {nt.icon} {nt.label}
             </button>
-          </div>
-          <div style={{ flex:1, overflowY:"auto", padding:"20px 28px",
-            display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:12, alignContent:"start" }}>
-            {issues.slice().reverse().map(issue => {
-              const cat = ISSUE_CATEGORIES?.find(c=>c.key===issue.category);
-              return (
-                <div key={issue.id} style={{ padding:"16px 18px", borderRadius:9,
-                  background:cat?.soft||DS.chromeMid,
-                  border:`1px solid ${cat?.line||DS.border}`,
-                  borderLeft:`4px solid ${cat?.color||DS.accent}` }}>
-                  <div style={{ fontSize:13, color:DS.ink, lineHeight:1.5, marginBottom:8 }}>{issue.text}</div>
-                  {cat && <span style={{ fontSize:10, fontWeight:700, color:cat.color,
-                    padding:"2px 7px", borderRadius:3, background:cat.color+"22" }}>
-                    {cat.icon} {cat.label}
-                  </span>}
-                </div>
-              );
-            })}
-          </div>
+          ))}
+          <input autoFocus value={newLabel} onChange={e=>setNewLabel(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter") addNode(); if(e.key==="Escape") setShowAdd(false); }}
+            placeholder={"Label for new "+NODE_TYPES[addType].label.toLowerCase()+"..."}
+            style={{ flex:1, minWidth:180, padding:"5px 10px", fontSize:12,
+              fontFamily:"inherit", background:DS.canvas,
+              border:"1px solid "+DS.accentLine, borderRadius:5, color:DS.ink, outline:"none" }}/>
+          <Btn variant="primary" size="sm" onClick={addNode}>Add</Btn>
+          <Btn variant="secondary" size="sm" onClick={()=>setShowAdd(false)}>Cancel</Btn>
         </div>
       )}
 
-      {/* ── VOTE VIEW ── */}
-      {wsView==="vote" && (
-        <div style={{ flex:1, overflowY:"auto", padding:"24px 36px" }}>
-          <div style={{ fontSize:14, color:DS.textSec, marginBottom:20 }}>
-            Vote on the most important issues. Highest-voted issues will be prioritised for strategy table focus.
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {sorted.map((issue, rank) => {
-              const cat = ISSUE_CATEGORIES?.find(c=>c.key===issue.category);
-              const maxVotes = sorted[0]?.votes||1;
-              return (
-                <div key={issue.id} style={{ display:"flex", alignItems:"center", gap:16,
-                  padding:"14px 18px", borderRadius:9,
-                  background: rank<3 ? (cat?.soft||DS.chromeMid) : DS.chromeMid,
-                  border:`1px solid ${rank<3?(cat?.line||DS.border):DS.border}` }}>
-                  <span style={{ fontSize:18, fontWeight:700,
-                    fontFamily:"'Libre Baskerville',Georgia,serif",
-                    color:rank===0?DS.accent:DS.textTer, width:28, textAlign:"center" }}>
-                    {rank+1}
-                  </span>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, color:DS.textPri, lineHeight:1.45, marginBottom:6 }}>{issue.text}</div>
-                    <div style={{ height:4, background:DS.border, borderRadius:2, overflow:"hidden" }}>
-                      <div style={{ width:`${(issue.votes||0)/maxVotes*100}%`, height:"100%",
-                        background:cat?.color||DS.accent, borderRadius:2, transition:"width .3s" }}/>
-                    </div>
-                  </div>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-                    <button onClick={()=>vote(issue.id)}
-                      style={{ width:44, height:44, borderRadius:9, background:DS.accent,
-                        border:"none", cursor:"pointer", fontSize:20, color:"#fff",
-                        display:"flex", alignItems:"center", justifyContent:"center" }}>▲</button>
-                    <span style={{ fontSize:15, fontWeight:700, color:DS.accent }}>{issue.votes||0}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* Validation results */}
+      {validation && (
+        <div style={{ padding:"8px 20px", flexShrink:0,
+          background:validation.length===0?DS.successSoft:"#fff5f5",
+          borderBottom:"1px solid "+(validation.length===0?DS.successLine:"#fecaca") }}>
+          {validation.length===0
+            ? <span style={{ fontSize:11, color:DS.success, fontWeight:700 }}>✓ Diagram is structurally valid.</span>
+            : validation.map((v,i)=>(
+              <span key={i} style={{ fontSize:10, color:"#7f1d1d",
+                background:"#fee2e2", padding:"2px 8px", borderRadius:3,
+                marginRight:6, display:"inline-block" }}>
+                {v.node}: {v.msg}
+              </span>
+            ))}
+          <button onClick={()=>setValidation(null)}
+            style={{ marginLeft:8, background:"none", border:"none",
+              cursor:"pointer", color:DS.inkTer, fontSize:12 }}>×</button>
         </div>
       )}
 
-      {/* ── STRATEGIES VIEW ── */}
-      {wsView==="strategies" && (
-        <div style={{ flex:1, overflowY:"auto", padding:"28px 36px" }}>
-          <div style={{ fontSize:14, color:DS.textSec, marginBottom:24 }}>
-            Present one strategy at a time. Click to highlight.
-          </div>
-          <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:24 }}>
-            {strategies.map(s => {
-              const col = DS.s[s.colorIdx];
-              return (
-                <button key={s.id} onClick={()=>setSelectedStrat(selectedStrat===s.id?null:s.id)}
-                  style={{ padding:"10px 22px", borderRadius:8, fontSize:14, fontWeight:700,
-                    fontFamily:"inherit", cursor:"pointer",
-                    border:`2px solid ${selectedStrat===s.id?col.fill:DS.border}`,
-                    background:selectedStrat===s.id?col.fill:"transparent",
-                    color:selectedStrat===s.id?"#fff":col.fill, transition:"all .15s" }}>
-                  {DS.sNames[s.colorIdx]||s.name}
-                </button>
-              );
-            })}
-          </div>
-          {selectedStrat && (() => {
-            const s = strategies.find(st=>st.id===selectedStrat);
-            const col = DS.s[s.colorIdx];
-            const focusDecs = decisions.filter(d=>d.tier==="focus");
-            return (
-              <div style={{ padding:"24px 28px", background:col.soft, border:`2px solid ${col.fill}`,
-                borderRadius:12, maxWidth:700 }}>
-                <div style={{ fontSize:22, fontWeight:700, color:col.fill,
-                  fontFamily:"'Libre Baskerville',Georgia,serif", marginBottom:8 }}>
-                  {DS.sNames[s.colorIdx]||s.name}
-                </div>
-                {s.description && <div style={{ fontSize:14, color:DS.ink, marginBottom:20, lineHeight:1.6 }}>{s.description}</div>}
-                {focusDecs.map(d => {
-                  const idx = s.selections?.[d.id];
+      {/* Main content */}
+      <div style={{ flex:1, overflow:"hidden", display:"flex" }}>
+        {/* Diagram view */}
+        {view==="diagram" && (
+          <div style={{ flex:1, overflow:"auto", background:"#f8f9fb",
+            backgroundImage:"radial-gradient(circle, #d0d4e0 1px, transparent 1px)",
+            backgroundSize:"24px 24px" }}
+            onMouseMove={onDragMouseMove} onMouseUp={onDragMouseUp} onMouseLeave={onDragMouseUp}>
+            <div style={{ position:"relative", width:CANVAS_W, height:CANVAS_H, minWidth:"100%", minHeight:"100%" }}>
+              <svg style={{ position:"absolute", top:0, left:0, width:CANVAS_W, height:CANVAS_H, pointerEvents:"none" }}>
+                <defs>
+                  <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill={DS.accent} opacity=".6"/>
+                  </marker>
+                </defs>
+                {edges.map(e=>{
+                  const f=nodes.find(n=>n.id===e.from), t=nodes.find(n=>n.id===e.to);
+                  if (!f||!t) return null;
+                  const fx=f.x+90,fy=f.y+28,tx=t.x+90,ty=t.y+28;
+                  const nt=NODE_TYPES[f.type]||NODE_TYPES.uncertainty;
                   return (
-                    <div key={d.id} style={{ padding:"12px 16px", background:"rgba(255,255,255,.7)",
-                      borderRadius:8, marginBottom:10, display:"flex", gap:16, alignItems:"center" }}>
-                      <div style={{ fontSize:11, fontWeight:700, color:DS.inkTer,
-                        letterSpacing:.5, textTransform:"uppercase", width:130, flexShrink:0 }}>{d.label}</div>
-                      <div style={{ fontSize:15, fontWeight:700,
-                        color:idx!==undefined?col.fill:DS.inkDis }}>
-                        {idx!==undefined?d.choices[idx]:"— Not selected —"}
-                      </div>
-                    </div>
+                    <g key={e.id}>
+                      <path d={"M"+fx+","+fy+" Q"+((fx+tx)/2)+","+(Math.min(fy,ty)-30)+" "+tx+","+ty}
+                        fill="none" stroke={nt.color} strokeWidth={1.5} strokeDasharray="5,3"
+                        markerEnd="url(#arr)" opacity={.65}/>
+                      <circle cx={(fx+tx)/2} cy={(fy+ty)/2-15} r={8}
+                        fill="transparent" style={{ cursor:"pointer" }}
+                        onClick={()=>setEdges(prev=>prev.filter(x=>x.id!==e.id))}/>
+                    </g>
                   );
                 })}
-              </div>
-            );
-          })()}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   PHASE 2 — SESSION PERSISTENCE & VERSION CONTROL
-───────────────────────────────────────────────────────────────────────────── */
-
-const SESSION_KEY = "vantage_dq_session_v1";
-
-const saveSession = (data) => {
-  try {
-    const snapshot = { ...data, savedAt: new Date().toISOString() };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(snapshot));
-    return true;
-  } catch { return false; }
-};
-
-const loadSession = () => {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-};
-
-const VERSION_KEY = "vantage_dq_versions_v1";
-
-const saveVersion = (label, data) => {
-  try {
-    const versions = loadVersions();
-    const newVersion = { id: uid("ver"), label, savedAt: new Date().toISOString(), data: {...data} };
-    versions.unshift(newVersion);
-    localStorage.setItem(VERSION_KEY, JSON.stringify(versions.slice(0, 20)));
-    return newVersion;
-  } catch { return null; }
-};
-
-const loadVersions = () => {
-  try {
-    const raw = localStorage.getItem(VERSION_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-};
-
-function VersionPanel({ currentData, onRestore, onClose }) {
-  const [versions, setVersions]     = useState(loadVersions);
-  const [label, setLabel]           = useState("");
-  const [confirmRestore, setConfirm] = useState(null);
-
-  const handleSave = () => {
-    const lbl = label.trim() || `Snapshot ${new Date().toLocaleTimeString()}`;
-    const v = saveVersion(lbl, currentData);
-    if (v) { setVersions(loadVersions()); setLabel(""); }
-  };
-
-  const handleRestore = (version) => {
-    onRestore(version.data);
-    setConfirm(null);
-    onClose();
-  };
-
-  const handleDelete = (id) => {
-    const updated = versions.filter(v=>v.id!==id);
-    localStorage.setItem(VERSION_KEY, JSON.stringify(updated));
-    setVersions(updated);
-  };
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:400,
-      display:"flex", alignItems:"center", justifyContent:"center",
-      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif" }}>
-      <div style={{ background:DS.canvas, borderRadius:14, width:"100%", maxWidth:560,
-        maxHeight:"82vh", display:"flex", flexDirection:"column",
-        boxShadow:"0 24px 64px rgba(0,0,0,.18)", border:`1px solid ${DS.canvasBdr}` }}>
-
-        <div style={{ padding:"16px 20px", borderBottom:`1px solid ${DS.canvasBdr}`,
-          display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <div style={{ fontSize:15, fontWeight:700, color:DS.ink,
-            fontFamily:"'Libre Baskerville',Georgia,serif" }}>Version History</div>
-          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:DS.inkTer }}>
-            <Svg path={ICONS.x} size={18} color={DS.inkTer}/>
-          </button>
-        </div>
-
-        {/* Save new version */}
-        <div style={{ padding:"14px 20px", borderBottom:`1px solid ${DS.canvasBdr}`,
-          display:"flex", gap:8 }}>
-          <input value={label} onChange={e=>setLabel(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&handleSave()}
-            placeholder="Snapshot name (e.g. After workshop Day 1)…"
-            style={{ flex:1, padding:"8px 12px", fontSize:12, fontFamily:"inherit",
-              background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`, borderRadius:6,
-              color:DS.ink, outline:"none" }}
-            onFocusCapture={e=>e.target.style.borderColor=DS.accent}
-            onBlurCapture={e=>e.target.style.borderColor=DS.canvasBdr}/>
-          <Btn variant="primary" size="sm" onClick={handleSave}>Save Snapshot</Btn>
-        </div>
-
-        {/* Version list */}
-        <div style={{ flex:1, overflowY:"auto", padding:"12px" }}>
-          {versions.length === 0 ? (
-            <div style={{ padding:"32px", textAlign:"center", color:DS.inkTer, fontSize:13 }}>
-              No snapshots yet. Save one above to capture the current state.
-            </div>
-          ) : versions.map(v => (
-            <div key={v.id} style={{ padding:"12px 14px", borderRadius:8, marginBottom:8,
-              border:`1px solid ${DS.canvasBdr}`, background:DS.canvas,
-              display:"flex", alignItems:"center", gap:12 }}>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:3 }}>{v.label}</div>
-                <div style={{ fontSize:11, color:DS.inkTer }}>
-                  {new Date(v.savedAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
-                  {" · "}{v.data?.issues?.length||0} issues · {v.data?.strategies?.length||0} strategies
-                </div>
-              </div>
-              {confirmRestore===v.id ? (
-                <div style={{ display:"flex", gap:5 }}>
-                  <Btn variant="danger" size="sm" onClick={()=>handleRestore(v)}>Restore</Btn>
-                  <Btn variant="ghost" size="sm" onClick={()=>setConfirm(null)}>Cancel</Btn>
-                </div>
-              ) : (
-                <div style={{ display:"flex", gap:5 }}>
-                  <Btn variant="secondary" size="sm" onClick={()=>setConfirm(v.id)}>Restore</Btn>
-                  <button onClick={()=>handleDelete(v.id)}
-                    style={{ background:"none", border:"none", cursor:"pointer", color:DS.inkDis, padding:4 }}>
-                    <Svg path={ICONS.trash} size={14} color={DS.inkTer}/>
-                  </button>
+              </svg>
+              {nodes.map(node=>{
+                const nt=NODE_TYPES[node.type]||NODE_TYPES.uncertainty;
+                const isSel=selected===node.id, isSrc=linkSource===node.id;
+                return (
+                  <div key={node.id}
+                    style={{ position:"absolute", left:node.x, top:node.y, width:180,
+                      cursor:linkMode?"crosshair":"grab", userSelect:"none",
+                      zIndex:isSel||isSrc?10:1 }}
+                    onMouseDown={e=>onDragMouseDown(e,node.id)}
+                    onClick={e=>{ if(linkMode){e.stopPropagation();handleLink(node.id);} }}>
+                    <div style={{ padding:"10px 13px",
+                      background:isSrc?nt.color:nt.bg,
+                      border:"2px solid "+(isSel||isSrc?nt.color:nt.border),
+                      borderRadius:node.type==="uncertainty"?40:node.type==="value"?0:8,
+                      boxShadow:isSel?"0 0 0 3px "+nt.border+"80":"0 2px 8px rgba(0,0,0,.08)" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+                        <span style={{ fontSize:11, color:isSrc?"#fff":nt.color }}>{nt.icon}</span>
+                        <span style={{ fontSize:11, fontWeight:700,
+                          color:isSrc?"#fff":nt.color, lineHeight:1.25 }}>{node.label}</span>
+                      </div>
+                      <div style={{ fontSize:9, color:isSrc?"rgba(255,255,255,.7)":"#6b7280",
+                        textTransform:"uppercase", letterSpacing:.5 }}>
+                        {nt.label}{node.type==="uncertainty"?" · "+node.impact+" impact":""}
+                      </div>
+                    </div>
+                    {isSel && !linkMode && (
+                      <div style={{ position:"absolute", top:-26, right:0, display:"flex", gap:4 }}>
+                        <button onMouseDown={e=>e.stopPropagation()}
+                          onClick={e=>{e.stopPropagation();setSelected(null);}}
+                          style={{ padding:"2px 7px", fontSize:9, fontWeight:700,
+                            background:nt.color, border:"none", borderRadius:3,
+                            color:"#fff", cursor:"pointer", fontFamily:"inherit" }}>
+                          {node.description?"Edit":"Edit"}
+                        </button>
+                        <button onMouseDown={e=>e.stopPropagation()}
+                          onClick={e=>{e.stopPropagation();removeNode(node.id);}}
+                          style={{ padding:"2px 7px", fontSize:9, fontWeight:700,
+                            background:"#dc2626", border:"none", borderRadius:3,
+                            color:"#fff", cursor:"pointer", fontFamily:"inherit" }}>×</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {nodes.length===0 && (
+                <div style={{ position:"absolute", top:"50%", left:"50%",
+                  transform:"translate(-50%,-50%)", textAlign:"center",
+                  color:DS.inkTer, pointerEvents:"none" }}>
+                  <div style={{ fontSize:32, marginBottom:10 }}>◎</div>
+                  <div style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>No nodes yet</div>
+                  <div style={{ fontSize:12 }}>Click "+ Add Node" or use "AI Generate" to build the diagram.</div>
                 </div>
               )}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* Impact Matrix view */}
+        {view==="matrix" && (
+          <div style={{ flex:1, overflow:"auto", padding:20 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr",
+              gridTemplateRows:"1fr 1fr", gap:3, height:"calc(100% - 40px)", minHeight:400 }}>
+              {[
+                { impact:"High", control:"High", label:"Manage Actively", sub:"Key levers — high impact you control", color:"#059669", bg:"#ecfdf5" },
+                { impact:"High", control:"Low",  label:"Monitor Closely", sub:"External forces — major impact, low control", color:"#d97706", bg:"#fffbeb" },
+                { impact:"Low",  control:"High", label:"Exploit",         sub:"Easy wins — low stakes, you control them", color:"#2563eb", bg:"#eff4ff" },
+                { impact:"Low",  control:"Low",  label:"Accept / Track",  sub:"Background noise — monitor but don't over-invest", color:"#6b7280", bg:"#f9fafb" },
+              ].map(q=>{
+                const qNodes = nodes.filter(n=>n.type==="uncertainty"&&n.impact===q.impact&&n.control===q.control);
+                return (
+                  <div key={q.label} style={{ background:q.bg,
+                    border:"1px solid "+q.color+"30", borderRadius:10, padding:"14px 16px" }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:q.color, marginBottom:2 }}>{q.label}</div>
+                    <div style={{ fontSize:10, color:"#6b7280", marginBottom:10 }}>{q.sub}</div>
+                    {qNodes.map(n=>(
+                      <div key={n.id} onClick={()=>{setView("diagram");setSelected(n.id);}}
+                        style={{ padding:"7px 10px", marginBottom:6, background:"white",
+                          border:"1px solid "+q.color+"40", borderRadius:6,
+                          cursor:"pointer", fontSize:11, fontWeight:600, color:q.color }}>
+                        {n.label}
+                      </div>
+                    ))}
+                    {qNodes.length===0 && (
+                      <div style={{ fontSize:11, color:"#9ca3af", fontStyle:"italic" }}>None here yet</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Node list view */}
+        {view==="metadata" && (
+          <div style={{ flex:1, overflowY:"auto", padding:20 }}>
+            {nodes.length===0 ? (
+              <div style={{ textAlign:"center", color:DS.inkTer, padding:48, fontSize:13 }}>
+                No nodes yet. Add nodes in the Diagram view or use AI Generate.
+              </div>
+            ) : Object.entries(NODE_TYPES).map(([type,nt])=>{
+              const typeNodes = nodes.filter(n=>n.type===type);
+              if (!typeNodes.length) return null;
+              return (
+                <div key={type} style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:nt.color,
+                    letterSpacing:.6, textTransform:"uppercase", marginBottom:8 }}>
+                    {nt.icon} {nt.label} ({typeNodes.length})
+                  </div>
+                  {typeNodes.map(n=>(
+                    <div key={n.id} style={{ padding:"12px 14px", marginBottom:7,
+                      background:nt.bg, border:"1px solid "+nt.border,
+                      borderRadius:8, borderLeft:"3px solid "+nt.color }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                        <input value={n.label} onChange={e=>updateNode(n.id,{label:e.target.value})}
+                          style={{ fontSize:12, fontWeight:700, color:nt.color,
+                            background:"transparent", border:"none", outline:"none",
+                            flex:1, fontFamily:"inherit" }}/>
+                        {n.type==="uncertainty" && (
+                          <>
+                            <select value={n.impact} onChange={e=>updateNode(n.id,{impact:e.target.value})}
+                              style={{ fontSize:10, padding:"2px 5px", border:"1px solid "+nt.border,
+                                borderRadius:4, background:nt.bg, color:nt.color, fontFamily:"inherit" }}>
+                              {["High","Medium","Low"].map(v=><option key={v}>{v} Impact</option>)}
+                            </select>
+                            <select value={n.control} onChange={e=>updateNode(n.id,{control:e.target.value})}
+                              style={{ fontSize:10, padding:"2px 5px", border:"1px solid "+nt.border,
+                                borderRadius:4, background:nt.bg, color:nt.color, fontFamily:"inherit" }}>
+                              {["High","Medium","Low","No Control"].map(v=><option key={v}>{v} Control</option>)}
+                            </select>
+                          </>
+                        )}
+                        <button onClick={()=>removeNode(n.id)}
+                          style={{ background:"none", border:"none",
+                            cursor:"pointer", color:"#9ca3af", fontSize:14 }}>×</button>
+                      </div>
+                      <textarea value={n.description||""}
+                        onChange={e=>updateNode(n.id,{description:e.target.value})}
+                        placeholder="Description or notes..."
+                        rows={2}
+                        style={{ width:"100%", fontSize:11, padding:"5px 7px",
+                          fontFamily:"inherit", background:"white",
+                          border:"1px solid "+nt.border, borderRadius:5,
+                          color:DS.inkSub, outline:"none", resize:"vertical",
+                          boxSizing:"border-box" }}/>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Validate view */}
+        {view==="validate" && (
+          <div style={{ flex:1, overflowY:"auto", padding:20 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+              {Object.entries(NODE_TYPES).map(([type,nt])=>(
+                <div key={type} style={{ padding:"14px 16px",
+                  background:nt.bg, border:"1px solid "+nt.border, borderRadius:8,
+                  display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontSize:22 }}>{nt.icon}</span>
+                  <div>
+                    <div style={{ fontSize:20, fontWeight:700, color:nt.color,
+                      fontFamily:"'Libre Baskerville',serif" }}>
+                      {nodes.filter(n=>n.type===type).length}
+                    </div>
+                    <div style={{ fontSize:11, color:"#6b7280" }}>{nt.label}</div>
+                  </div>
+                </div>
+              ))}
+              <div style={{ padding:"14px 16px", background:DS.accentSoft,
+                border:"1px solid "+DS.accentLine, borderRadius:8,
+                display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:22 }}>→</span>
+                <div>
+                  <div style={{ fontSize:20, fontWeight:700, color:DS.accent,
+                    fontFamily:"'Libre Baskerville',serif" }}>{edges.length}</div>
+                  <div style={{ fontSize:11, color:"#6b7280" }}>Influence edges</div>
+                </div>
+              </div>
+            </div>
+            <Btn variant="primary" onClick={runValidation} style={{ marginBottom:16 }}>
+              Run Validation
+            </Btn>
+            {validation && (
+              validation.length===0
+                ? <div style={{ padding:"16px", background:DS.successSoft,
+                    border:"1px solid "+DS.successLine, borderRadius:8,
+                    color:DS.success, fontWeight:700 }}>✓ Diagram passes all structural checks.</div>
+                : validation.map((v,i)=>(
+                  <div key={i} style={{ padding:"10px 14px", marginBottom:7,
+                    background:DS.dangerSoft, border:"1px solid "+DS.dangerLine,
+                    borderRadius:7, fontSize:12 }}>
+                    <strong>{v.node}:</strong> {v.msg}
+                  </div>
+                ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   PHASE 2 — CROSS-MODULE AI INTELLIGENCE PANEL
-───────────────────────────────────────────────────────────────────────────── */
+
+function NudgeBar({ module, issues, decisions, criteria, strategies, assessmentScores, dqScores, onNavigate }) {
+  const nudges = [];
+  const focusDecs = decisions.filter(d=>d.tier==="focus");
+  const criticalIssues = issues.filter(i=>i.severity==="Critical"&&i.status==="Open");
+
+  if (module==="problem" && issues.length===0)
+    nudges.push({ text:"Start by raising issues from the problem brief", nav:"issues", color:DS.accent });
+  if (module==="issues" && focusDecs.length===0 && issues.length>=3)
+    nudges.push({ text:"Promote key decisions to the Decision Hierarchy", nav:"hierarchy", color:DS.warning });
+  if (module==="hierarchy" && focusDecs.length>=2 && strategies.length===0)
+    nudges.push({ text:"You have focus decisions — build your strategies now", nav:"strategy", color:DS.success });
+  if (module==="strategy" && strategies.length>=2 && Object.keys(assessmentScores).length===0)
+    nudges.push({ text:"Strategies ready — score them against your criteria", nav:"assessment", color:DS.accent });
+  if (module==="assessment" && Object.keys(assessmentScores).length>0 && !dqScores?.frame)
+    nudges.push({ text:"Assessment complete — run the DQ Scorecard", nav:"scorecard", color:DS.warning });
+  if (criticalIssues.length>0 && module!=="issues")
+    nudges.push({ text:criticalIssues.length+" critical issue"+(criticalIssues.length>1?"s":"")+" unresolved", nav:"issues", color:DS.danger });
+
+  if (nudges.length===0) return null;
+  const n = nudges[0];
+  return (
+    <div style={{ margin:"8px 10px 0", padding:"8px 10px",
+      background:n.color+"18", border:"1px solid "+n.color+"40",
+      borderRadius:7, cursor:"pointer" }}
+      onClick={()=>onNavigate(n.nav)}>
+      <div style={{ fontSize:9, fontWeight:700, color:n.color,
+        textTransform:"uppercase", letterSpacing:.5, marginBottom:2 }}>DQ Nudge</div>
+      <div style={{ fontSize:10, color:DS.textSec, lineHeight:1.4 }}>{n.text}</div>
+    </div>
+  );
+}
 
 function CrossModuleAI({ problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, aiCall, aiBusy, onAIMsg }) {
   const [insights, setInsights] = useState(null);
@@ -7839,6 +7472,7 @@ const PHASE1 = [
 ];
 const PHASE2 = [
   { id:"influence",  num:"08", label:"Influence Map",          sub:"Uncertainty analysis",      icon:"⊕" },
+  { id:"timeline",   num:"09", label:"Decision Risk Timeline", sub:"Time, gates & risk",       icon:"⊳" },
 ];
 const MODULES = [...PHASE1, ...PHASE2];
 
@@ -9444,23 +9078,54 @@ export default function App() {
           })}
         </nav>
 
-        {/* Progress footer */}
+        {/* Session Snapshot */}
         {!navCollapsed && (
-          <div style={{ padding:"12px 16px", borderTop:`1px solid ${DS.border}` }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
-              <span style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
-                textTransform:"uppercase", fontWeight:700 }}>Session Progress</span>
-              <span style={{ fontSize:10, color:DS.textSec, fontWeight:700 }}>{overall}%</span>
+          <div style={{ padding:"10px 12px", borderTop:"1px solid "+DS.border, flexShrink:0 }}>
+            <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
+              textTransform:"uppercase", fontWeight:700, marginBottom:6 }}>
+              Session Snapshot
+            </div>
+            {problem.decisionStatement && (
+              <div style={{ fontSize:10, color:DS.textSec, lineHeight:1.4,
+                marginBottom:8, fontStyle:"italic" }}>
+                {problem.decisionStatement.slice(0,80)}{problem.decisionStatement.length>80?"…":""}
+              </div>
+            )}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5, marginBottom:6 }}>
+              {[
+                { label:"Issues", val:issues.length, sub:issues.filter(i=>i.severity==="Critical"&&i.status==="Open").length+" critical", warn:issues.filter(i=>i.severity==="Critical"&&i.status==="Open").length>0 },
+                { label:"Focus Dec.", val:decisions.filter(d=>d.tier==="focus").length, sub:"in scope", warn:false },
+                { label:"Strategies", val:strategies.length, sub:"built", warn:false },
+                { label:"Criteria", val:criteria.length, sub:"defined", warn:false },
+              ].map(item=>(
+                <div key={item.label} style={{ padding:"5px 7px",
+                  background:DS.chromeMid, borderRadius:5, border:"1px solid "+DS.border }}>
+                  <div style={{ fontSize:14, fontWeight:700,
+                    color:item.warn?DS.danger:DS.textPri,
+                    fontFamily:"'Libre Baskerville',serif", lineHeight:1 }}>
+                    {item.val}
+                  </div>
+                  <div style={{ fontSize:8, color:DS.textTer, marginTop:2, fontWeight:600 }}>{item.label}</div>
+                  <div style={{ fontSize:7, color:item.warn?DS.danger:DS.textTer, marginTop:1 }}>{item.sub}</div>
+                </div>
+              ))}
             </div>
             <div style={{ height:3, background:DS.chromeMid, borderRadius:2, overflow:"hidden" }}>
               <div style={{ height:"100%", borderRadius:2, transition:"width .5s",
-                background:`linear-gradient(90deg, ${DS.accent}, #60a5fa)`,
-                width:`${overall}%` }}/>
+                background:"linear-gradient(90deg, "+DS.accent+", #60a5fa)",
+                width:overall+"%" }}/>
             </div>
-            <div style={{ fontSize:8, color:DS.textTer, marginTop:5 }}>
-              {issues.length} issues · {decisions.filter(d=>d.tier==="focus").length} focus · {strategies.length} strategies
+            <div style={{ display:"flex", justifyContent:"space-between", marginTop:3 }}>
+              <span style={{ fontSize:8, color:DS.textTer }}>Overall Progress</span>
+              <span style={{ fontSize:8, color:DS.textSec, fontWeight:700 }}>{overall}%</span>
             </div>
           </div>
+        )}
+        {!navCollapsed && (
+          <NudgeBar module={module} issues={issues} decisions={decisions}
+            criteria={criteria} strategies={strategies}
+            assessmentScores={assessmentScores} dqScores={{}}
+            onNavigate={setModule}/>
         )}
       </div>
 
