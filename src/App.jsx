@@ -2597,59 +2597,69 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
 
   // ── AI ─────────────────────────────────────────────────────────────────────
   const aiSuggest = () => {
+    if (nowDecisions.length === 0) {
+      onAIMsg({ role:"ai", text:"Add at least one Focus decision in the Decision Hierarchy before suggesting strategies." });
+      return;
+    }
     setSuggesting(true);
-    const tableDesc = nowDecisions.map(d => d.label + ": [" + d.choices.join(" / ") + "]").join(" | ");
-    const existing = strategies.map(s => {
-      const path = nowDecisions.map(d => {
-        const i = s.selections[d.id];
-        return i !== undefined ? d.choices[i] : "?";
-      }).join(" > ");
-      return s.name + ": " + path;
-    }).join(" | ");
 
-    aiCall(dqPrompt(
-      "You are a DQ strategist. Build 2 genuinely distinct new strategies. " +
-      "Strategies must make DIFFERENT choices on the decisions that matter most. " +
-      "If two strategies share more than 60% choices they are not distinct. " +
-      "Each must be internally coherent — its choices form a logical path. " +
-      "Decision: " + (problem.decisionStatement || "") + ". " +
-      "Decisions and options: " + tableDesc + ". " +
-      "Existing strategies (avoid duplicating): " + (existing || "none") + ". " +
-      "Each selections array must have one index per decision column (0-based). " +
-      "Return ONLY JSON: " +
-      '{"strategies":[{"name":"name","description":"one sentence","objective":"what it aims to achieve","selections":[0,1,0],"rationale":"why coherent"}],' +
-      '"coherenceFlags":[{"strategy":"name","issue":"desc"}],"insight":"key observation"}'
-    ), (r) => {
-      // Handle _raw fallback
+    const decList = nowDecisions.map((d, di) =>
+      (di+1) + ". " + d.label + " — options: " + d.choices.map((c,ci) => ci+"="+c).join(", ")
+    ).join(" | ");
+
+    const existingList = strategies.length > 0
+      ? strategies.map(s => s.name + ": " + nowDecisions.map(d => {
+          const v = s.selections[d.id];
+          const idx = Array.isArray(v) ? v[0] : v;
+          return idx !== undefined ? d.choices[idx] : "?";
+        }).join("/")).join(" | ")
+      : "none";
+
+    aiCall(
+      "You are a Decision Quality strategist. Build 2 distinct strategies for this decision. " +
+      "Each strategy must choose a different combination of options across the decisions. " +
+      "Decision: " + (problem.decisionStatement || "Not defined") + ". " +
+      "Focus decisions with options (use option index numbers in selections array): " + decList + ". " +
+      "Existing strategies to avoid duplicating: " + existingList + ". " +
+      "Return ONLY a JSON object with this exact structure: " +
+      "{"strategies":[{"name":"Strategy name","description":"What this strategy does in one sentence","objective":"What it aims to achieve","selections":[0,1,0],"rationale":"Why these choices form a coherent path"}],"insight":"Key observation about the strategic options"}. " +
+      "The selections array must have exactly " + nowDecisions.length + " numbers, one per decision above (0-based index of chosen option).",
+    (r) => {
       let result = r;
       if (r._raw) {
         try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
-        catch(e) { onAIMsg({ role:"ai", text:"Could not parse AI response. Try again." }); setSuggesting(false); return; }
+        catch(e) { onAIMsg({ role:"ai", text:"Could not parse response. Try again." }); setSuggesting(false); return; }
       }
       if (result.error) { onAIMsg({ role:"ai", text:"AI error: " + result.error }); setSuggesting(false); return; }
-      if (result.strategies?.length) {
+
+      // Try multiple possible response keys
+      const strats = result.strategies || result.Strategies || result.strategy || [];
+      if (strats.length) {
         const used = strategies.map(s => s.colorIdx);
-        const newSs = result.strategies.map((s, i) => {
+        const newSs = strats.map((s, i) => {
           const colorIdx = [0,1,2,3,4,5].find(c => !used.includes(c)) ?? (strategies.length + i) % 6;
           used.push(colorIdx);
           const selections = {};
-          (s.selections || []).forEach((optIdx, j) => {
-            if (nowDecisions[j]) selections[nowDecisions[j].id] = optIdx;
+          const sels = s.selections || s.choices || [];
+          sels.forEach((optIdx, j) => {
+            if (nowDecisions[j] && typeof optIdx === "number") {
+              selections[nowDecisions[j].id] = optIdx;
+            }
           });
           return {
             id: uid("s"), colorIdx,
-            name: s.name || DS.sNames[colorIdx],
-            description: s.description || "",
+            name: s.name || DS.sNames[colorIdx] || ("Strategy " + (strategies.length + i + 1)),
+            description: s.description || s.rationale || "",
             objective: s.objective || "",
             rationale: {},
             selections
           };
         });
         onChange([...strategies, ...newSs]);
-        if (result.coherenceFlags?.length) setValidation({ coherenceFlags: result.coherenceFlags, insight: result.insight });
-        onAIMsg({ role: "ai", text: result.insight || ("Added " + newSs.length + " new strategies.") });
+        onAIMsg({ role: "ai", text: result.insight || ("Added " + newSs.length + " strategies.") });
       } else {
-        onAIMsg({ role:"ai", text:"No strategies returned. Try again with more focus decisions defined." });
+        onAIMsg({ role:"ai", text:"AI returned no strategies. Check the console for details." });
+        console.log("aiSuggest response:", JSON.stringify(result).slice(0,300));
       }
       setSuggesting(false);
     });
