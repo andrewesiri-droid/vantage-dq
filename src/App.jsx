@@ -7908,7 +7908,7 @@ function SessionHealthBar({ problem, issues, decisions, strategies, criteria, as
 }
 
 /* ── TOOLS DROPDOWN ────────────────────────────────────────────────────────── */
-function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, aiBusy }) {
+function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, onCrossModule, aiBusy }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -9038,6 +9038,7 @@ export default function App() {
   const [module, setModule]               = useState("problem");
   const [customTabs, setCustomTabs]       = useState([]);
   const [showTabPicker, setShowTabPicker] = useState(false);
+  const [showCrossModule, setShowCrossModule] = useState(false);
   const [problem, setProblem]             = useState(defaultProblem);
   const [issues, setIssues]               = useState(defaultIssues);
   const [decisions, setDecisions]         = useState(defaultDecisions);
@@ -9619,10 +9620,13 @@ export default function App() {
             </button>
 
             {/* Cross-Module AI */}
-            <CrossModuleAI problem={problem} issues={issues} decisions={decisions}
-              criteria={criteria} strategies={strategies}
-              assessmentScores={assessmentScores} dqScores={dqScores}
-              aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
+            {showCrossModule && (
+              <CrossModuleAI problem={problem} issues={issues} decisions={decisions}
+                criteria={criteria} strategies={strategies}
+                assessmentScores={assessmentScores} dqScores={dqScores}
+                aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}
+                onClose={()=>setShowCrossModule(false)}/>
+            )}
 
             {/* Tools dropdown */}
             <ToolsMenu
