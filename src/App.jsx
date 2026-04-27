@@ -2592,10 +2592,6 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
     return v === optIdx;
   };
 
-  const hasSel = (s, decId) => {
-    const v = s.selections[decId];
-    return Array.isArray(v) ? v.length > 0 : v !== undefined;
-  };
 
   const completeness = s => {
     if (nowDecisions.length === 0) return 0;
