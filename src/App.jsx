@@ -6258,17 +6258,20 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       "Annual revenue growth rate: "+params.growthRate+"%. " +
       "Cost as % of revenue: "+params.costMargin+"%. " +
       "Build a COMPLETE financial model with three scenarios (Low/Base/High) driven by the uncertainty nodes. " +
-      "Return ONLY JSON with this structure: " +
-      '{"modelTitle":"title","assumptions":[{"name":"param","low":0,"base":0,"high":0,"unit":"desc","driver":"which uncertainty drives this"}],' +
-      '"incomeStatement":{"years":["Y1","Y2","Y3","Y4","Y5"],' +
-      '"revenue":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0],"formula":"=prior*(1+growthRate)"},' +
-      '"costs":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0],"formula":"=revenue*costMargin"},' +
-      '"ebitda":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0],"formula":"=revenue-costs"},' +
-      '"additionalLines":[{"name":"line item","low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0],"formula":"description","driver":"which node drives this"}]},' +
-      '"valuation":{"npv":{"low":0,"base":0,"high":0},"irr":{"low":0,"base":0,"high":0},"payback":{"low":0,"base":0,"high":0}},' +
-      '"scenarioNarrative":{"low":"what happens in the downside","base":"central case","high":"upside case"},' +
-      '"keyRisks":["risk 1 from uncertainty nodes"],' +
-      '"modellingNotes":"key assumptions and limitations"}',
+      "Return ONLY a JSON object. No markdown, no explanation, start with {. " +
+      "Use this exact structure: " +
+      '{"modelTitle":"short title","assumptions":[{"name":"assumption name","low":0,"base":0,"high":0,"unit":"unit description","driver":"which uncertainty node drives this"}],' +
+      '"revenue":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0]},' +
+      '"costs":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0]},' +
+      '"ebitda":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0]},' +
+      '"npv":{"low":0,"base":0,"high":0},' +
+      '"irr":{"low":0,"base":0,"high":0},' +
+      '"payback":{"low":0,"base":0,"high":0},' +
+      '"scenarioLow":"one sentence downside description",' +
+      '"scenarioBase":"one sentence base case description",' +
+      '"scenarioHigh":"one sentence upside description",' +
+      '"keyRisks":["risk 1","risk 2","risk 3"],' +
+      '"notes":"key modelling assumptions"}',
     (r) => {
       let result = r;
       if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setBuildingModel(false); onAIMsg({role:"ai",text:"Could not parse model response."}); return; } }
@@ -6371,33 +6374,30 @@ ${assum.map(a => `<tr><td>${a.name}</td><td class="num">${fmtNum(a.low)}</td><td
 <h2>Income Statement — Three Scenarios</h2>
 ${scenarios.map(sc => `
 <h3 style="color:${sc==="low"?"#dc2626":sc==="high"?"#059669":"#2563eb"}">${scenLabels[sc]}</h3>
-<p style="font-size:10px;color:#6b7280;margin-bottom:6px">${modelData.scenarioNarrative?.[sc]||""}</p>
+<p style="font-size:10px;color:#6b7280;margin-bottom:6px">${scenNarr[sc]}</p>
 <table>
-<tr><th style="width:200px">Line Item</th>${yrs.map(y=>`<th class="num">${y}</th>`).join("")}<th>Formula Driver</th></tr>
+<tr><th style="width:200px">Line Item</th>${yrs.map(y=>`<th class="num">${y}</th>`).join("")}</tr>
 ${rows.map(row => {
-  const vals = row.data ? row.data[sc] : (inc[row.key]?.[sc] || []);
-  const fmla = row.data ? row.data.formula : (inc[row.key]?.formula || "");
-  const driver = row.data?.driver || "";
+  const vals = modelData[row.key]?.[sc] || [];
   return `<tr class="${row.bold?"bold":""} ${row.separator?"sep":""}">
     <td>${row.label}</td>
     ${yrs.map((_,i) => `<td class="num">${fmtNum(vals?.[i])}</td>`).join("")}
-    <td style="font-size:9px;color:#6b7280">${fmla}${driver?` <span class="tag tag-unc">${driver}</span>`:""}</td>
   </tr>`;
 }).join("")}
 </table>`).join("")}
 
 <h2>Valuation Summary</h2>
 <table>
-<tr><th style="width:200px">Metric</th><th class="num">⬇ Low Case</th><th class="num">◆ Base Case</th><th class="num">⬆ High Case</th></tr>
-<tr class="bold"><td>NPV (${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit})</td><td class="num" style="color:#dc2626">${fmtNum(val.npv?.low)}</td><td class="num" style="color:#2563eb">${fmtNum(val.npv?.base)}</td><td class="num" style="color:#059669">${fmtNum(val.npv?.high)}</td></tr>
-<tr><td>IRR (%)</td><td class="num">${fmtNum(val.irr?.low)}%</td><td class="num">${fmtNum(val.irr?.base)}%</td><td class="num">${fmtNum(val.irr?.high)}%</td></tr>
-<tr><td>Payback Period (years)</td><td class="num">${fmtNum(val.payback?.low)}</td><td class="num">${fmtNum(val.payback?.base)}</td><td class="num">${fmtNum(val.payback?.high)}</td></tr>
+<tr><th style="width:200px">Metric</th><th class="num">⬇ Low</th><th class="num">◆ Base</th><th class="num">⬆ High</th></tr>
+<tr class="bold"><td>NPV (${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit})</td><td class="num" style="color:#dc2626">${fmtNum(val.npv.low)}</td><td class="num" style="color:#2563eb">${fmtNum(val.npv.base)}</td><td class="num" style="color:#059669">${fmtNum(val.npv.high)}</td></tr>
+<tr><td>IRR</td><td class="num">${fmtNum(val.irr.low)}%</td><td class="num">${fmtNum(val.irr.base)}%</td><td class="num">${fmtNum(val.irr.high)}%</td></tr>
+<tr><td>Payback (years)</td><td class="num">${fmtNum(val.payback.low)}</td><td class="num">${fmtNum(val.payback.base)}</td><td class="num">${fmtNum(val.payback.high)}</td></tr>
 </table>
 
 <h2>Key Risks from Uncertainty Nodes</h2>
 ${(modelData.keyRisks||[]).map(r=>`<div class="risk">${r}</div>`).join("")}
 
-${modelData.modellingNotes?`<h2>Modelling Notes</h2><p style="font-size:11px;color:#4b5563;line-height:1.7">${modelData.modellingNotes}</p>`:""}
+${modelData.notes?`<h2>Modelling Notes</h2><p style="font-size:11px;color:#4b5563;line-height:1.7">${modelData.notes}</p>`:""}
 
 </body></html>`;
 
@@ -9100,16 +9100,13 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                           height={LANE_H-8} rx={4}
                           fill={col} fillOpacity={selected===rk.id?0.4:0.18}
                           stroke={col} strokeWidth={selected===rk.id?2:1}/>
-                        <text x={x1+6} y={laneY+LANE_H/2+4}
-                          fontSize={9} fontWeight={600} fill={col}>
-                          {rk.label.slice(0,25)}{rk.label.length>25?"…":""}
-                        </text>
+                        {(x2-x1)>45 && <text x={x1+8} y={laneY+LANE_H/2+4} fontSize={8} fontWeight={600} fill={col}>{rk.label.slice(0,Math.max(5,Math.floor((x2-x1)/7)))}{rk.label.length>Math.floor((x2-x1)/7)?"…":""}</text>}
                       </g>
                     );
                   })}
 
                   {/* Events */}
-                  {events.map(ev=>{
+                  {events.map((ev,evIdx)=>{
                     const ot = OBJECT_TYPES[ev.type]||OBJECT_TYPES.milestone;
                     const laneIdx = LANES.findIndex(l=>l.types.includes(ev.type));
                     const laneY = 40 + (laneIdx>=0?laneIdx:0)*LANE_H;
@@ -9131,10 +9128,20 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                           <polygon points={x+","+laneY+" "+(x+10)+","+(laneY+LANE_H/2)+" "+x+","+(laneY+LANE_H)+" "+(x-10)+","+(laneY+LANE_H/2)}
                             fill={isSel?ot.color:ot.bg} stroke={ot.color} strokeWidth={2}/>
                           {/* Label above */}
-                          <text x={x} y={laneY-6} textAnchor="middle"
-                            fontSize={9} fontWeight={700} fill={ot.color}>
-                            {ev.label.slice(0,15)}{ev.label.length>15?"…":""}
-                          </text>
+                          {/* Staggered label with pill background */}
+                          {(() => {
+                            const gi = events.filter(e=>e.type==="gate").indexOf(ev);
+                            const off = (gi%3)*13;
+                            const lbl = ev.label.length>22?ev.label.slice(0,20)+"…":ev.label;
+                            const ly = laneY - 10 - off;
+                            return (
+                              <g>
+                                {off>0&&<line x1={x} y1={ly+3} x2={x} y2={laneY} stroke={ot.color} strokeWidth={0.5} strokeDasharray="2,2" opacity={0.4}/>}
+                                <rect x={x-lbl.length*3.5-4} y={ly-11} width={lbl.length*7+8} height={14} rx={3} fill={isSel?ot.color:ot.bg} stroke={ot.color} strokeWidth={1}/>
+                                <text x={x} y={ly} textAnchor="middle" fontSize={9} fontWeight={700} fill={isSel?"#fff":ot.color}>{lbl}</text>
+                              </g>
+                            );
+                          })()}
                           {/* Readiness badge */}
                           <rect x={x-12} y={laneY+LANE_H} width={24} height={12}
                             rx={3} fill={color} opacity={0.9}/>
