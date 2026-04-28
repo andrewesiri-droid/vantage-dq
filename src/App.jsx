@@ -7419,6 +7419,433 @@ function NudgeBar({ module, issues, decisions, criteria, strategies, assessmentS
   );
 }
 
+
+function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssues, onExit }) {
+  const [wsView, setWsView]         = useState("facilitor"); // facilitor | participant | brainstorm | vote
+  const [timer, setTimer]           = useState(null);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [input, setInput]           = useState("");
+  const [newCat, setNewCat]         = useState("uncertainty-external");
+  const [locked, setLocked]         = useState(false);
+  const [selectedStrat, setSelectedStrat] = useState(null);
+  const [revealAll, setRevealAll]   = useState(true);
+  const [wsNotes, setWsNotes]       = useState("");
+
+  useEffect(() => {
+    let interval;
+    if (timerRunning && timerSeconds > 0) {
+      interval = setInterval(() => setTimerSeconds(s => {
+        if (s <= 1) { setTimerRunning(false); return 0; }
+        return s - 1;
+      }), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timerRunning, timerSeconds]);
+
+  const addIssue = () => {
+    if (!input.trim()) return;
+    onIssues(prev => [...prev, { id:uid("iss"), text:input.trim(), category:newCat, severity:"Medium", status:"Open", owner:"Workshop", votes:0 }]);
+    setInput("");
+  };
+
+  const vote = (id) => onIssues(prev => prev.map(i => i.id===id ? {...i, votes:(i.votes||0)+1} : i));
+  const sorted = [...issues].sort((a,b)=>(b.votes||0)-(a.votes||0));
+
+  const fmtTime = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:DS.ink, zIndex:300,
+      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif", color:DS.textPri,
+      display:"flex", flexDirection:"column" }}>
+      <style>{`@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}`}</style>
+
+      {/* Workshop top bar */}
+      <div style={{ padding:"12px 24px", borderBottom:`1px solid ${DS.border}`,
+        display:"flex", alignItems:"center", gap:12, flexShrink:0, background:DS.chromeAlt }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ width:8,height:8,borderRadius:"50%",background:"#22c55e",animation:"pulse 2s infinite" }}/>
+          <span style={{ fontSize:13, fontWeight:700, color:DS.textPri }}>Workshop Mode</span>
+          <Badge variant="chrome" size="xs">{problem.decisionStatement?.slice(0,40)}…</Badge>
+        </div>
+
+        {/* Timer */}
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginLeft:16 }}>
+          <span style={{ fontSize:22, fontWeight:700,
+            fontFamily:"'Libre Baskerville',Georgia,serif",
+            color: timerSeconds<60&&timerSeconds>0 ? DS.danger : DS.textPri }}>
+            {fmtTime(timerSeconds)}
+          </span>
+          <div style={{ display:"flex", gap:4 }}>
+            {[5,10,15,20].map(m => (
+              <button key={m} onClick={()=>{setTimerSeconds(m*60);setTimerRunning(false);}}
+                style={{ padding:"3px 8px", fontSize:10, fontWeight:700, fontFamily:"inherit",
+                  border:`1px solid ${DS.border}`, borderRadius:4, background:"transparent",
+                  color:DS.textSec, cursor:"pointer" }}>{m}m</button>
+            ))}
+            <button onClick={()=>setTimerRunning(r=>!r)} style={{ padding:"4px 10px", fontSize:11,
+              fontWeight:700, fontFamily:"inherit", border:`1px solid ${timerRunning?DS.danger:DS.success}`,
+              borderRadius:4, background:timerRunning?DS.dangerSoft:DS.successSoft,
+              color:timerRunning?DS.danger:DS.success, cursor:"pointer" }}>
+              {timerRunning?"Pause":"Start"}
+            </button>
+          </div>
+        </div>
+
+        {/* View switcher */}
+        <div style={{ display:"flex", gap:5, marginLeft:"auto" }}>
+          {[
+            {id:"facilitor", label:"Facilitator"},
+            {id:"brainstorm",label:"Brainstorm"},
+            {id:"vote",      label:"Vote"},
+            {id:"strategies",label:"Strategies"},
+          ].map(v => (
+            <button key={v.id} onClick={()=>setWsView(v.id)}
+              style={{ padding:"5px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
+                cursor:"pointer", border:`1px solid ${wsView===v.id?DS.accent:DS.border}`,
+                borderRadius:5, background:wsView===v.id?DS.accent:"transparent",
+                color:wsView===v.id?"#fff":DS.textSec }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+        <Btn variant="secondary" size="sm" onClick={onExit}>Exit Workshop</Btn>
+      </div>
+
+      {/* ── FACILITATOR VIEW ── */}
+      {wsView==="facilitor" && (
+        <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:20 }}>
+            {[
+              { label:"Issues Raised", value:issues.length, color:DS.accent },
+              { label:"Critical Issues", value:issues.filter(i=>i.severity==="Critical").length, color:DS.danger },
+              { label:"Top Voted", value:sorted[0]?.votes||0, sub:sorted[0]?.text?.slice(0,30)||"—", color:DS.success },
+            ].map((stat,i)=>(
+              <div key={i} style={{ padding:"16px 18px", background:DS.chromeMid, borderRadius:9,
+                border:`1px solid ${DS.border}` }}>
+                <div style={{ fontSize:11, color:DS.textTer, marginBottom:6 }}>{stat.label}</div>
+                <div style={{ fontSize:28, fontWeight:700, color:stat.color,
+                  fontFamily:"'Libre Baskerville',Georgia,serif" }}>{stat.value}</div>
+                {stat.sub && <div style={{ fontSize:11, color:DS.textTer, marginTop:4 }}>{stat.sub}</div>}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+            {/* Issue feed */}
+            <div style={{ background:DS.chromeMid, borderRadius:9, border:`1px solid ${DS.border}`, overflow:"hidden" }}>
+              <div style={{ padding:"11px 16px", background:DS.chromeSub, borderBottom:`1px solid ${DS.border}`,
+                fontSize:11, fontWeight:700, color:DS.textSec }}>Live Issue Feed</div>
+              <div style={{ maxHeight:320, overflowY:"auto", padding:"10px" }}>
+                {sorted.slice(0,8).map(issue => {
+                  const cat = ISSUE_CATEGORIES?.find(c=>c.key===issue.category);
+                  return (
+                    <div key={issue.id} style={{ padding:"8px 10px", borderRadius:6, marginBottom:6,
+                      background:DS.chromeSub, border:`1px solid ${DS.border}` }}>
+                      <div style={{ fontSize:11, color:DS.textSec, lineHeight:1.4, marginBottom:4 }}>{issue.text}</div>
+                      <div style={{ display:"flex", gap:5, alignItems:"center" }}>
+                        {cat && <span style={{ fontSize:9, fontWeight:700, color:cat.color,
+                          padding:"1px 5px", borderRadius:3, background:cat.color+"22" }}>{cat.icon} {cat.short}</span>}
+                        <span style={{ fontSize:10, color:DS.accent }}>▲ {issue.votes||0}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Facilitator notes */}
+            <div style={{ background:DS.chromeMid, borderRadius:9, border:`1px solid ${DS.border}`, overflow:"hidden" }}>
+              <div style={{ padding:"11px 16px", background:DS.chromeSub, borderBottom:`1px solid ${DS.border}`,
+                fontSize:11, fontWeight:700, color:DS.textSec }}>Session Notes</div>
+              <textarea value={wsNotes} onChange={e=>setWsNotes(e.target.value)}
+                placeholder="Record key observations, tensions, decisions made in the room…"
+                style={{ width:"100%", height:280, padding:"12px 14px", fontSize:12, fontFamily:"inherit",
+                  background:"transparent", border:"none", color:DS.textSec, outline:"none",
+                  resize:"none", lineHeight:1.6, boxSizing:"border-box" }}/>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BRAINSTORM VIEW ── */}
+      {wsView==="brainstorm" && (
+        <div style={{ flex:1, display:"flex", flexDirection:"column" }}>
+          <div style={{ padding:"20px 28px", borderBottom:`1px solid ${DS.border}`,
+            display:"flex", gap:10, flexShrink:0 }}>
+            <input value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&addIssue()}
+              placeholder={locked?"Session locked — no new submissions":"Submit an issue, risk, or question…"}
+              disabled={locked}
+              style={{ flex:1, padding:"14px 18px", fontSize:16, fontFamily:"inherit",
+                background:DS.chromeMid, border:`1px solid ${locked?DS.border:DS.accent}`,
+                borderRadius:8, color:DS.textPri, outline:"none" }}/>
+            <Select value={newCat} onChange={setNewCat}
+              options={ISSUE_CATEGORIES.map(c=>({value:c.key,label:`${c.icon} ${c.label}`}))}
+              style={{ width:200 }}/>
+            <Btn variant="primary" onClick={addIssue} disabled={locked}>Submit</Btn>
+            <button onClick={()=>setLocked(l=>!l)}
+              style={{ padding:"8px 14px", border:`1px solid ${locked?DS.danger:DS.border}`,
+                borderRadius:7, background:locked?DS.dangerSoft:"transparent",
+                color:locked?DS.danger:DS.textSec, cursor:"pointer", fontFamily:"inherit",
+                fontSize:11, fontWeight:700 }}>
+              {locked?"🔒 Locked":"🔓 Lock"}
+            </button>
+          </div>
+          <div style={{ flex:1, overflowY:"auto", padding:"20px 28px",
+            display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:12, alignContent:"start" }}>
+            {issues.slice().reverse().map(issue => {
+              const cat = ISSUE_CATEGORIES?.find(c=>c.key===issue.category);
+              return (
+                <div key={issue.id} style={{ padding:"16px 18px", borderRadius:9,
+                  background:cat?.soft||DS.chromeMid,
+                  border:`1px solid ${cat?.line||DS.border}`,
+                  borderLeft:`4px solid ${cat?.color||DS.accent}` }}>
+                  <div style={{ fontSize:13, color:DS.ink, lineHeight:1.5, marginBottom:8 }}>{issue.text}</div>
+                  {cat && <span style={{ fontSize:10, fontWeight:700, color:cat.color,
+                    padding:"2px 7px", borderRadius:3, background:cat.color+"22" }}>
+                    {cat.icon} {cat.label}
+                  </span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── VOTE VIEW ── */}
+      {wsView==="vote" && (
+        <div style={{ flex:1, overflowY:"auto", padding:"24px 36px" }}>
+          <div style={{ fontSize:14, color:DS.textSec, marginBottom:20 }}>
+            Vote on the most important issues. Highest-voted issues will be prioritised for strategy table focus.
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {sorted.map((issue, rank) => {
+              const cat = ISSUE_CATEGORIES?.find(c=>c.key===issue.category);
+              const maxVotes = sorted[0]?.votes||1;
+              return (
+                <div key={issue.id} style={{ display:"flex", alignItems:"center", gap:16,
+                  padding:"14px 18px", borderRadius:9,
+                  background: rank<3 ? (cat?.soft||DS.chromeMid) : DS.chromeMid,
+                  border:`1px solid ${rank<3?(cat?.line||DS.border):DS.border}` }}>
+                  <span style={{ fontSize:18, fontWeight:700,
+                    fontFamily:"'Libre Baskerville',Georgia,serif",
+                    color:rank===0?DS.accent:DS.textTer, width:28, textAlign:"center" }}>
+                    {rank+1}
+                  </span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, color:DS.textPri, lineHeight:1.45, marginBottom:6 }}>{issue.text}</div>
+                    <div style={{ height:4, background:DS.border, borderRadius:2, overflow:"hidden" }}>
+                      <div style={{ width:`${(issue.votes||0)/maxVotes*100}%`, height:"100%",
+                        background:cat?.color||DS.accent, borderRadius:2, transition:"width .3s" }}/>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                    <button onClick={()=>vote(issue.id)}
+                      style={{ width:44, height:44, borderRadius:9, background:DS.accent,
+                        border:"none", cursor:"pointer", fontSize:20, color:"#fff",
+                        display:"flex", alignItems:"center", justifyContent:"center" }}>▲</button>
+                    <span style={{ fontSize:15, fontWeight:700, color:DS.accent }}>{issue.votes||0}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── STRATEGIES VIEW ── */}
+      {wsView==="strategies" && (
+        <div style={{ flex:1, overflowY:"auto", padding:"28px 36px" }}>
+          <div style={{ fontSize:14, color:DS.textSec, marginBottom:24 }}>
+            Present one strategy at a time. Click to highlight.
+          </div>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:24 }}>
+            {strategies.map(s => {
+              const col = DS.s[s.colorIdx];
+              return (
+                <button key={s.id} onClick={()=>setSelectedStrat(selectedStrat===s.id?null:s.id)}
+                  style={{ padding:"10px 22px", borderRadius:8, fontSize:14, fontWeight:700,
+                    fontFamily:"inherit", cursor:"pointer",
+                    border:`2px solid ${selectedStrat===s.id?col.fill:DS.border}`,
+                    background:selectedStrat===s.id?col.fill:"transparent",
+                    color:selectedStrat===s.id?"#fff":col.fill, transition:"all .15s" }}>
+                  {DS.sNames[s.colorIdx]||s.name}
+                </button>
+              );
+            })}
+          </div>
+          {selectedStrat && (() => {
+            const s = strategies.find(st=>st.id===selectedStrat);
+            const col = DS.s[s.colorIdx];
+            const focusDecs = decisions.filter(d=>d.tier==="focus");
+            return (
+              <div style={{ padding:"24px 28px", background:col.soft, border:`2px solid ${col.fill}`,
+                borderRadius:12, maxWidth:700 }}>
+                <div style={{ fontSize:22, fontWeight:700, color:col.fill,
+                  fontFamily:"'Libre Baskerville',Georgia,serif", marginBottom:8 }}>
+                  {DS.sNames[s.colorIdx]||s.name}
+                </div>
+                {s.description && <div style={{ fontSize:14, color:DS.ink, marginBottom:20, lineHeight:1.6 }}>{s.description}</div>}
+                {focusDecs.map(d => {
+                  const idx = s.selections?.[d.id];
+                  return (
+                    <div key={d.id} style={{ padding:"12px 16px", background:"rgba(255,255,255,.7)",
+                      borderRadius:8, marginBottom:10, display:"flex", gap:16, alignItems:"center" }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.inkTer,
+                        letterSpacing:.5, textTransform:"uppercase", width:130, flexShrink:0 }}>{d.label}</div>
+                      <div style={{ fontSize:15, fontWeight:700,
+                        color:idx!==undefined?col.fill:DS.inkDis }}>
+                        {idx!==undefined?d.choices[idx]:"— Not selected —"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHASE 2 — SESSION PERSISTENCE & VERSION CONTROL
+───────────────────────────────────────────────────────────────────────────── */
+
+const SESSION_KEY = "vantage_dq_session_v1";
+
+const saveSession = (data) => {
+  try {
+    const snapshot = { ...data, savedAt: new Date().toISOString() };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(snapshot));
+    return true;
+  } catch { return false; }
+};
+
+const loadSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+};
+
+const VERSION_KEY = "vantage_dq_versions_v1";
+
+const saveVersion = (label, data) => {
+  try {
+    const versions = loadVersions();
+    const newVersion = { id: uid("ver"), label, savedAt: new Date().toISOString(), data: {...data} };
+    versions.unshift(newVersion);
+    localStorage.setItem(VERSION_KEY, JSON.stringify(versions.slice(0, 20)));
+    return newVersion;
+  } catch { return null; }
+};
+
+const loadVersions = () => {
+  try {
+    const raw = localStorage.getItem(VERSION_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+};
+
+function VersionPanel({ currentData, onRestore, onClose }) {
+  const [versions, setVersions]     = useState(loadVersions);
+  const [label, setLabel]           = useState("");
+  const [confirmRestore, setConfirm] = useState(null);
+
+  const handleSave = () => {
+    const lbl = label.trim() || `Snapshot ${new Date().toLocaleTimeString()}`;
+    const v = saveVersion(lbl, currentData);
+    if (v) { setVersions(loadVersions()); setLabel(""); }
+  };
+
+  const handleRestore = (version) => {
+    onRestore(version.data);
+    setConfirm(null);
+    onClose();
+  };
+
+  const handleDelete = (id) => {
+    const updated = versions.filter(v=>v.id!==id);
+    localStorage.setItem(VERSION_KEY, JSON.stringify(updated));
+    setVersions(updated);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:400,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif" }}>
+      <div style={{ background:DS.canvas, borderRadius:14, width:"100%", maxWidth:560,
+        maxHeight:"82vh", display:"flex", flexDirection:"column",
+        boxShadow:"0 24px 64px rgba(0,0,0,.18)", border:`1px solid ${DS.canvasBdr}` }}>
+
+        <div style={{ padding:"16px 20px", borderBottom:`1px solid ${DS.canvasBdr}`,
+          display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontSize:15, fontWeight:700, color:DS.ink,
+            fontFamily:"'Libre Baskerville',Georgia,serif" }}>Version History</div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:DS.inkTer }}>
+            <Svg path={ICONS.x} size={18} color={DS.inkTer}/>
+          </button>
+        </div>
+
+        {/* Save new version */}
+        <div style={{ padding:"14px 20px", borderBottom:`1px solid ${DS.canvasBdr}`,
+          display:"flex", gap:8 }}>
+          <input value={label} onChange={e=>setLabel(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&handleSave()}
+            placeholder="Snapshot name (e.g. After workshop Day 1)…"
+            style={{ flex:1, padding:"8px 12px", fontSize:12, fontFamily:"inherit",
+              background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`, borderRadius:6,
+              color:DS.ink, outline:"none" }}
+            onFocusCapture={e=>e.target.style.borderColor=DS.accent}
+            onBlurCapture={e=>e.target.style.borderColor=DS.canvasBdr}/>
+          <Btn variant="primary" size="sm" onClick={handleSave}>Save Snapshot</Btn>
+        </div>
+
+        {/* Version list */}
+        <div style={{ flex:1, overflowY:"auto", padding:"12px" }}>
+          {versions.length === 0 ? (
+            <div style={{ padding:"32px", textAlign:"center", color:DS.inkTer, fontSize:13 }}>
+              No snapshots yet. Save one above to capture the current state.
+            </div>
+          ) : versions.map(v => (
+            <div key={v.id} style={{ padding:"12px 14px", borderRadius:8, marginBottom:8,
+              border:`1px solid ${DS.canvasBdr}`, background:DS.canvas,
+              display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:3 }}>{v.label}</div>
+                <div style={{ fontSize:11, color:DS.inkTer }}>
+                  {new Date(v.savedAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+                  {" · "}{v.data?.issues?.length||0} issues · {v.data?.strategies?.length||0} strategies
+                </div>
+              </div>
+              {confirmRestore===v.id ? (
+                <div style={{ display:"flex", gap:5 }}>
+                  <Btn variant="danger" size="sm" onClick={()=>handleRestore(v)}>Restore</Btn>
+                  <Btn variant="ghost" size="sm" onClick={()=>setConfirm(null)}>Cancel</Btn>
+                </div>
+              ) : (
+                <div style={{ display:"flex", gap:5 }}>
+                  <Btn variant="secondary" size="sm" onClick={()=>setConfirm(v.id)}>Restore</Btn>
+                  <button onClick={()=>handleDelete(v.id)}
+                    style={{ background:"none", border:"none", cursor:"pointer", color:DS.inkDis, padding:4 }}>
+                    <Svg path={ICONS.trash} size={14} color={DS.inkTer}/>
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHASE 2 — CROSS-MODULE AI INTELLIGENCE PANEL
+───────────────────────────────────────────────────────────────────────────── */
 function CrossModuleAI({ problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, aiCall, aiBusy, onAIMsg }) {
   const [insights, setInsights] = useState(null);
   const [running, setRunning]   = useState(false);
@@ -9813,17 +10240,6 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
 
 
 const HARDCODED_API_KEY = null;
-
-const SESSION_KEY = "vantage_dq_session";
-const saveSession = (data) => {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); } catch(e) {}
-};
-const loadSession = () => {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch(e) { return null; }
-};
 
 export default function App() {
   const [module, setModule]               = useState("problem");
