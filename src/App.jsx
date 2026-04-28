@@ -5894,6 +5894,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   const [selected, setSelected]     = useState(null);
   const [linkMode, setLinkMode]     = useState(false);
   const [linkSource, setLinkSource] = useState(null);
+  const linkSourceRef = useRef(null); // ref stays current across renders
   const [addType, setAddType]       = useState("uncertainty");
   const [newLabel, setNewLabel]     = useState("");
   const [showAdd, setShowAdd]       = useState(false);
@@ -5965,10 +5966,22 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
 
   // ── Link / edge logic ─────────────────────────────────────────────────────
   const handleLink = (targetId) => {
-    if (!linkSource) { setLinkSource(targetId); return; }
+    const currentSource = linkSourceRef.current;
+    if (!currentSource) {
+      setLinkSource(targetId);
+      linkSourceRef.current = targetId;
+      return;
+    }
+    if (currentSource === targetId) {
+      setLinkSource(null);
+      linkSourceRef.current = null;
+      return;
+    }
+    // Use currentSource (from ref) instead of linkSource (stale closure)
+    const linkSourceId = currentSource;
     if (linkSource === targetId) { setLinkSource(null); return; }
 
-    const src = nodes.find(n => n.id === linkSource);
+    const src = nodes.find(n => n.id === linkSourceId);
     const tgt = nodes.find(n => n.id === targetId);
 
     // Rule: value nodes cannot influence upstream
@@ -5978,8 +5991,8 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
     }
 
     // Rule: no duplicate edges
-    if (edges.find(e => e.from === linkSource && e.to === targetId)) {
-      setLinkSource(null); return;
+    if (edges.find(e => e.from === linkSourceId && e.to === targetId)) {
+      setLinkSource(null); linkSourceRef.current = null; return;
     }
 
     // Rule: circular dependency check (DFS)
@@ -5993,13 +6006,14 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       };
       return dfs(to);
     };
-    if (wouldCycle(linkSource, targetId)) {
+    if (wouldCycle(linkSourceId, targetId)) {
       onAIMsg({ role: "ai", text: "⚠ Circular dependency detected. Influence diagrams must be acyclic — this link would create a loop." });
       setLinkSource(null); return;
     }
 
-    setEdges(prev => [...prev, { id: uid("e"), from: linkSource, to: targetId, label: "influences" }]);
+    setEdges(prev => [...prev, { id: uid("e"), from: linkSourceId, to: targetId, label: "influences" }]);
     setLinkSource(null);
+    linkSourceRef.current = null;
   };
 
   // ── Node CRUD ─────────────────────────────────────────────────────────────
@@ -6114,22 +6128,19 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
           impact: n.impact || "Medium", control: n.control || "Low",
           x: 150 + (i % 4) * 240, y: 120 + Math.floor(i / 4) * 180,
         }));
-        setNodes(prev => [...prev, ...newNodes]);
+        // Add nodes first, then wire edges using combined node list
+        const allNodes = [...nodes, ...newNodes];
+        setNodes(allNodes);
 
         if (result.edges?.length) {
-          // Use newNodes + current nodes (via functional update to get fresh state)
-          setNodes(prev => {
-            const allNodes = [...prev]; // prev already includes newNodes from setNodes above
-            const newEdges = result.edges.map(e => {
-              const s = allNodes.find(n => n.label.toLowerCase() === (e.from || "").toLowerCase());
-              const t = allNodes.find(n => n.label.toLowerCase() === (e.to || "").toLowerCase());
-              return s && t ? { id: uid("e"), from: s.id, to: t.id, label: e.label || "influences" } : null;
-            }).filter(Boolean);
-            if (newEdges.length > 0) {
-              setEdges(edgePrev => [...edgePrev, ...newEdges]);
-            }
-            return prev; // don't change nodes again
-          });
+          const newEdges = result.edges.map(e => {
+            const s = allNodes.find(n => n.label.toLowerCase() === (e.from || "").toLowerCase());
+            const t = allNodes.find(n => n.label.toLowerCase() === (e.to || "").toLowerCase());
+            return s && t ? { id: uid("e"), from: s.id, to: t.id, label: e.label || "influences" } : null;
+          }).filter(Boolean);
+          if (newEdges.length > 0) {
+            setEdges(prev => [...prev, ...newEdges]);
+          }
         }
 
         const msg = result.insight || ("Added " + result.nodes.length + " nodes.");
@@ -6308,7 +6319,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
           <Btn variant="secondary" size="sm" onClick={() => setShowAdd(p => !p)}>+ Add Node</Btn>
           <Btn variant="secondary" size="sm" onClick={autoLayout}>Auto Layout</Btn>
           <Btn variant="secondary" size="sm"
-            onClick={() => { setLinkMode(l => !l); setLinkSource(null); }}
+            onClick={() => { setLinkMode(l => !l); setLinkSource(null); linkSourceRef.current = null; }}
             style={{
               background: linkMode ? DS.accentSoft : "transparent",
               border: "1px solid " + (linkMode ? DS.accent : DS.canvasBdr),
