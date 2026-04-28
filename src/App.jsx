@@ -555,7 +555,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
 
   const upd = (key, val) => onChange({ ...data, [key]: val });
   const updStakeholder = (id, key, val) =>
-    upd("stakeholders", data.stakeholders.map(s => s.id===id ? {...s,[key]:val} : s));
+    upd("stakeholders", (data.stakeholders||[]).map(s => s.id===id ? {...s,[key]:val} : s));
 
   const validateWithAI = () => {
     setChecking(true);
@@ -827,10 +827,10 @@ Evaluate strictly. Return ONLY valid JSON:
           <div style={{ maxWidth:900 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
               <div style={{ fontSize:12, color:DS.inkSub }}>
-                {data.stakeholders.length} stakeholder{data.stakeholders.length!==1?"s":""} identified
+                {(data.stakeholders||[]).length} stakeholder{data.stakeholders.length!==1?"s":""} identified
               </div>
               <Btn variant="secondary" icon="plus" size="sm"
-                onClick={()=>upd("stakeholders",[...data.stakeholders, { id:uid("sh"), name:"", role:"", influence:"Medium" }])}>
+                onClick={()=>upd("stakeholders",[...(data.stakeholders||[]), { id:uid("sh"), name:"", role:"", influence:"Medium" }])}>
                 Add Stakeholder
               </Btn>
             </div>
@@ -846,7 +846,7 @@ Evaluate strictly. Return ONLY valid JSON:
                   </tr>
                 </thead>
                 <tbody>
-                  {data.stakeholders.map((s,i)=>(
+                  {(data.stakeholders||[]).map((s,i)=>(
                     <tr key={s.id} style={{ borderBottom: i<data.stakeholders.length-1 ? `1px solid ${DS.canvasBdr}` : "none" }}>
                       <td style={{ padding:"8px 14px", width:"30%" }}>
                         <Input value={s.name} onChange={v=>updStakeholder(s.id,"name",v)} placeholder="Stakeholder name"/>
@@ -10429,7 +10429,7 @@ export default function App() {
           setShowQuickStart(false);
           if (mode === "clean") {
             // Reset everything to truly empty
-            setProblem({ id: uid("prob"), decisionStatement:"", context:"", owner:"", deadline:"", successCriteria:"", scopeIn:"", scopeOut:"", projectName:"", projectCode:"", client:"", sector:"", facilitator:"", sessionDate:"", decisionType:"", confidentiality:"Internal" });
+            setProblem({ id: uid("prob"), decisionStatement:"", context:"", owner:"", deadline:"", successCriteria:"", scopeIn:"", scopeOut:"", projectName:"", projectCode:"", client:"", sector:"", facilitator:"", sessionDate:"", decisionType:"", confidentiality:"Internal", stakeholders:[], constraints:[], assumptions:[] });
             setIssues([]);
             setDecisions([]);
             setCriteria([]);
