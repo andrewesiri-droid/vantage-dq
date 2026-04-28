@@ -10425,7 +10425,24 @@ export default function App() {
 
       {/* Quick Start */}
       {showQuickStart && (
-        <QuickStartScreen onComplete={handleQuickStartComplete} onSkip={()=>setShowQuickStart(false)}/>
+        <QuickStartScreen onComplete={handleQuickStartComplete} onSkip={(mode)=>{
+          setShowQuickStart(false);
+          if (mode === "clean") {
+            // Reset everything to truly empty
+            setProblem({ id: uid("prob"), decisionStatement:"", context:"", owner:"", deadline:"", successCriteria:"", scopeIn:"", scopeOut:"", projectName:"", projectCode:"", client:"", sector:"", facilitator:"", sessionDate:"", decisionType:"", confidentiality:"Internal" });
+            setIssues([]);
+            setDecisions([]);
+            setCriteria([]);
+            setStrategies([]);
+            setAssessmentScores({});
+            setDqScores({});
+            setBriefState(null);
+            setNarrative(null);
+            setAIMessages([]);
+            setModule("problem");
+            try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+          }
+        }}/>
       )}
 
       {/* Onboarding */}
