@@ -5901,6 +5901,8 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   const [validation, setValidation] = useState(null);
   const [zoom, setZoom]             = useState(1);
   const [metaNode, setMetaNode]     = useState(null); // node being edited in metadata panel
+  const [modelResult, setModelResult] = useState(null); // built financial model
+  const [showModelResult, setShowModelResult] = useState(false);
   const [showModelModal, setShowModelModal] = useState(false);
   const [modelParams, setModelParams] = useState({
     horizon: "5", discount: "10", currency: "USD",
@@ -6279,132 +6281,16 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
 
       // Build the Excel file via API call to the server-side generator
       // For now, pass the model data to a downloadable JSON that gets rendered
-      generateExcelModel(result);
+      showModelInApp(result);
       setBuildingModel(false);
       setShowModelModal(false);
     });
   };
 
-  const generateExcelModel = (modelData) => {
-    // Create a downloadable data structure
-    // The actual Excel is built in the browser using the SheetJS approach
-    const exportData = {
-      meta: {
-        title: modelData.modelTitle || (problem?.decisionStatement || "Financial Model"),
-        generated: new Date().toISOString().slice(0,10),
-        decision: problem?.decisionStatement || "",
-        params: modelParams,
-      },
-      nodes: { value: nodes.filter(n=>n.type==="value"), decision: nodes.filter(n=>n.type==="decision"),
-               uncertainty: nodes.filter(n=>n.type==="uncertainty"), deterministic: nodes.filter(n=>n.type==="deterministic") },
-      edges,
-      model: modelData,
-    };
-
-    // Trigger download of the model data as JSON (analysts can import to Excel)
-    // Better: open a new window with the model rendered as HTML table
-    const modelWindow = window.open("", "_blank");
-    if (!modelWindow) { onAIMsg({role:"ai",text:"Please allow popups to view the financial model."}); return; }
-
-    const yrs = modelData.incomeStatement?.years || ["Y1","Y2","Y3","Y4","Y5"];
-    const inc = modelData.incomeStatement || {};
-    const val = modelData.valuation || {};
-    const assum = modelData.assumptions || [];
-    const scenarios = ["low","base","high"];
-    const scenColors = { low:"#fef2f2", base:"#eff6ff", high:"#f0fdf4" };
-    const scenLabels = { low:"⬇ Low Case", base:"◆ Base Case", high:"⬆ High Case" };
-
-    const fmtNum = (n) => {
-      if (n === undefined || n === null) return "—";
-      if (typeof n === "number") return n >= 1000 ? n.toLocaleString("en-US",{maximumFractionDigits:0}) : n.toFixed(1);
-      return n;
-    };
-
-    const rows = [
-      { label:"Revenue", key:"revenue", bold:true },
-      { label:"Costs",   key:"costs",   bold:false },
-      { label:"EBITDA",  key:"ebitda",  bold:true, separator:true },
-      ...(inc.additionalLines||[]).map(l=>({ label:l.name, key:null, bold:false, data:l })),
-    ];
-
-    const html = `<!DOCTYPE html><html><head>
-<title>${exportData.meta.title}</title>
-<style>
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:Arial,sans-serif; font-size:11px; color:#1e2433; background:#f8f9fb; padding:24px; }
-  h1 { font-size:20px; font-weight:700; color:#1e2433; margin-bottom:4px; }
-  h2 { font-size:13px; font-weight:700; color:#2563eb; margin:20px 0 8px; border-bottom:2px solid #2563eb; padding-bottom:4px; }
-  h3 { font-size:11px; font-weight:700; color:#374151; margin:12px 0 6px; }
-  .meta { font-size:10px; color:#6b7280; margin-bottom:16px; }
-  table { width:100%; border-collapse:collapse; margin-bottom:16px; }
-  th { padding:7px 10px; background:#1e2433; color:#fff; font-weight:700; font-size:10px; text-align:left; }
-  th.num { text-align:right; }
-  td { padding:6px 10px; border-bottom:1px solid #e5e7eb; }
-  td.num { text-align:right; font-family:monospace; }
-  tr.bold td { font-weight:700; background:#f1f5f9; }
-  tr.sep td { border-top:2px solid #374151; }
-  tr.low { background:#fef2f2; }
-  tr.base { background:#eff6ff; }
-  tr.high { background:#f0fdf4; }
-  .scenario-header { padding:4px 10px; font-weight:700; font-size:10px; }
-  .tag { display:inline-block; padding:2px 7px; border-radius:4px; font-size:9px; font-weight:700; margin-left:4px; }
-  .tag-unc { background:#fef3c7; color:#92400e; }
-  .tag-dec { background:#dbeafe; color:#1d4ed8; }
-  .narrative { padding:10px 14px; border-radius:6px; margin-bottom:8px; font-size:11px; line-height:1.6; }
-  .risk { padding:5px 10px; border-left:3px solid #dc2626; background:#fef2f2; margin-bottom:4px; font-size:10px; }
-  .print-btn { position:fixed; top:16px; right:16px; padding:8px 18px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:700; font-size:12px; }
-  @media print { .print-btn { display:none; } }
-</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
-
-<h1>${exportData.meta.title}</h1>
-<div class="meta">Generated by Vantage DQ · Decision Quality Platform · ${exportData.meta.generated} · 
-Horizon: ${exportData.meta.params.horizon} years · Discount rate: ${exportData.meta.params.discount}% · Currency: ${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit}</div>
-
-<h2>Model Assumptions</h2>
-<table>
-<tr><th style="width:200px">Parameter</th><th class="num">Low Case</th><th class="num">Base Case</th><th class="num">High Case</th><th>Unit</th><th>Uncertainty Driver</th></tr>
-<tr><td>Initial Investment</td><td class="num">${exportData.meta.params.investment}</td><td class="num">${exportData.meta.params.investment}</td><td class="num">${exportData.meta.params.investment}</td><td>${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit}</td><td>—</td></tr>
-<tr><td>Base Revenue (Yr 1)</td><td class="num">—</td><td class="num">${exportData.meta.params.baseRevenue}</td><td class="num">—</td><td>${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit}</td><td>—</td></tr>
-<tr><td>Revenue Growth Rate</td><td class="num">—</td><td class="num">${exportData.meta.params.growthRate}%</td><td class="num">—</td><td>% p.a.</td><td>—</td></tr>
-<tr><td>Cost Margin</td><td class="num">—</td><td class="num">${exportData.meta.params.costMargin}%</td><td class="num">—</td><td>% of revenue</td><td>—</td></tr>
-${assum.map(a => `<tr><td>${a.name}</td><td class="num">${fmtNum(a.low)}</td><td class="num">${fmtNum(a.base)}</td><td class="num">${fmtNum(a.high)}</td><td>${a.unit||""}</td><td><span class="tag tag-unc">${a.driver||""}</span></td></tr>`).join("")}
-</table>
-
-<h2>Income Statement — Three Scenarios</h2>
-${scenarios.map(sc => `
-<h3 style="color:${sc==="low"?"#dc2626":sc==="high"?"#059669":"#2563eb"}">${scenLabels[sc]}</h3>
-<p style="font-size:10px;color:#6b7280;margin-bottom:6px">${scenNarr[sc]}</p>
-<table>
-<tr><th style="width:200px">Line Item</th>${yrs.map(y=>`<th class="num">${y}</th>`).join("")}</tr>
-${rows.map(row => {
-  const vals = modelData[row.key]?.[sc] || [];
-  return `<tr class="${row.bold?"bold":""} ${row.separator?"sep":""}">
-    <td>${row.label}</td>
-    ${yrs.map((_,i) => `<td class="num">${fmtNum(vals?.[i])}</td>`).join("")}
-  </tr>`;
-}).join("")}
-</table>`).join("")}
-
-<h2>Valuation Summary</h2>
-<table>
-<tr><th style="width:200px">Metric</th><th class="num">⬇ Low</th><th class="num">◆ Base</th><th class="num">⬆ High</th></tr>
-<tr class="bold"><td>NPV (${exportData.meta.params.currency} ${exportData.meta.params.revenueUnit})</td><td class="num" style="color:#dc2626">${fmtNum(val.npv.low)}</td><td class="num" style="color:#2563eb">${fmtNum(val.npv.base)}</td><td class="num" style="color:#059669">${fmtNum(val.npv.high)}</td></tr>
-<tr><td>IRR</td><td class="num">${fmtNum(val.irr.low)}%</td><td class="num">${fmtNum(val.irr.base)}%</td><td class="num">${fmtNum(val.irr.high)}%</td></tr>
-<tr><td>Payback (years)</td><td class="num">${fmtNum(val.payback.low)}</td><td class="num">${fmtNum(val.payback.base)}</td><td class="num">${fmtNum(val.payback.high)}</td></tr>
-</table>
-
-<h2>Key Risks from Uncertainty Nodes</h2>
-${(modelData.keyRisks||[]).map(r=>`<div class="risk">${r}</div>`).join("")}
-
-${modelData.notes?`<h2>Modelling Notes</h2><p style="font-size:11px;color:#4b5563;line-height:1.7">${modelData.notes}</p>`:""}
-
-</body></html>`;
-
-    modelWindow.document.write(html);
-    modelWindow.document.close();
-    onAIMsg({role:"ai", text:"Financial model built — opened in a new tab. Use Print/Save PDF to export."});
-  };
+  const showModelInApp = (modelData) => {
+    setModelResult(modelData);
+    setShowModelResult(true);
+  };;
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
@@ -7038,8 +6924,7 @@ ${modelData.notes?`<h2>Modelling Notes</h2><p style="font-size:11px;color:#4b556
               <div style={{ marginTop:12, padding:"9px 12px",
                 background:"#fffbeb", border:"1px solid #fde68a",
                 borderRadius:6, fontSize:10, color:"#92400e", lineHeight:1.5 }}>
-                ⚡ The AI traces causal paths from your uncertainty nodes through to value nodes,
-                builds Low/Base/High scenarios, and calculates NPV/IRR. Opens in a new tab — print to PDF.
+                ⚡ The AI traces causal paths from your uncertainty nodes to value nodes, builds Low/Base/High scenario projections, and calculates NPV, IRR and payback. Renders inside Vantage DQ.
               </div>
             </div>
             <div style={{ padding:"13px 24px", borderTop:"1px solid "+DS.canvasBdr,
@@ -7049,6 +6934,256 @@ ${modelData.notes?`<h2>Modelling Notes</h2><p style="font-size:11px;color:#4b556
                 disabled={buildingModel||!modelParams.investment||!modelParams.baseRevenue}>
                 {buildingModel?"Building model…":"Build Financial Model →"}
               </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── FINANCIAL MODEL RESULT MODAL ── */}
+      {showModelResult && modelResult && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)",
+          display:"flex", alignItems:"flex-start", justifyContent:"center",
+          zIndex:9500, overflowY:"auto", padding:"24px 16px" }}>
+          <div style={{ width:"100%", maxWidth:900, background:DS.canvas,
+            borderRadius:14, boxShadow:"0 32px 80px rgba(0,0,0,.3)",
+            overflow:"hidden" }}>
+
+            {/* Header */}
+            <div style={{ padding:"20px 28px", display:"flex", alignItems:"center",
+              background:"linear-gradient(135deg,#1e2433 0%,#2d3748 100%)" }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:18, fontWeight:700, color:"#fff", marginBottom:3 }}>
+                  📊 {modelResult.modelTitle || "Financial Model"}
+                </div>
+                <div style={{ fontSize:11, color:"#93c5fd" }}>
+                  {modelResult.scenarioBase}
+                </div>
+              </div>
+              <button onClick={()=>setShowModelResult(false)}
+                style={{ background:"none", border:"1px solid rgba(255,255,255,.2)",
+                  borderRadius:6, cursor:"pointer", color:"#fff",
+                  fontSize:11, padding:"5px 12px", fontFamily:"inherit", fontWeight:600 }}>
+                Close ×
+              </button>
+            </div>
+
+            <div style={{ padding:"24px 28px", overflowY:"auto", maxHeight:"80vh" }}>
+
+              {/* Parameters recap */}
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:20,
+                padding:"10px 14px", background:DS.canvasAlt,
+                border:"1px solid "+DS.canvasBdr, borderRadius:8 }}>
+                {[
+                  ["Investment", modelParams.currency+" "+modelParams.investment+"M"],
+                  ["Yr 1 Rev (Base)", modelParams.currency+" "+modelParams.baseRevenue+"M"],
+                  ["Growth", modelParams.growthRate+"%"],
+                  ["Cost Margin", modelParams.costMargin+"%"],
+                  ["WACC", modelParams.discount+"%"],
+                  ["Horizon", modelParams.horizon+" years"],
+                ].map(([k,v])=>(
+                  <div key={k} style={{ fontSize:10 }}>
+                    <span style={{ color:DS.inkTer }}>{k}: </span>
+                    <span style={{ fontWeight:700, color:DS.ink }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Assumptions table */}
+              {modelResult.assumptions?.length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink, marginBottom:10,
+                    paddingBottom:6, borderBottom:"2px solid #d97706" }}>
+                    Key Assumptions
+                  </div>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+                    <thead>
+                      <tr>
+                        {["Parameter","Low Case","Base Case","High Case","Unit","Uncertainty Driver"].map(h=>(
+                          <th key={h} style={{ padding:"7px 10px", background:"#1e2433",
+                            color:"#fff", fontWeight:700, textAlign:h==="Parameter"||h==="Uncertainty Driver"?"left":"center",
+                            fontSize:10 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {modelResult.assumptions.map((a,i)=>(
+                        <tr key={i} style={{ background:i%2===0?"#fffbeb":"#fef9ee" }}>
+                          <td style={{ padding:"7px 10px", fontWeight:600, color:"#92400e" }}>{a.name}</td>
+                          <td style={{ padding:"7px 10px", textAlign:"center", color:"#dc2626", fontWeight:600 }}>{a.low}</td>
+                          <td style={{ padding:"7px 10px", textAlign:"center", color:"#2563eb", fontWeight:700 }}>{a.base}</td>
+                          <td style={{ padding:"7px 10px", textAlign:"center", color:"#059669", fontWeight:600 }}>{a.high}</td>
+                          <td style={{ padding:"7px 10px", color:DS.inkTer, fontSize:10 }}>{a.unit}</td>
+                          <td style={{ padding:"7px 10px", fontSize:10 }}>
+                            <span style={{ background:"#fef3c7", color:"#92400e",
+                              padding:"1px 6px", borderRadius:3, fontWeight:600 }}>
+                              {a.driver}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Income Statement — 3 scenarios side by side */}
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:DS.ink, marginBottom:10,
+                  paddingBottom:6, borderBottom:"2px solid #2563eb" }}>
+                  Income Statement — Three Scenarios
+                </div>
+                {(() => {
+                  const yrs = Array.from({length:parseInt(modelParams.horizon)||5},(_,i)=>"Y"+(i+1));
+                  const rows = [
+                    { label:"Revenue",   key:"revenue", bold:true,  color:"#059669" },
+                    { label:"Costs",     key:"costs",   bold:false, color:"#dc2626" },
+                    { label:"EBITDA",    key:"ebitda",  bold:true,  color:"#2563eb", sep:true },
+                  ];
+                  const fmtN = (n) => {
+                    if (n===undefined||n===null) return "—";
+                    const num = parseFloat(n);
+                    if (isNaN(num)) return n;
+                    return num >= 1000 ? num.toLocaleString("en",{maximumFractionDigits:0})
+                      : num >= 0 ? num.toFixed(1) : "("+Math.abs(num).toFixed(1)+")";
+                  };
+                  const scenarios = [
+                    { key:"low",  label:"⬇ Low",  bg:"#fff5f5", hdr:"#fecaca", col:"#dc2626" },
+                    { key:"base", label:"◆ Base", bg:"#eff6ff", hdr:"#bfdbfe", col:"#2563eb" },
+                    { key:"high", label:"⬆ High", bg:"#f0fdf4", hdr:"#bbf7d0", col:"#059669" },
+                  ];
+                  return (
+                    <div style={{ overflowX:"auto" }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ padding:"7px 12px", background:"#1e2433",
+                              color:"#fff", textAlign:"left", width:120 }}>Line</th>
+                            {scenarios.map(sc=>(
+                              yrs.map(y=>(
+                                <th key={sc.key+y} style={{ padding:"5px 8px",
+                                  background:sc.col, color:"#fff",
+                                  textAlign:"right", fontSize:9, fontWeight:700,
+                                  minWidth:60 }}>
+                                  {sc.label} {y}
+                                </th>
+                              ))
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row,ri)=>(
+                            <tr key={row.key} style={{
+                              background:ri%2===0?"#f9fafb":"#fff",
+                              borderTop:row.sep?"2px solid #374151":"none" }}>
+                              <td style={{ padding:"7px 12px", fontWeight:row.bold?700:400,
+                                color:row.color, fontSize:row.bold?12:11 }}>{row.label}</td>
+                              {scenarios.map(sc=>(
+                                yrs.map((_,yi)=>(
+                                  <td key={sc.key+yi} style={{ padding:"6px 8px",
+                                    textAlign:"right", fontFamily:"monospace",
+                                    fontWeight:row.bold?700:400,
+                                    background:row.sep?sc.bg+"80":"transparent",
+                                    color:row.key==="costs"?"#dc2626":row.bold?sc.col:"#374151" }}>
+                                    {fmtN(modelResult[row.key]?.[sc.key]?.[yi])}
+                                  </td>
+                                ))
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Valuation Summary */}
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:DS.ink, marginBottom:10,
+                  paddingBottom:6, borderBottom:"2px solid #059669" }}>
+                  Valuation Summary
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+                  {[
+                    { metric:"Net Present Value", key:"npv", unit:modelParams.currency+"M", icon:"💰" },
+                    { metric:"Internal Rate of Return", key:"irr", unit:"%", icon:"📈" },
+                    { metric:"Payback Period", key:"payback", unit:"years", icon:"⏱" },
+                  ].map(item=>(
+                    <div key={item.key} style={{ borderRadius:10, overflow:"hidden",
+                      border:"1px solid "+DS.canvasBdr }}>
+                      <div style={{ padding:"8px 14px", background:"#1e2433",
+                        fontSize:10, fontWeight:700, color:"#94a3b8" }}>
+                        {item.icon} {item.metric}
+                      </div>
+                      {[
+                        { sc:"low",  label:"Low",  col:"#dc2626", bg:"#fff5f5" },
+                        { sc:"base", label:"Base", col:"#2563eb", bg:"#eff6ff" },
+                        { sc:"high", label:"High", col:"#059669", bg:"#f0fdf4" },
+                      ].map(row=>(
+                        <div key={row.sc} style={{ padding:"8px 14px",
+                          background:row.bg, display:"flex",
+                          justifyContent:"space-between", alignItems:"center",
+                          borderBottom:"1px solid "+DS.canvasBdr }}>
+                          <span style={{ fontSize:10, color:row.col, fontWeight:700 }}>
+                            {row.label}
+                          </span>
+                          <span style={{ fontSize:16, fontWeight:700, color:row.col,
+                            fontFamily:"'Libre Baskerville',serif" }}>
+                            {modelResult[item.key]?.[row.sc] ?? "—"}{item.unit}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Scenarios + Risks */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink, marginBottom:8,
+                    paddingBottom:6, borderBottom:"1px solid "+DS.canvasBdr }}>
+                    Scenario Narratives
+                  </div>
+                  {[
+                    { key:"scenarioLow",  label:"⬇ Low Case",  col:"#dc2626", bg:"#fff5f5" },
+                    { key:"scenarioBase", label:"◆ Base Case", col:"#2563eb", bg:"#eff6ff" },
+                    { key:"scenarioHigh", label:"⬆ High Case", col:"#059669", bg:"#f0fdf4" },
+                  ].map(s=>(
+                    <div key={s.key} style={{ padding:"10px 12px", marginBottom:6,
+                      background:s.bg, borderLeft:"3px solid "+s.col, borderRadius:5 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:s.col, marginBottom:3 }}>
+                        {s.label}
+                      </div>
+                      <div style={{ fontSize:11, color:DS.inkSub, lineHeight:1.5 }}>
+                        {modelResult[s.key] || "—"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink, marginBottom:8,
+                    paddingBottom:6, borderBottom:"1px solid "+DS.canvasBdr }}>
+                    Key Risks from Diagram
+                  </div>
+                  {(modelResult.keyRisks||[]).map((r,i)=>(
+                    <div key={i} style={{ padding:"8px 10px", marginBottom:5,
+                      background:"#fff5f5", borderLeft:"3px solid #dc2626",
+                      borderRadius:5, fontSize:11, color:DS.inkSub, lineHeight:1.5 }}>
+                      ⚠ {r}
+                    </div>
+                  ))}
+                  {modelResult.notes && (
+                    <div style={{ marginTop:10, padding:"10px 12px",
+                      background:DS.canvasAlt, borderRadius:6,
+                      fontSize:10, color:DS.inkTer, lineHeight:1.6,
+                      border:"1px solid "+DS.canvasBdr }}>
+                      <strong>Modelling notes:</strong> {modelResult.notes}
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
