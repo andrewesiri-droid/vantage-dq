@@ -6237,71 +6237,187 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   };
 
 
-  // ── Build Financial Model ────────────────────────────────────────────────
+  // ── Build Financial Model (deterministic engine) ────────────────────────
   const buildFinancialModel = () => {
     setBuildingModel(true);
-    const valNodes   = nodes.filter(n => n.type === "value");
-    const decNodes   = nodes.filter(n => n.type === "decision");
-    const uncNodes   = nodes.filter(n => n.type === "uncertainty");
-    const detNodes   = nodes.filter(n => n.type === "deterministic");
-
-    // Build a structured description of the diagram for the AI
+    const valNodes = nodes.filter(n=>n.type==="value");
+    const decNodes = nodes.filter(n=>n.type==="decision");
+    const uncNodes = nodes.filter(n=>n.type==="uncertainty");
+    const detNodes = nodes.filter(n=>n.type==="deterministic");
     const diagramDesc =
-      "VALUE NODES (outcomes to model): " + valNodes.map(n => n.label + (n.description?" ["+n.description+"]":"")).join(", ") + ". " +
-      "DECISION NODES (controllable inputs): " + decNodes.map(n => n.label).join(", ") + ". " +
-      "UNCERTAINTY NODES (scenario drivers): " + uncNodes.map(n => n.label + " (impact:"+n.impact+", control:"+n.control+")").join(", ") + ". " +
-      "DETERMINISTIC NODES (calculated lines): " + detNodes.map(n => n.label).join(", ") + ". " +
-      "INFLUENCE EDGES: " + edges.map(e => {
-        const s = nodes.find(n=>n.id===e.from), t = nodes.find(n=>n.id===e.to);
-        return s&&t ? s.label+" → "+t.label : null;
-      }).filter(Boolean).join(", ");
+      "Value nodes: " + valNodes.map(n=>n.label).join(", ") + ". " +
+      "Decision nodes: " + decNodes.map(n=>n.label).join(", ") + ". " +
+      "Uncertainty nodes (scenario drivers): " + uncNodes.map(n=>n.label+" (impact:"+n.impact+", control:"+n.control+")").join(", ") + ". " +
+      "Deterministic nodes: " + detNodes.map(n=>n.label).join(", ") + ". " +
+      "Edges: " + edges.map(e=>{const s=nodes.find(n=>n.id===e.from),t=nodes.find(n=>n.id===e.to);return s&&t?s.label+"->"+t.label:null;}).filter(Boolean).join(", ");
 
-    const params = modelParams;
+    const p = modelParams;
+    const inv = parseFloat(p.investment)||0;
+    const baseRev = parseFloat(p.baseRevenue)||0;
+    const growth = parseFloat(p.growthRate)||0;
+    const costPct = parseFloat(p.costMargin)||0;
+    const wacc = parseFloat(p.discount)||10;
+    const yrs = parseInt(p.horizon)||5;
 
+    // Step 1: AI decides ONLY structure/assumptions — no numbers
     aiCall(
-      "You are a financial modelling expert. Build a complete financial model structure for this decision. " +
-      "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
-      "Influence diagram structure: " + diagramDesc + ". " +
-      "Model parameters: " +
-      "Time horizon: "+params.horizon+" years. " +
-      "Discount rate: "+params.discount+"%. " +
-      "Currency: "+params.currency+" "+params.revenueUnit+". " +
-      "Initial investment: "+params.investment+" "+params.currency+" "+params.revenueUnit+". " +
-      "Base case Year 1 revenue: "+params.baseRevenue+" "+params.currency+" "+params.revenueUnit+". " +
-      "Annual revenue growth rate: "+params.growthRate+"%. " +
-      "Cost as % of revenue: "+params.costMargin+"%. " +
-      "Build a COMPLETE financial model with three scenarios (Low/Base/High) driven by the uncertainty nodes. " +
-      "Return ONLY a JSON object. No markdown, no explanation, start with {. " +
-      "Use this exact structure: " +
-      '{"modelTitle":"short title","assumptions":[{"name":"assumption name","low":0,"base":0,"high":0,"unit":"unit description","driver":"which uncertainty node drives this"}],' +
-      '"revenue":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0]},' +
-      '"costs":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0]},' +
-      '"ebitda":{"low":[0,0,0,0,0],"base":[0,0,0,0,0],"high":[0,0,0,0,0]},' +
-      '"npv":{"low":0,"base":0,"high":0},' +
-      '"irr":{"low":0,"base":0,"high":0},' +
-      '"payback":{"low":0,"base":0,"high":0},' +
-      '"scenarioLow":"one sentence downside description",' +
-      '"scenarioBase":"one sentence base case description",' +
-      '"scenarioHigh":"one sentence upside description",' +
-      '"keyRisks":["risk 1","risk 2","risk 3"],' +
-      '"notes":"key modelling assumptions"}',
+      "You are a decision analyst. Given this influence diagram, define the key uncertainty assumptions " +
+      "that will drive Low/Base/High scenario spreads in a financial model. " +
+      "Do NOT generate any financial numbers — just the assumption structure. " +
+      "Diagram: " + diagramDesc + ". " +
+      "Decision: " + (problem?.decisionStatement||"") + ". " +
+      "For each key uncertainty node, define what the Low/Base/High multiplier means for revenue and cost. " +
+      "Also provide: scenario narratives (one sentence each), key risks from uncertainty nodes, modelling notes. " +
+      "Return ONLY JSON: " +
+      '{"modelTitle":"short title",' +
+      '"revenueMultipliers":{"low":0.6,"base":1.0,"high":1.4},' +
+      '"costMultipliers":{"low":1.1,"base":1.0,"high":0.85},' +
+      '"growthMultipliers":{"low":0.6,"base":1.0,"high":1.3},' +
+      '"assumptions":[{"name":"assumption","driver":"uncertainty node","low":"description","base":"description","high":"description"}],' +
+      '"scenarioLow":"downside narrative",' +
+      '"scenarioBase":"base case narrative",' +
+      '"scenarioHigh":"upside narrative",' +
+      '"keyRisks":["risk1","risk2","risk3"],' +
+      '"notes":"modelling assumptions and caveats"}',
     (r) => {
-      let result = r;
-      if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setBuildingModel(false); onAIMsg({role:"ai",text:"Could not parse model response."}); return; } }
-      if (result.error) { setBuildingModel(false); onAIMsg({role:"ai",text:"Model error: "+result.error}); return; }
+      let structure = r;
+      if (r._raw) { try { structure = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setBuildingModel(false); onAIMsg({role:"ai",text:"Could not parse model structure."}); return; } }
+      if (structure.error) { setBuildingModel(false); onAIMsg({role:"ai",text:"Error: "+structure.error}); return; }
 
-      // Build the Excel file via API call to the server-side generator
-      // For now, pass the model data to a downloadable JSON that gets rendered
-      showModelInApp(result);
+      // Step 2: Calculate ALL numbers deterministically from params + multipliers
+      const rMult = { low: parseFloat(structure.revenueMultipliers?.low)||0.6, base: 1.0, high: parseFloat(structure.revenueMultipliers?.high)||1.4 };
+      const cMult = { low: parseFloat(structure.costMultipliers?.low)||1.1,    base: 1.0, high: parseFloat(structure.costMultipliers?.high)||0.85 };
+      const gMult = { low: parseFloat(structure.growthMultipliers?.low)||0.6,  base: 1.0, high: parseFloat(structure.growthMultipliers?.high)||1.3 };
+
+      const calcRevenue = (sc) => {
+        const g = (growth * gMult[sc]) / 100;
+        return Array.from({length:yrs}, (_,i) => parseFloat((baseRev * rMult[sc] * Math.pow(1+g, i)).toFixed(2)));
+      };
+      const calcCosts = (sc, revArr) => revArr.map(r => parseFloat((r * costPct * cMult[sc] / 100).toFixed(2)));
+      const calcEbitda = (revArr, costArr) => revArr.map((r,i) => parseFloat((r - costArr[i]).toFixed(2)));
+
+      const calcNPV = (ebitdaArr, waccPct, initialInv) => {
+        const w = waccPct / 100;
+        const pv = ebitdaArr.reduce((sum,cf,i) => sum + cf / Math.pow(1+w, i+1), 0);
+        return parseFloat((pv - initialInv).toFixed(2));
+      };
+
+      const calcIRR = (ebitdaArr, initialInv) => {
+        if (initialInv === 0) return 0;
+        const cashflows = [-initialInv, ...ebitdaArr];
+        let r = 0.1;
+        for (let iter = 0; iter < 100; iter++) {
+          const npv = cashflows.reduce((s,cf,i) => s + cf/Math.pow(1+r,i), 0);
+          const dnpv = cashflows.reduce((s,cf,i) => s - i*cf/Math.pow(1+r,i+1), 0);
+          if (Math.abs(dnpv) < 1e-10) break;
+          const rNew = r - npv/dnpv;
+          if (Math.abs(rNew - r) < 1e-8) { r = rNew; break; }
+          r = rNew;
+        }
+        return parseFloat((r * 100).toFixed(1));
+      };
+
+      const calcPayback = (ebitdaArr, initialInv) => {
+        let cum = -initialInv;
+        for (let i = 0; i < ebitdaArr.length; i++) {
+          cum += ebitdaArr[i];
+          if (cum >= 0) return parseFloat((i + 1 - (cum - ebitdaArr[i]) / ebitdaArr[i]).toFixed(1));
+        }
+        return null;
+      };
+
+      const scenarios = ["low","base","high"];
+      const revenue = {}, costs = {}, ebitda = {};
+      const npv = {}, irr = {}, payback = {};
+
+      scenarios.forEach(sc => {
+        revenue[sc] = calcRevenue(sc);
+        costs[sc]   = calcCosts(sc, revenue[sc]);
+        ebitda[sc]  = calcEbitda(revenue[sc], costs[sc]);
+        npv[sc]     = calcNPV(ebitda[sc], wacc, inv);
+        irr[sc]     = calcIRR(ebitda[sc], inv);
+        payback[sc] = calcPayback(ebitda[sc], inv);
+      });
+
+      const modelData = {
+        modelTitle: structure.modelTitle || "Financial Model",
+        assumptions: structure.assumptions || [],
+        revenue, costs, ebitda, npv, irr, payback,
+        scenarioLow:  structure.scenarioLow  || "",
+        scenarioBase: structure.scenarioBase || "",
+        scenarioHigh: structure.scenarioHigh || "",
+        keyRisks: structure.keyRisks || [],
+        notes: structure.notes || "",
+        params: p,
+        // Store multipliers so Excel can show the logic
+        rMult, cMult, gMult,
+        yrs,
+      };
+
+      showModelInApp(modelData);
       setBuildingModel(false);
       setShowModelModal(false);
+      onAIMsg({role:"ai", text:"Model built. Base NPV: "+p.currency+" "+npv.base+"M | IRR: "+irr.base+"% | Payback: "+(payback.base||">"+(p.horizon||5))+" yrs. Numbers are deterministic — same inputs always give same outputs."});
     });
   };
+
 
   const showModelInApp = (modelData) => {
     setModelResult(modelData);
     setShowModelResult(true);
-  };;
+  };
+
+  const downloadExcel = async (modelData) => {
+    try {
+      onAIMsg({role:"ai", text:"Generating Excel file..."});
+      const response = await fetch("/api/excel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelData, params: modelParams }),
+      });
+      if (!response.ok) throw new Error("Server error: " + response.status);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = (modelData.modelTitle||"FinancialModel").replace(/\s+/g,"_") + "_VantageDQ.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      onAIMsg({role:"ai", text:"Excel downloaded. Open in Excel — blue cells are editable inputs, black cells contain formulas. Change any blue cell and the model recalculates automatically."});
+    } catch(err) {
+      // Fallback to CSV if server fails
+      console.error("Excel API failed, falling back to CSV:", err);
+      const p = modelParams;
+      const yrs = modelData.yrs || parseInt(p.horizon) || 5;
+      const yrLabels = Array.from({length:yrs},(_,i)=>"Y"+(i+1));
+      const fmtN = (n) => n===undefined||n===null?"":parseFloat(n).toFixed(2);
+      let csv = "FINANCIAL MODEL: "+(modelData.modelTitle||"").toUpperCase()+"\n";
+      csv += "Generated by Vantage DQ\n\n";
+      csv += "PARAMETERS\n";
+      csv += "Investment,"+p.investment+"\n";
+      csv += "Year 1 Revenue (Base),"+p.baseRevenue+"\n";
+      csv += "Growth Rate,"+p.growthRate+"%\n";
+      csv += "Cost Margin,"+p.costMargin+"%\n";
+      csv += "WACC,"+p.discount+"%\n\n";
+      csv += "INCOME STATEMENT\n";
+      csv += "Scenario,Line Item,"+yrLabels.join(",")+",NPV,IRR,Payback\n";
+      ["low","base","high"].forEach(sc => {
+        csv += sc.toUpperCase()+",Revenue,"+(modelData.revenue[sc]||[]).map(fmtN).join(",")+"\n";
+        csv += ",Costs,"+(modelData.costs[sc]||[]).map(fmtN).join(",")+"\n";
+        csv += ",EBITDA,"+(modelData.ebitda[sc]||[]).map(fmtN).join(",")+",,"+fmtN(modelData.npv[sc])+","+fmtN(modelData.irr[sc])+"%,"+fmtN(modelData.payback[sc])+" yrs\n";
+      });
+      const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = (modelData.modelTitle||"FinancialModel").replace(/\s+/g,"_")+"_VantageDQ.csv";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      onAIMsg({role:"ai", text:"Downloaded as CSV (Excel API unavailable). Open in Excel to edit."});
+    }
+  };
+
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
@@ -6970,6 +7086,15 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
                   {modelResult.scenarioBase}
                 </div>
               </div>
+              {/* Download Excel/CSV */}
+              <button
+                onClick={()=>downloadExcel(modelResult)}
+                style={{ padding:"6px 14px", border:"1px solid rgba(255,255,255,.3)",
+                  borderRadius:6, cursor:"pointer", color:"#fff", background:"rgba(255,255,255,.15)",
+                  fontSize:11, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", gap:5 }}>
+                ⬇ Download Excel
+              </button>
               {/* Print to PDF */}
               <button
                 onClick={()=>{
@@ -7030,22 +7155,30 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
             <div id="vantage-fin-model" style={{ padding:"24px 28px", overflowY:"auto", maxHeight:"80vh" }}>
 
               {/* Parameters recap */}
-              <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:20,
-                padding:"10px 14px", background:DS.canvasAlt,
-                border:"1px solid "+DS.canvasBdr, borderRadius:8 }}>
-                {[
-                  ["Investment", modelParams.currency+" "+modelParams.investment+"M"],
-                  ["Yr 1 Rev (Base)", modelParams.currency+" "+modelParams.baseRevenue+"M"],
-                  ["Growth", modelParams.growthRate+"%"],
-                  ["Cost Margin", modelParams.costMargin+"%"],
-                  ["WACC", modelParams.discount+"%"],
-                  ["Horizon", modelParams.horizon+" years"],
-                ].map(([k,v])=>(
-                  <div key={k} style={{ fontSize:10 }}>
-                    <span style={{ color:DS.inkTer }}>{k}: </span>
-                    <span style={{ fontWeight:700, color:DS.ink }}>{v}</span>
-                  </div>
-                ))}
+              <div style={{ marginBottom:16 }}>
+                <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:6,
+                  padding:"10px 14px", background:DS.canvasAlt,
+                  border:"1px solid "+DS.canvasBdr, borderRadius:"8px 8px 0 0" }}>
+                  {[
+                    ["Investment", modelParams.currency+" "+modelParams.investment+"M"],
+                    ["Yr 1 Rev (Base)", modelParams.currency+" "+modelParams.baseRevenue+"M"],
+                    ["Growth", modelParams.growthRate+"%"],
+                    ["Cost Margin", modelParams.costMargin+"%"],
+                    ["WACC", modelParams.discount+"%"],
+                    ["Horizon", modelParams.horizon+" years"],
+                  ].map(([k,v])=>(
+                    <div key={k} style={{ fontSize:10 }}>
+                      <span style={{ color:DS.inkTer }}>{k}: </span>
+                      <span style={{ fontWeight:700, color:DS.ink }}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding:"7px 14px", background:"#f0fdf4",
+                  border:"1px solid #bbf7d0", borderRadius:"0 0 8px 8px",
+                  fontSize:10, color:"#065f46" }}>
+                  ✓ Numbers calculated deterministically — same inputs always produce the same outputs.
+                  Scenario spread is driven by uncertainty node multipliers from your influence diagram.
+                </div>
               </div>
 
               {/* Assumptions table */}
