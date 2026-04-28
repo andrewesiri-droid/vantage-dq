@@ -10059,13 +10059,25 @@ export default function App() {
             onMouseEnter={e=>e.currentTarget.style.background=DS.chromeMid}
             onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
             <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
-              textTransform:"uppercase", marginBottom:4 }}>Active Project</div>
-            <div style={{ fontSize:11, fontWeight:700, color:DS.textPri, lineHeight:1.35,
-              fontFamily:"'Libre Baskerville',Georgia,serif", marginBottom:4 }}>
-              {(problem.projectName||problem.decisionStatement?.slice(0,40)||"Untitled").slice(0,38)}
-              {(problem.projectName||"").length>38?"…":""}
-            </div>
-            <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+              textTransform:"uppercase", marginBottom:5 }}>Active Project</div>
+
+            {/* Project name if set */}
+            {problem.projectName && (
+              <div style={{ fontSize:11, fontWeight:700, color:DS.textPri, lineHeight:1.3,
+                fontFamily:"'Libre Baskerville',Georgia,serif", marginBottom:4 }}>
+                {problem.projectName}
+              </div>
+            )}
+
+            {/* Full decision statement */}
+            {problem.decisionStatement && (
+              <div style={{ fontSize:10, color:DS.textSec, lineHeight:1.5, marginBottom:6 }}>
+                {problem.decisionStatement}
+              </div>
+            )}
+
+            {/* Meta badges */}
+            <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:4 }}>
               {problem.projectCode && (
                 <span style={{ fontSize:8, fontWeight:700, padding:"1px 5px", borderRadius:3,
                   background:DS.chromeSub, color:DS.textTer, border:`1px solid ${DS.border}` }}>
@@ -10084,9 +10096,14 @@ export default function App() {
                   {problem.confidentiality}
                 </span>
               )}
+              {!problem.projectName && !problem.decisionStatement && (
+                <span style={{ fontSize:10, color:DS.textTer, fontStyle:"italic" }}>
+                  No project defined yet
+                </span>
+              )}
             </div>
             {problem.facilitator && (
-              <div style={{ fontSize:9, color:DS.textTer, marginTop:4 }}>
+              <div style={{ fontSize:9, color:DS.textTer, marginTop:2 }}>
                 {problem.facilitator}{problem.sessionDate ? ` · ${new Date(problem.sessionDate).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}` : ""}
               </div>
             )}
