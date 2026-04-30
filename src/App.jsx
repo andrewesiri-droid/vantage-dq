@@ -672,105 +672,289 @@ function ProjectSetupModal({ data, onChange, onClose }) {
 }
 
 function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onAIMsg, onAISend }) {
-  const [tab, setTab] = useState("frame");
-  const [checking, setChecking] = useState(false);
-  const [applying, setApplying] = useState(false);
 
-  const upd = (key, val) => onChange({ ...data, [key]: val });
-  const updStakeholder = (id, key, val) =>
-    upd("stakeholders", data.stakeholders.map(s => s.id===id ? {...s,[key]:val} : s));
+  // ── STATE ──────────────────────────────────────────────────────────────────
+  const [tab,        setTab]        = useState("context");
+  const [checking,   setChecking]   = useState(false);
+  const [applying,   setApplying]   = useState(false);
+  const [improvements, setImprovements] = useState(null); // staged improvements
+  const [impStep,    setImpStep]    = useState(0);        // 0=diagnose 1=suggestions 2=apply 3=done
+  const [accepted,   setAccepted]   = useState({});       // which suggestions user accepted
+  const [liveFlags,  setLiveFlags]  = useState({});       // live field guard rails
 
+  const upd = (k, v) => onChange({ ...data, [k]: v });
+
+  // ── TABS ───────────────────────────────────────────────────────────────────
+  const TABS = [
+    { id:"context",   label:"1. Context",          icon:"◎" },
+    { id:"frame",     label:"2. Decision Frame",   icon:"◈" },
+    { id:"scope",     label:"3. Scope & Boundaries", icon:"◧" },
+    { id:"outcomes",  label:"4. Success Measures", icon:"◉" },
+    { id:"validation",label:"5. AI Frame Check",   icon:"✦",
+      highlight: data.aiValidation?.overallScore > 0 },
+  ];
+
+  // ── COMPLETION ─────────────────────────────────────────────────────────────
+  const REQUIRED = ["context","decisionStatement","owner","objectives","deadline","scopeIn","scopeOut","successCriteria"];
+  const filled   = REQUIRED.filter(k => (data[k]||"").trim().length > 10).length;
+  const pct      = Math.round(filled / REQUIRED.length * 100);
+
+  // ── LIVE GUARD RAILS ───────────────────────────────────────────────────────
+  const checkDecisionStatement = (val) => {
+    if (!val || val.length < 8) return null;
+    const v = val.trim().toLowerCase();
+    // Yes/no question detection
+    if (/^(should|do|does|is|are|will|can|has|have|did|was|were)\s/.test(v))
+      return { level:"warning", msg:"This looks like a yes/no question. DQ frames need open questions starting with What, How, Which, or Where." };
+    // Solution locking
+    if (/\b(buy|purchase|implement|install|hire|use|adopt|select)\b/.test(v) && !/\bshould\b/.test(v))
+      return { level:"critical", msg:"Frame may be solution-locked. Try reframing as 'What is the best approach to...' to preserve alternatives." };
+    // Too short
+    if (val.trim().split(" ").length < 8)
+      return { level:"warning", msg:"Decision statement is very brief. A strong frame includes context, scope, and key constraints." };
+    // Statement not question
+    if (!val.trim().endsWith("?") && val.length > 15)
+      return { level:"info", msg:"Consider phrasing as a question (ending with ?) to keep the frame open and alternatives-friendly." };
+    // Too broad
+    if (/\b(overall|entire|all|everything|company|organisation|organization|business|corporate)\b/.test(v) && val.split(" ").length < 20)
+      return { level:"warning", msg:"Frame may be too broad. Consider narrowing to a specific asset, market, or decision context." };
+    return { level:"ok", msg:"Decision statement looks well-formed." };
+  };
+
+  const checkSuccessCriteria = (val) => {
+    if (!val || val.length < 8) return null;
+    if (!/\d/.test(val) && !/\b(increase|decrease|reduce|improve|achieve|target|threshold|minimum|maximum|within|less than|more than|at least)\b/i.test(val))
+      return { level:"warning", msg:"Success criteria should be measurable. Add numbers, percentages, or thresholds (e.g. 'NPV > $50M', 'within 18 months')." };
+    return { level:"ok", msg:"Success criteria appear measurable." };
+  };
+
+  const checkObjectives = (val) => {
+    if (!val || val.length < 5) return null;
+    if (/\b(implement|execute|deliver|build|create|launch)\b/i.test(val))
+      return { level:"warning", msg:"Objectives should describe what value to create or protect, not actions to take. Try: maximise NPV, reduce operational risk, improve reliability." };
+    return { level:"ok", msg:"" };
+  };
+
+  const liveCheck = (key, val) => {
+    let flag = null;
+    if (key === "decisionStatement") flag = checkDecisionStatement(val);
+    if (key === "successCriteria")   flag = checkSuccessCriteria(val);
+    if (key === "objectives")        flag = checkObjectives(val);
+    setLiveFlags(prev => ({ ...prev, [key]: flag }));
+  };
+
+  const handleChange = (key, val) => {
+    upd(key, val);
+    if (["decisionStatement","successCriteria","objectives"].includes(key))
+      liveCheck(key, val);
+  };
+
+  // ── LIVE FLAG INDICATOR ────────────────────────────────────────────────────
+  const LiveFlag = ({ field }) => {
+    const f = liveFlags[field];
+    if (!f || f.level === "ok") return null;
+    const colors = { critical:["#fef2f2","#dc2626","#fee2e2"], warning:["#fffbeb","#d97706","#fef3c7"], info:["#eff6ff","#2563eb","#dbeafe"] };
+    const [bg, text, border] = colors[f.level] || colors.info;
+    return (
+      <div style={{ marginTop:5, padding:"6px 10px", background:bg,
+        border:`1px solid ${border}`, borderRadius:5,
+        fontSize:11, color:text, lineHeight:1.5, display:"flex", gap:6 }}>
+        <span style={{ flexShrink:0 }}>{f.level==="critical"?"⚠":f.level==="warning"?"○":"ℹ"}</span>
+        <span>{f.msg}</span>
+      </div>
+    );
+  };
+
+  // ── FIELD HELPER ──────────────────────────────────────────────────────────
+  const Field = ({ label, fieldKey, placeholder, rows=3, hint=null, required=false, type="textarea" }) => (
+    <div style={{ marginBottom:18 }}>
+      <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:5 }}>
+        <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+          textTransform:"uppercase", letterSpacing:.6 }}>
+          {label}{required && <span style={{ color:DS.danger, marginLeft:3 }}>*</span>}
+        </div>
+        {hint && <div style={{ fontSize:10, color:DS.inkTer, fontStyle:"italic" }}>{hint}</div>}
+      </div>
+      {type==="textarea" ? (
+        <textarea value={data[fieldKey]||""} rows={rows}
+          onChange={e=>handleChange(fieldKey, e.target.value)}
+          placeholder={placeholder}
+          style={{ width:"100%", padding:"9px 12px", fontSize:12, fontFamily:"inherit",
+            background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+            borderRadius:6, color:DS.ink, outline:"none", resize:"vertical",
+            lineHeight:1.6, boxSizing:"border-box",
+            borderColor: liveFlags[fieldKey]?.level==="critical"
+              ? "#fca5a5" : liveFlags[fieldKey]?.level==="warning"
+              ? "#fde68a" : DS.canvasBdr }}/>
+      ) : (
+        <input type={type} value={data[fieldKey]||""}
+          onChange={e=>handleChange(fieldKey, e.target.value)}
+          placeholder={placeholder}
+          style={{ width:"100%", padding:"9px 12px", fontSize:12, fontFamily:"inherit",
+            background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+            borderRadius:6, color:DS.ink, outline:"none", boxSizing:"border-box" }}/>
+      )}
+      <LiveFlag field={fieldKey}/>
+    </div>
+  );
+
+  // ── SCORE HELPERS ─────────────────────────────────────────────────────────
+  const scoreColor  = (s) => s>=85?"#059669":s>=70?"#2563eb":s>=50?"#d97706":"#dc2626";
+  const scoreLabel  = (s) => s>=85?"Strong Frame":s>=70?"Good — Refine":s>=50?"Incomplete":"Not Decision-Ready";
+  const statusColor = (s) => ({ strong:"#059669", adequate:"#2563eb", weak:"#dc2626" }[s]||DS.inkTer);
+
+  const DIM_LABELS = {
+    decisionClarity:    "Decision Clarity",
+    ownership:          "Decision Ownership",
+    objectives:         "Objective Clarity",
+    timeframe:          "Timeframe Clarity",
+    scopeDefinition:    "Scope Definition",
+    constraints:        "Constraints Clarity",
+    uncertaintyAwareness:"Uncertainty Awareness",
+    alternativeOpenness: "Alternative Openness",
+    stakeholderAwareness:"Stakeholder Awareness",
+    overallFraming:     "Overall Framing Quality",
+  };
+
+  // ── VALIDATE WITH AI ──────────────────────────────────────────────────────
   const validateWithAI = () => {
     setChecking(true);
+    setImprovements(null);
+    setImpStep(0);
+    setAccepted({});
+
     const validatePrompt =
-      "You are a senior Decision Quality expert. Validate this decision frame strictly. " +
-      "Decision Statement: \"" + (data.decisionStatement||"") + "\". " +
-      "Context: \"" + (data.context||"") + "\". " +
-      "Scope In: \"" + (data.scopeIn||"") + "\". " +
-      "Scope Out: \"" + (data.scopeOut||"") + "\". " +
-      "Owner: \"" + (data.owner||"") + "\". " +
-      "Deadline: \"" + (data.deadline||"") + "\". " +
-      "Constraints: \"" + (data.constraints||"") + "\". " +
-      "Assumptions: \"" + (data.assumptions||"") + "\". " +
-      "Success Criteria: \"" + (data.successCriteria||"") + "\". " +
-      "Return ONLY valid JSON: " +
-      '{"overallScore":75,"status":"strong|adequate|weak","flags":[{"severity":"critical|warning|info","field":"fieldName","message":"specific issue"}],"improvedStatement":"rewritten statement or null","hiddenAssumptions":["plain string assumption"],"missingElements":["missing item"],"executiveSummary":"2-sentence summary"}';
+      "You are an elite Decision Quality facilitator with 20 years of experience. " +
+      "Evaluate this decision frame strictly against DQ methodology. " +
+      "A strong DQ frame must: (1) pose an open question not a yes/no or situation description, " +
+      "(2) name a specific decision-owner not just 'the team', " +
+      "(3) state objectives as value to create/protect not actions, " +
+      "(4) define measurable success criteria with numbers or thresholds, " +
+      "(5) clearly bound scope in AND out, " +
+      "(6) name key uncertainties that could change the decision, " +
+      "(7) state constraints as non-negotiable givens not preferences, " +
+      "(8) preserve alternative openness — frame must not be solution-locked. " +
+      "\n\nFRAME TO EVALUATE:\n" +
+      "Context: \"" + (data.context||"") + "\"\n" +
+      "Decision Statement: \"" + (data.decisionStatement||"") + "\"\n" +
+      "Decision Owner: \"" + (data.owner||"") + "\"\n" +
+      "Objectives: \"" + (data.objectives||"") + "\"\n" +
+      "Deadline: \"" + (data.deadline||"") + "\"\n" +
+      "Scope In: \"" + (data.scopeIn||"") + "\"\n" +
+      "Scope Out: \"" + (data.scopeOut||"") + "\"\n" +
+      "Key Uncertainties: \"" + (data.keyUncertainties||"") + "\"\n" +
+      "Constraints: \"" + (data.constraints||"") + "\"\n" +
+      "Assumptions: \"" + (data.assumptions||"") + "\"\n" +
+      "Success Criteria: \"" + (data.successCriteria||"") + "\"\n" +
+      "Stakeholders: \"" + (data.stakeholders||"") + "\"\n\n" +
+      "Score each of 10 dimensions 0-10. Be strict — an empty or vague field scores 0-2. " +
+      "Flag ALL DQ issues found including: no_clear_decision, solution_locking, too_broad, too_narrow, " +
+      "missing_owner, missing_timeframe, no_value_measure, no_uncertainty, assumptions_as_facts, scope_confusion. " +
+      "For the improved statement do NOT invent specific facts like dates or budgets — use [placeholders] instead. " +
+      "Return ONLY valid JSON:\n" +
+      "{\"overallScore\":72,\"status\":\"strong|adequate|weak\"," +
+      "\"dimensions\":{\"decisionClarity\":7,\"ownership\":5,\"objectives\":6,\"timeframe\":4,\"scopeDefinition\":6,\"constraints\":5,\"uncertaintyAwareness\":3,\"alternativeOpenness\":7,\"stakeholderAwareness\":4,\"overallFraming\":6}," +
+      "\"flags\":[{\"id\":\"missing_owner\",\"severity\":\"critical|warning|info\",\"field\":\"fieldName\",\"title\":\"Short flag title\",\"message\":\"Specific issue found\",\"why\":\"Why this matters for decision quality\",\"suggestion\":\"Specific improvement advice\",\"before\":\"original text or EMPTY\",\"after\":\"improved version using [placeholders] if facts unknown\"}]," +
+      "\"hiddenAssumptions\":[\"assumption stated as fact\"]," +
+      "\"missingElements\":[\"what is missing\"]," +
+      "\"diagnosticSummary\":\"2-3 sentence expert diagnosis of the frame quality\"," +
+      "\"improvedStatement\":\"Better decision statement using [placeholders] if needed\"," +
+      "\"downstreamRecommendations\":[{\"module\":\"Issue Raising\",\"reason\":\"why this module should come next\"}]," +
+      "\"facilitatorQuestions\":[\"follow-up question to improve the frame\",\"another question\"]," +
+      "\"executiveSummary\":\"1-2 sentence summary\"}";
+
     aiCall(validatePrompt, (r) => {
-      // Normalise response
       let result = r;
-      if (r && typeof r === "object" && r._raw) {
+      if (r && r._raw) {
         try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) {}
+      }
+      if (!result || typeof result !== "object") {
+        setChecking(false);
+        onAIMsg({ role:"ai", text:"Frame Check failed. Try again." });
+        return;
       }
       upd("aiValidation", result);
       setChecking(false);
       const score = result.overallScore;
       const summary = typeof result.executiveSummary === "string" ? result.executiveSummary : "";
-      onAIMsg({ role:"ai", text: (score ? "DQ Score: " + score + "/100. " : "") + (summary || "Validation complete. Check the AI Validation tab.") });
+      onAIMsg({ role:"ai", text:"Frame Check: " + (score||"?") + "/100 — " + scoreLabel(score||0) + ". " + summary });
     });
   };
 
-  const TABS = [
-    { id:"identity",     label:"Project Identity" },
-    { id:"frame",        label:"Decision Frame" },
-    { id:"scope",        label:"Scope & Time" },
-    { id:"stakeholders", label:"Stakeholders" },
-    { id:"constraints",  label:"Constraints & Assumptions" },
-    { id:"outcomes",     label:"Outcomes" },
-    { id:"validation",   label:"AI Validation" },
-  ];
-
-  const applyImprovements = () => {
+  // ── APPLY IMPROVEMENTS (5-STAGE) ──────────────────────────────────────────
+  const startImprovements = () => {
     const v = data.aiValidation;
-    if (!v) { onAIMsg({role:"ai",text:"Run Frame Check first to identify what needs fixing."}); return; }
+    if (!v || !(v.flags||[]).length) {
+      onAIMsg({ role:"ai", text:"Run Frame Check first to identify issues." }); return;
+    }
+    setImprovements(v);
+    setImpStep(1); // start at diagnose
+    setAccepted({});
+    setTab("validation");
+  };
+
+  const acceptSuggestion = (flagId) =>
+    setAccepted(prev => ({ ...prev, [flagId]: !prev[flagId] }));
+
+  const applyAccepted = () => {
+    const v = improvements;
+    if (!v) return;
     setApplying(true);
-    onAIMsg({role:"ai",text:"Improving decision frame to raise DQ score — 15 seconds…"});
 
-    const flags = (v.flags||[]).map(f=>"["+f.severity+"] "+f.field+": "+f.message).join("\n")||"none";
-    const missing = (v.missingElements||[]).join(", ")||"none";
+    const flagsToApply = (v.flags||[]).filter(f => accepted[f.id] && f.after && f.after !== "EMPTY");
+    if (!flagsToApply.length) {
+      onAIMsg({ role:"ai", text:"No suggestions selected. Select at least one to apply." });
+      setApplying(false); return;
+    }
 
-    const improvePrompt =
-      "You are a senior Decision Quality expert rewriting a decision frame to achieve a score of 80+ on a DQ frame check. " +
-      "Rewrite EVERY flagged field to directly fix the issue identified. " +
-      "A high-quality DQ frame requires: " +
-      "(1) Decision statement: open question starting with How/What/Which, names the decision-maker, specifies scope " +
-      "(2) Context: explains the strategic situation and why this decision matters now " +
-      "(3) Scope In: what IS within the decision boundary " +
-      "(4) Scope Out: what is explicitly excluded " +
-      "(5) Success Criteria: measurable outcomes that define a good decision " +
-      "(6) Constraints: non-negotiable limits and boundaries " +
-      "(7) Assumptions: explicit statements of what is being assumed true " +
+    // Build improvement prompt for accepted flags only
+    const acceptedFields = flagsToApply.map(f =>
+      "Field: " + f.field + " | Issue: " + f.message + " | Suggested: " + f.after
+    ).join("\n");
+
+    const applyPrompt =
+      "You are a senior DQ expert. Rewrite ONLY the specific fields listed below to fix the identified issues. " +
+      "CRITICAL RULES: " +
+      "(1) Do NOT invent specific facts — use [placeholders] for unknown dates, budgets, names. " +
+      "(2) Do NOT change any field not listed. " +
+      "(3) Preserve the user's strategic intent and domain context. " +
+      "(4) Decision statement must be an open question ending in ?. " +
+      "(5) Success criteria must include measurable thresholds. " +
+      "(6) Never solution-lock the frame. " +
       "\n\nCURRENT VALUES:\n" +
-      "decisionStatement: " + (data.decisionStatement||"EMPTY") + "\n" +
       "context: " + (data.context||"EMPTY") + "\n" +
+      "decisionStatement: " + (data.decisionStatement||"EMPTY") + "\n" +
+      "owner: " + (data.owner||"EMPTY") + "\n" +
+      "objectives: " + (data.objectives||"EMPTY") + "\n" +
+      "deadline: " + (data.deadline||"EMPTY") + "\n" +
       "scopeIn: " + (data.scopeIn||"EMPTY") + "\n" +
       "scopeOut: " + (data.scopeOut||"EMPTY") + "\n" +
-      "successCriteria: " + (data.successCriteria||"EMPTY") + "\n" +
+      "keyUncertainties: " + (data.keyUncertainties||"EMPTY") + "\n" +
       "constraints: " + (data.constraints||"EMPTY") + "\n" +
-      "assumptions: " + (data.assumptions||"EMPTY") + "\n\n" +
-      "FLAGS TO FIX:\n" + flags + "\n" +
-      "MISSING ELEMENTS: " + missing + "\n" +
-      (v.improvedStatement ? "AI SUGGESTED STATEMENT: " + v.improvedStatement + "\n" : "") +
-      "\nReturn ONLY a JSON object with the improved values for every field that needs work. " +
-      "Write real content — not placeholders. Each field should be 1-3 concise sentences. " +
-      '{"decisionStatement":"improved","context":"improved","scopeIn":"improved","scopeOut":"improved","successCriteria":"improved","constraints":"improved","assumptions":"improved"}';
+      "assumptions: " + (data.assumptions||"EMPTY") + "\n" +
+      "successCriteria: " + (data.successCriteria||"EMPTY") + "\n\n" +
+      "FIELDS TO REWRITE:\n" + acceptedFields + "\n\n" +
+      "Return ONLY JSON with the rewritten fields and nothing else:\n" +
+      "{\"context\":\"\",\"decisionStatement\":\"\",\"owner\":\"\",\"objectives\":\"\",\"deadline\":\"\",\"scopeIn\":\"\",\"scopeOut\":\"\",\"keyUncertainties\":\"\",\"constraints\":\"\",\"assumptions\":\"\",\"successCriteria\":\"\"}";
 
-    aiCall(improvePrompt, (r) => {
+    aiCall(applyPrompt, (r) => {
       let result = r;
       if (r && r._raw) {
-        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
-        catch(e) { setApplying(false); onAIMsg({role:"ai",text:"Could not parse improvements. Try again."}); return; }
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) {
+          setApplying(false);
+          onAIMsg({ role:"ai", text:"Could not apply improvements. Try again." }); return;
+        }
       }
-      if (!result || typeof result !== "object" || result.error) {
-        setApplying(false);
-        onAIMsg({role:"ai", text:"Error applying improvements. Try again."});
-        return;
+      if (!result || typeof result !== "object") {
+        setApplying(false); return;
       }
 
-      // Apply all returned fields (skip placeholder values)
-      const PLACEHOLDERS = ["improved","only if flagged","empty","n/a",""];
+      const PLACEHOLDERS = ["empty","improved","n/a","","null"];
       const updates = {};
-      ["decisionStatement","context","scopeIn","scopeOut","successCriteria","constraints","assumptions","owner"].forEach(key => {
-        const val = result[key];
+      // Only apply fields that were in the accepted flags
+      const allowedFields = new Set(flagsToApply.map(f=>f.field));
+      Object.entries(result).forEach(([key, val]) => {
+        if (!allowedFields.has(key)) return; // never touch un-flagged fields
         if (val && typeof val === "string") {
           const clean = val.trim();
           if (clean && !PLACEHOLDERS.includes(clean.toLowerCase())) {
@@ -779,33 +963,39 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
         }
       });
 
-      if (Object.keys(updates).length === 0) {
-        setApplying(false);
-        onAIMsg({role:"ai", text:"No improvements returned. The frame may already be good or try again."});
-        return;
-      }
-
-      const newData = {...data, ...updates};
+      const newData = { ...data, ...updates };
       onChange(newData);
+      setImpStep(3); // done
       setApplying(false);
-      onAIMsg({role:"ai", text:"Improved " + Object.keys(updates).length + " field(s). Running Frame Check to verify score improvement…"});
 
-      // Re-run frame check after 600ms
+      // Auto re-run frame check
+      onAIMsg({ role:"ai", text:"Applied " + Object.keys(updates).length + " improvement(s). Re-running Frame Check…" });
       setTimeout(() => {
         setChecking(true);
         const recheckPrompt =
-          "You are a senior Decision Quality expert. Evaluate this improved decision frame strictly. " +
+          "You are an elite DQ facilitator. Re-evaluate this improved decision frame strictly. " +
+          "Score each of 10 dimensions 0-10. " +
           "Decision Statement: \"" + (newData.decisionStatement||"") + "\". " +
           "Context: \"" + (newData.context||"") + "\". " +
+          "Owner: \"" + (newData.owner||"") + "\". " +
+          "Objectives: \"" + (newData.objectives||"") + "\". " +
+          "Deadline: \"" + (newData.deadline||"") + "\". " +
           "Scope In: \"" + (newData.scopeIn||"") + "\". " +
           "Scope Out: \"" + (newData.scopeOut||"") + "\". " +
-          "Owner: \"" + (newData.owner||"") + "\". " +
+          "Key Uncertainties: \"" + (newData.keyUncertainties||"") + "\". " +
           "Constraints: \"" + (newData.constraints||"") + "\". " +
           "Assumptions: \"" + (newData.assumptions||"") + "\". " +
           "Success Criteria: \"" + (newData.successCriteria||"") + "\". " +
-          "Score this frame 0-100. A frame with clear decision statement, context, scope, criteria, constraints and assumptions should score 75+. " +
-          "Return ONLY JSON: " +
-          '{"overallScore":82,"status":"strong|adequate|weak","flags":[{"severity":"warning","field":"field","message":"issue"}],"improvedStatement":null,"hiddenAssumptions":["string"],"missingElements":["string"],"executiveSummary":"summary"}';
+          "Return ONLY valid JSON (same schema as before): " +
+          "{\"overallScore\":80,\"status\":\"strong|adequate|weak\"," +
+          "\"dimensions\":{\"decisionClarity\":8,\"ownership\":7,\"objectives\":7,\"timeframe\":6,\"scopeDefinition\":7,\"constraints\":6,\"uncertaintyAwareness\":6,\"alternativeOpenness\":8,\"stakeholderAwareness\":5,\"overallFraming\":7}," +
+          "\"flags\":[{\"id\":\"f1\",\"severity\":\"warning\",\"field\":\"f\",\"title\":\"t\",\"message\":\"m\",\"why\":\"w\",\"suggestion\":\"s\",\"before\":\"b\",\"after\":\"a\"}]," +
+          "\"hiddenAssumptions\":[],\"missingElements\":[]," +
+          "\"diagnosticSummary\":\"summary\"," +
+          "\"improvedStatement\":null," +
+          "\"downstreamRecommendations\":[{\"module\":\"Issue Raising\",\"reason\":\"r\"}]," +
+          "\"facilitatorQuestions\":[\"q1\"]," +
+          "\"executiveSummary\":\"summary\"}";
         aiCall(recheckPrompt, (r2) => {
           let res2 = r2;
           if (r2 && r2._raw) {
@@ -813,614 +1003,721 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
           }
           upd("aiValidation", res2);
           setChecking(false);
-          const score = res2?.overallScore;
-          const summary = typeof res2?.executiveSummary === "string" ? res2.executiveSummary : "";
-          onAIMsg({role:"ai", text:"Frame Check complete. Score: " + (score||"?") + "/100. " + summary});
+          const s2 = res2?.overallScore;
+          onAIMsg({ role:"ai", text:"Frame Check updated: " + (s2||"?") + "/100 — " + scoreLabel(s2||0) });
         });
-      }, 600);
+      }, 800);
     });
   };
 
+  const v = data.aiValidation;
+  const flags = v?.flags || [];
+  const criticalFlags = flags.filter(f => f.severity === "critical");
+  const warningFlags  = flags.filter(f => f.severity === "warning");
+  const infoFlags     = flags.filter(f => f.severity === "info");
 
-  const scoreColor = (s) => s>=75 ? DS.success : s>=50 ? DS.warning : DS.danger;
-  const statusVar = (s) => s==="strong"?"green":s==="adequate"?"warn":"danger";
+  const FLAG_COLORS = {
+    critical: { bg:"#fef2f2", border:"#fecaca", text:"#dc2626", icon:"⛔" },
+    warning:  { bg:"#fffbeb", border:"#fde68a", text:"#d97706", icon:"⚠" },
+    info:     { bg:"#eff6ff", border:"#bfdbfe", text:"#2563eb", icon:"ℹ" },
+  };
 
+  // ── RENDER ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
-      {/* Module header */}
-      <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
-        display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:11, color:DS.inkTer, letterSpacing:1, textTransform:"uppercase", fontWeight:700, marginBottom:3 }}>Module 01</div>
-          <div style={{ fontFamily:"'Libre Baskerville', Georgia, serif", fontSize:22, fontWeight:700, color:DS.ink, letterSpacing:-.3 }}>Problem Definition</div>
-          {data.projectName && (
-            <div style={{ fontSize:11, color:DS.inkTer, marginTop:2 }}>{data.projectName}</div>
-          )}
+    <div style={{ display:"flex", flexDirection:"column", height:"100%",
+      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif" }}>
+
+      {/* ── HEADER ─────────────────────────────────────────────── */}
+      <div style={{ padding:"12px 24px", background:DS.canvas,
+        borderBottom:`1px solid ${DS.canvasBdr}`, flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
+              fontWeight:700, letterSpacing:1 }}>Module 01</div>
+            <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:20,
+              fontWeight:700, color:DS.ink }}>Problem Definition</div>
+          </div>
+          {/* Completion + score */}
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
+                letterSpacing:.5 }}>Completion</div>
+              <div style={{ fontSize:14, fontWeight:700, color:pct>=80?DS.success:DS.warning }}>
+                {pct}%
+              </div>
+            </div>
+            {v?.overallScore > 0 && (
+              <div style={{ textAlign:"right", paddingLeft:10,
+                borderLeft:`1px solid ${DS.canvasBdr}` }}>
+                <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
+                  letterSpacing:.5 }}>DQ Score</div>
+                <div style={{ fontSize:20, fontWeight:700, fontFamily:"'Libre Baskerville',serif",
+                  color:scoreColor(v.overallScore), lineHeight:1 }}>{v.overallScore}</div>
+              </div>
+            )}
+          </div>
+          {/* Action buttons */}
+          <div style={{ display:"flex", gap:6 }}>
+            {v?.flags?.length > 0 && (
+              <Btn variant="secondary" size="sm" onClick={startImprovements}>
+                ✦ Apply Improvements {criticalFlags.length > 0 && `(${criticalFlags.length} critical)`}
+              </Btn>
+            )}
+            <Btn variant="primary" size="sm" icon="spark"
+              onClick={validateWithAI} disabled={aiBusy||checking}>
+              {checking ? "Checking…" : "AI Frame Check"}
+            </Btn>
+          </div>
         </div>
-        <Badge variant={data.aiValidation ? statusVar(data.aiValidation.status) : "default"}>
-          {data.aiValidation ? `DQ Score: ${data.aiValidation.overallScore}` : "Not validated"}
-        </Badge>
-        <Btn variant="primary" icon="spark" onClick={validateWithAI} disabled={aiBusy||checking}>
-          {checking ? "Validating…" : "AI Frame Check"}
-        </Btn>
+
+        {/* Completion bar */}
+        <div style={{ height:3, background:DS.canvasBdr, borderRadius:2, overflow:"hidden" }}>
+          <div style={{ height:"100%", borderRadius:2, transition:"width .4s",
+            background:pct>=80?DS.success:pct>=50?DS.warning:DS.danger,
+            width:pct+"%" }}/>
+        </div>
       </div>
 
-      {/* Tab bar */}
-      <div style={{ display:"flex", gap:0, background:DS.canvasAlt,
-        borderBottom:`1px solid ${DS.canvasBdr}`, flexShrink:0, paddingLeft:28 }}>
+      {/* ── TAB BAR ───────────────────────────────────────────── */}
+      <div style={{ display:"flex", background:DS.canvasAlt,
+        borderBottom:`1px solid ${DS.canvasBdr}`, flexShrink:0, overflowX:"auto" }}>
         {TABS.map(t => (
           <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{ padding:"10px 16px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-              cursor:"pointer", border:"none", borderBottom:`2px solid ${tab===t.id?DS.accent:"transparent"}`,
-              background:"transparent", color:tab===t.id?DS.accent:DS.inkTer,
-              letterSpacing:.4, transition:"all .12s",
-              ...(t.id==="validation" && data.aiValidation?.flags?.filter(f=>f.severity==="critical").length > 0
-                ? { color:DS.danger } : {})
-            }}>
+            style={{ padding:"9px 18px", fontSize:11, fontWeight:700, fontFamily:"inherit",
+              cursor:"pointer", border:"none", background:"transparent",
+              borderBottom:`2px solid ${tab===t.id?DS.accent:"transparent"}`,
+              color:tab===t.id?DS.accent:DS.inkTer, whiteSpace:"nowrap",
+              display:"flex", alignItems:"center", gap:5,
+              transition:"color .15s" }}>
             {t.label}
-            {t.id==="validation" && data.aiValidation && (
-              <span style={{ marginLeft:6, padding:"1px 5px", borderRadius:10, fontSize:9, fontWeight:700,
-                background: scoreColor(data.aiValidation.overallScore), color:"#fff" }}>
-                {data.aiValidation.overallScore}
-              </span>
+            {t.highlight && (
+              <span style={{ width:6,height:6,borderRadius:"50%",
+                background:scoreColor(v?.overallScore||0),flexShrink:0 }}/>
             )}
           </button>
         ))}
       </div>
 
+      {/* ── CONTENT ───────────────────────────────────────────── */}
       <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
+        <div style={{ maxWidth:760, margin:"0 auto" }}>
 
-        {tab==="identity" && (
-          <div style={{ maxWidth:900 }}>
-            {/* Project identity summary card */}
-            <div style={{ marginBottom:24, padding:"18px 22px",
-              background:`linear-gradient(135deg, ${DS.ink} 0%, ${DS.chromeSub} 100%)`,
-              borderRadius:10, border:`1px solid ${DS.border}` }}>
-              <div style={{ display:"flex", alignItems:"flex-start", gap:20 }}>
-                <div style={{ width:52, height:52, borderRadius:10, background:DS.accent,
-                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
-                    <polygon points="12,2 22,8.5 22,15.5 12,22 2,15.5 2,8.5"/>
-                    <line x1="12" y1="2" x2="12" y2="22"/>
-                    <line x1="2" y1="8.5" x2="22" y2="8.5"/>
-                    <line x1="2" y1="15.5" x2="22" y2="15.5"/>
-                  </svg>
+          {/* ══ TAB 1: CONTEXT ══════════════════════════════════ */}
+          {tab==="context" && (
+            <div>
+              <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                fontWeight:700, color:DS.ink, marginBottom:4 }}>
+                What is the situation?
+              </div>
+              <div style={{ fontSize:12, color:DS.inkTer, marginBottom:20, lineHeight:1.6 }}>
+                Describe the situation or opportunity that triggered this decision — without jumping to solutions.
+                Focus on context, not answers.
+              </div>
+
+              <Field label="Situation / Context" fieldKey="context" required rows={4}
+                placeholder="What situation, trigger, or opportunity created the need for this decision? Describe the current reality, what is changing, and why this matters now."
+                hint="Describe the situation, not the solution"/>
+
+              <Field label="Why This Decision Matters" fieldKey="importance" rows={3}
+                placeholder="What is the cost of making a poor decision here? What value is at stake? What happens if we delay or decide badly?"
+                hint="Stakes and urgency"/>
+
+              <Field label="Background (Optional)" fieldKey="background" rows={3}
+                placeholder="Relevant history, previous decisions, or context that informs this decision."/>
+
+              <div style={{ marginTop:8, padding:"12px 14px", background:DS.accentSoft,
+                border:`1px solid ${DS.accentLine}`, borderRadius:7 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
+                  textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>
+                  DQ Principle
                 </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:20,
-                    fontWeight:700, color:DS.textPri, marginBottom:4, lineHeight:1.25 }}>
-                    {data.projectName||"Untitled Project"}
-                  </div>
-                  <div style={{ fontSize:12, color:DS.textSec, marginBottom:8 }}>
-                    {data.projectDescription||"No description yet."}
-                  </div>
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    {data.projectCode && <Badge variant="chrome">{data.projectCode}</Badge>}
-                    {data.sector && <Badge variant="blue">{data.sector}</Badge>}
-                    {data.decisionType && <Badge variant="chrome">{data.decisionType}</Badge>}
-                    {data.confidentiality && <Badge variant={data.confidentiality==="Strictly Confidential"?"danger":data.confidentiality==="Confidential"?"warn":"default"}>{data.confidentiality}</Badge>}
-                    {data.projectStatus && <Badge variant={data.projectStatus==="Active"?"green":data.projectStatus==="Completed"?"blue":"default"}>{data.projectStatus}</Badge>}
-                  </div>
-                </div>
-                <div style={{ textAlign:"right", flexShrink:0 }}>
-                  <div style={{ fontSize:10, color:DS.textTer, marginBottom:3 }}>Session date</div>
-                  <div style={{ fontSize:13, fontWeight:700, color:DS.textSec }}>
-                    {data.sessionDate ? new Date(data.sessionDate).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}) : "Not set"}
-                  </div>
-                  <div style={{ fontSize:10, color:DS.textTer, marginTop:6 }}>Facilitator</div>
-                  <div style={{ fontSize:12, fontWeight:600, color:DS.textSec }}>{data.facilitator||"—"}</div>
+                <div style={{ fontSize:11, color:DS.ink, lineHeight:1.6 }}>
+                  Context sets the frame. A good context statement describes the situation and stakes without
+                  proposing solutions. Teams that skip context often solve the wrong problem beautifully.
                 </div>
               </div>
             </div>
+          )}
 
-            {/* Editable fields */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
-              <div>
-                <Field label="Project Name" required>
-                  <Input value={data.projectName||""} onChange={v=>upd("projectName",v)}
-                    placeholder="e.g. APAC Market Entry Strategy"/>
-                </Field>
-                <Field label="Project Code / Reference">
-                  <Input value={data.projectCode||""} onChange={v=>upd("projectCode",v)}
-                    placeholder="e.g. STR-2025-001"/>
-                </Field>
-                <Field label="Client / Organisation">
-                  <Input value={data.client||""} onChange={v=>upd("client",v)}
-                    placeholder="e.g. Acme Corp — Strategy Team"/>
-                </Field>
-                <Field label="Project Description">
-                  <Textarea value={data.projectDescription||""} onChange={v=>upd("projectDescription",v)}
-                    rows={3} placeholder="Brief description of this project…"/>
-                </Field>
+          {/* ══ TAB 2: DECISION FRAME ═══════════════════════════ */}
+          {tab==="frame" && (
+            <div>
+              <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                fontWeight:700, color:DS.ink, marginBottom:4 }}>
+                What decision must be made?
               </div>
-              <div>
-                <Field label="Decision Type">
-                  <Select value={data.decisionType||"Strategic"} onChange={v=>upd("decisionType",v)}
-                    options={DECISION_TYPES.map(t=>({value:t,label:t}))}/>
-                </Field>
-                <Field label="Sector">
-                  <Select value={data.sector||""} onChange={v=>upd("sector",v)}
-                    options={[{value:"",label:"Select sector…"},...SECTORS.map(t=>({value:t,label:t}))]}/>
-                </Field>
-                <Field label="Facilitator / Lead">
-                  <Input value={data.facilitator||""} onChange={v=>upd("facilitator",v)}
-                    placeholder="Name of session facilitator"/>
-                </Field>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                  <Field label="Confidentiality">
-                    <Select value={data.confidentiality||"Confidential"} onChange={v=>upd("confidentiality",v)}
-                      options={CONFIDENTIALITY_LEVELS.map(t=>({value:t,label:t}))}/>
-                  </Field>
-                  <Field label="Status">
-                    <Select value={data.projectStatus||"Active"} onChange={v=>upd("projectStatus",v)}
-                      options={PROJECT_STATUSES.map(t=>({value:t,label:t}))}/>
-                  </Field>
+              <div style={{ fontSize:12, color:DS.inkTer, marginBottom:20, lineHeight:1.6 }}>
+                Define the core decision as an open question. Name the decision-maker. State what value this decision should create or protect.
+              </div>
+
+              {/* Decision Statement — most important field */}
+              <div style={{ marginBottom:18 }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:5 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    textTransform:"uppercase", letterSpacing:.6 }}>
+                    Decision Statement <span style={{ color:DS.danger }}>*</span>
+                  </div>
                 </div>
-                <Field label="Session Date">
-                  <Input value={data.sessionDate||""} onChange={v=>upd("sessionDate",v)}
-                    placeholder="YYYY-MM-DD" style={{ padding:"8px 12px" }}/>
-                </Field>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {tab==="frame" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, maxWidth:1100 }}>
-            <div>
-              <Field label="Decision Statement" required hint="Start with 'How should we…' or 'What is the best…'">
-                <Textarea value={data.decisionStatement} onChange={v=>upd("decisionStatement",v)} rows={3}
-                  placeholder="What specific decision are we making?"/>
-              </Field>
-              <Field label="Business Context" required>
-                <Textarea value={data.context} onChange={v=>upd("context",v)} rows={4}
-                  placeholder="What is the situation driving this decision?"/>
-              </Field>
-              <Field label="Business Background">
-                <Textarea value={data.background} onChange={v=>upd("background",v)} rows={3}
-                  placeholder="Relevant history, prior decisions, strategic context"/>
-              </Field>
-            </div>
-            <div>
-              <Field label="Trigger / Precipitating Event">
-                <Textarea value={data.trigger} onChange={v=>upd("trigger",v)} rows={2}
-                  placeholder="What event or condition is forcing this decision now?"/>
-              </Field>
-              <Field label="Problem Symptoms" hint="Distinguish from root decision">
-                <Textarea value={data.symptoms} onChange={v=>upd("symptoms",v)} rows={3}
-                  placeholder="Observable symptoms — not the decision itself"/>
-              </Field>
-              <Field label="Root Decision Problem" required>
-                <Textarea value={data.rootDecision} onChange={v=>upd("rootDecision",v)} rows={3}
-                  placeholder="The underlying strategic choice beneath the symptoms"/>
-              </Field>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-                <Field label="Strategic Importance">
-                  <Select value={data.importance} onChange={v=>upd("importance",v)}
-                    options={IMPORTANCE_OPTS.map(o=>({value:o,label:o}))}/>
-                </Field>
-                <Field label="Decision Urgency">
-                  <Select value={data.urgency} onChange={v=>upd("urgency",v)}
-                    options={URGENCY_OPTS.map(o=>({value:o,label:o}))}/>
-                </Field>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {tab==="scope" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, maxWidth:1100 }}>
-            <div>
-              <Field label="In Scope" required>
-                <Textarea value={data.scopeIn} onChange={v=>upd("scopeIn",v)} rows={4}
-                  placeholder="Explicitly what this decision covers"/>
-              </Field>
-              <Field label="Out of Scope" required>
-                <Textarea value={data.scopeOut} onChange={v=>upd("scopeOut",v)} rows={4}
-                  placeholder="What is explicitly excluded — boundary setting"/>
-              </Field>
-            </div>
-            <div>
-              <Field label="Time Horizon">
-                <Input value={data.timeHorizon} onChange={v=>upd("timeHorizon",v)}
-                  placeholder="e.g. 18 months to entry, 36 months to break-even"/>
-              </Field>
-              <Field label="Decision Deadline" required>
-                <Input value={data.deadline} onChange={v=>upd("deadline",v)}
-                  placeholder="e.g. Board decision required by Q2 FY26"/>
-              </Field>
-              <Field label="Decision Owner" required>
-                <Input value={data.owner} onChange={v=>upd("owner",v)}
-                  placeholder="Who has final decision authority?"/>
-              </Field>
-              <Field label="Linked Risks">
-                <Textarea value={data.risks} onChange={v=>upd("risks",v)} rows={3}
-                  placeholder="Key risk factors connected to this decision"/>
-              </Field>
-              <Field label="Linked Opportunities">
-                <Textarea value={data.opportunities} onChange={v=>upd("opportunities",v)} rows={3}
-                  placeholder="Strategic opportunities enabled by this decision"/>
-              </Field>
-            </div>
-          </div>
-        )}
-
-        {tab==="stakeholders" && (
-          <div style={{ maxWidth:900 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-              <div style={{ fontSize:12, color:DS.inkSub }}>
-                {data.stakeholders.length} stakeholder{data.stakeholders.length!==1?"s":""} identified
-              </div>
-              <Btn variant="secondary" icon="plus" size="sm"
-                onClick={()=>upd("stakeholders",[...data.stakeholders, { id:uid("sh"), name:"", role:"", influence:"Medium" }])}>
-                Add Stakeholder
-              </Btn>
-            </div>
-            <div style={{ border:`1px solid ${DS.canvasBdr}`, borderRadius:8, overflow:"hidden" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                <thead>
-                  <tr style={{ background:DS.canvasAlt }}>
-                    {["Name","Role / Interest","Influence",""].map(h=>(
-                      <th key={h} style={{ padding:"10px 14px", fontSize:10, fontWeight:700, color:DS.inkTer,
-                        letterSpacing:.8, textTransform:"uppercase", textAlign:"left",
-                        borderBottom:`1px solid ${DS.canvasBdr}` }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.stakeholders.map((s,i)=>(
-                    <tr key={s.id} style={{ borderBottom: i<data.stakeholders.length-1 ? `1px solid ${DS.canvasBdr}` : "none" }}>
-                      <td style={{ padding:"8px 14px", width:"30%" }}>
-                        <Input value={s.name} onChange={v=>updStakeholder(s.id,"name",v)} placeholder="Stakeholder name"/>
-                      </td>
-                      <td style={{ padding:"8px 14px", width:"40%" }}>
-                        <Input value={s.role} onChange={v=>updStakeholder(s.id,"role",v)} placeholder="Role or interest"/>
-                      </td>
-                      <td style={{ padding:"8px 14px", width:"20%" }}>
-                        <Select value={s.influence} onChange={v=>updStakeholder(s.id,"influence",v)}
-                          options={["High","Medium","Low"].map(o=>({value:o,label:o}))}/>
-                      </td>
-                      <td style={{ padding:"8px 14px", textAlign:"center" }}>
-                        <button onClick={()=>upd("stakeholders",data.stakeholders.filter(x=>x.id!==s.id))}
-                          style={{ background:"none", border:"none", cursor:"pointer", color:DS.inkDis, display:"flex" }}>
-                          <Svg path={ICONS.x} size={13} color={DS.inkTer}/>
-                        </button>
-                      </td>
-                    </tr>
+                <div style={{ fontSize:11, color:DS.inkTer, marginBottom:6, lineHeight:1.5 }}>
+                  Phrase as an open question. Good: <em>"What is the best strategy for X?"</em> — Bad: <em>"Should we do X?"</em> or <em>"We need to improve X."</em>
+                </div>
+                <textarea value={data.decisionStatement||""} rows={3}
+                  onChange={e=>handleChange("decisionStatement", e.target.value)}
+                  placeholder="What is the best [strategy / approach / allocation] for [specific scope] given [key constraints or uncertainties]?"
+                  style={{ width:"100%", padding:"9px 12px", fontSize:12, fontFamily:"inherit",
+                    background:DS.canvasAlt, borderRadius:6, color:DS.ink, outline:"none",
+                    resize:"vertical", lineHeight:1.6, boxSizing:"border-box",
+                    border:`1.5px solid ${
+                      liveFlags.decisionStatement?.level==="critical"?"#fca5a5":
+                      liveFlags.decisionStatement?.level==="warning"?"#fde68a":DS.canvasBdr}`}}/>
+                <LiveFlag field="decisionStatement"/>
+                {/* Pattern examples */}
+                <div style={{ marginTop:8, display:"flex", flexWrap:"wrap", gap:6 }}>
+                  {[
+                    "What is the best development strategy for [Asset X] over the next [N] years?",
+                    "Which market entry approach should [Company] pursue given [constraints]?",
+                    "How should [Organisation] allocate capital across [portfolio] to maximise [objective]?",
+                  ].map((ex,i)=>(
+                    <button key={i} onClick={()=>handleChange("decisionStatement", ex)}
+                      style={{ padding:"3px 9px", fontSize:10, fontFamily:"inherit",
+                        border:`1px solid ${DS.canvasBdr}`, borderRadius:4,
+                        background:DS.canvasAlt, color:DS.inkTer, cursor:"pointer",
+                        textAlign:"left" }}>
+                      Use template →
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                </div>
+              </div>
 
-        {tab==="constraints" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, maxWidth:1100 }}>
-            <div>
-              <Field label="Constraints" required hint="Hard limits — non-negotiable">
-                <Textarea value={data.constraints} onChange={v=>upd("constraints",v)} rows={5}
-                  placeholder="Budget ceiling, regulatory requirements, resource limits, policy boundaries"/>
-              </Field>
-              <Field label="Assumptions" hint="Identify hidden assumptions explicitly">
-                <Textarea value={data.assumptions} onChange={v=>upd("assumptions",v)} rows={5}
-                  placeholder="What are we assuming to be true that may not be?"/>
-              </Field>
-            </div>
-            <div>
-              <Field label="Facilitator Notes" hint="Internal only">
-                <Textarea value={data.facilitatorNotes} onChange={v=>upd("facilitatorNotes",v)} rows={5}
-                  placeholder="Workshop observations, unresolved tensions, process notes"/>
-              </Field>
-            </div>
-          </div>
-        )}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                <Field label="Decision Owner" fieldKey="owner" required rows={1} type="text"
+                  placeholder="Name or role of the person who approves this decision"
+                  hint="One person, not a committee"/>
+                <Field label="Decision Deadline" fieldKey="deadline" rows={1} type="text"
+                  placeholder="When must this decision be made?"
+                  hint="Create urgency and timing clarity"/>
+              </div>
 
-        {tab==="outcomes" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, maxWidth:1100 }}>
-            <div>
-              <Field label="Success Criteria" required>
-                <Textarea value={data.successCriteria} onChange={v=>upd("successCriteria",v)} rows={4}
-                  placeholder="Measurable outcomes that define a successful decision"/>
-              </Field>
-            </div>
-            <div>
-              <Field label="Failure Consequences" required hint="What happens if we decide poorly?">
-                <Textarea value={data.failureConsequences} onChange={v=>upd("failureConsequences",v)} rows={4}
-                  placeholder="Consequences of making the wrong decision, or no decision"/>
-              </Field>
-            </div>
-          </div>
-        )}
+              <Field label="Objectives / Value Drivers" fieldKey="objectives" required rows={3}
+                placeholder="What are we trying to maximise, minimise, protect, or achieve? e.g. maximise NPV, reduce operational risk, improve reliability, increase market share"
+                hint="Value to create or protect — not actions"/>
+              <LiveFlag field="objectives"/>
 
-        {tab==="validation" && (
-          <div style={{ maxWidth:900 }}>
-            {!data.aiValidation ? (
-              <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`,
-                borderRadius:10, color:DS.inkTer }}>
-                <Svg path={ICONS.spark} size={32} color={DS.inkDis}/>
-                <div style={{ fontSize:14, marginTop:12, marginBottom:20 }}>Run AI Frame Check to validate this decision definition</div>
-                <Btn variant="primary" icon="spark" onClick={validateWithAI} disabled={aiBusy||checking}>
-                  {checking ? "Validating…" : "Run AI Frame Check"}
+              <Field label="Key Stakeholders" fieldKey="stakeholders" rows={3}
+                placeholder="Who are the key stakeholders? Who will be affected by this decision? Whose input is required?"
+                hint="Include decision influencers, approvers, and those impacted"/>
+
+              <div style={{ marginTop:8, padding:"12px 14px", background:DS.accentSoft,
+                border:`1px solid ${DS.accentLine}`, borderRadius:7 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
+                  textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>DQ Guard Rail</div>
+                <div style={{ fontSize:11, color:DS.ink, lineHeight:1.6 }}>
+                  A strong decision statement is an open question that preserves alternatives.
+                  If your statement implies a solution or can be answered yes/no, reframe it.
+                  The absence of a named decision-owner is one of the most common causes of decision failure.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══ TAB 3: SCOPE & BOUNDARIES ═══════════════════════ */}
+          {tab==="scope" && (
+            <div>
+              <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                fontWeight:700, color:DS.ink, marginBottom:4 }}>
+                Scope, boundaries and uncertainty
+              </div>
+              <div style={{ fontSize:12, color:DS.inkTer, marginBottom:20, lineHeight:1.6 }}>
+                Define what is and is not included in this decision. Surface the key uncertainties.
+                State constraints as non-negotiable givens.
+              </div>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:4 }}>
+                <Field label="Scope In" fieldKey="scopeIn" required rows={3}
+                  placeholder="What IS included in this decision? What assets, markets, time periods, or choices are within scope?"
+                  hint="Be specific and concrete"/>
+                <Field label="Scope Out" fieldKey="scopeOut" required rows={3}
+                  placeholder="What is explicitly EXCLUDED? What are we NOT deciding here?"
+                  hint="Prevent scope creep"/>
+              </div>
+
+              <Field label="Key Uncertainties" fieldKey="keyUncertainties" required rows={4}
+                placeholder="What important uncertainties could materially affect this decision? e.g. market demand, commodity prices, regulatory outcomes, technology performance, competitor moves, cost escalation"
+                hint="Distinguish uncertain from assumed-certain"/>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                <Field label="Constraints / Givens" fieldKey="constraints" required rows={3}
+                  placeholder="What conditions must be treated as fixed? e.g. budget cap of $X, regulatory requirements, existing contracts, technology constraints"
+                  hint="Non-negotiable limits"/>
+                <Field label="Assumptions" fieldKey="assumptions" rows={3}
+                  placeholder="What are we assuming to be true for this decision? Make implicit assumptions explicit."
+                  hint="Explicit testable statements"/>
+              </div>
+
+              <Field label="Time Horizon" fieldKey="timeHorizon" rows={2}
+                placeholder="What is the relevant time horizon for this decision? Over what period do outcomes matter?"
+                hint="Planning horizon, not just deadline"/>
+
+              <div style={{ marginTop:8, padding:"12px 14px", background:DS.accentSoft,
+                border:`1px solid ${DS.accentLine}`, borderRadius:7 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
+                  textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>DQ Guard Rail</div>
+                <div style={{ fontSize:11, color:DS.ink, lineHeight:1.6 }}>
+                  Most decision failures stem from scope confusion or hidden assumptions treated as facts.
+                  Key uncertainties defined here feed directly into your Influence Diagram and Scenario Planning modules.
+                  Constraints are non-negotiable — if they are negotiable, they are objectives.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══ TAB 4: SUCCESS MEASURES ══════════════════════════ */}
+          {tab==="outcomes" && (
+            <div>
+              <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                fontWeight:700, color:DS.ink, marginBottom:4 }}>
+                What does success look like?
+              </div>
+              <div style={{ fontSize:12, color:DS.inkTer, marginBottom:20, lineHeight:1.6 }}>
+                Define measurable outcomes that define a successful decision. Success criteria must be specific enough that a reasonable person could assess whether they were met.
+              </div>
+
+              <Field label="Success Criteria" fieldKey="successCriteria" required rows={4}
+                placeholder="What would define a successful decision outcome? Include measurable thresholds. e.g. NPV > $50M at a 10% discount rate, operational reliability > 95%, time to market within 18 months, stakeholder approval by Q3"
+                hint="Must be measurable — add numbers and thresholds"/>
+
+              <Field label="Failure Consequences" fieldKey="failureConsequences" rows={3}
+                placeholder="What are the consequences of making a poor decision here? What does failure look like?"
+                hint="Clarifies stakes"/>
+
+              <Field label="Facilitator Notes" fieldKey="facilitatorNotes" rows={3}
+                placeholder="Notes for the facilitator or DQ analyst — observations about the framing process, team dynamics, or issues to probe further."/>
+
+              <div style={{ marginTop:8, padding:"12px 14px", background:DS.accentSoft,
+                border:`1px solid ${DS.accentLine}`, borderRadius:7 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
+                  textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>DQ Guard Rail</div>
+                <div style={{ fontSize:11, color:DS.ink, lineHeight:1.6 }}>
+                  Vague success criteria like "improve performance" or "grow the business" are not assessable.
+                  The DQ standard requires measurable thresholds. Success criteria flow directly into the
+                  evaluation criteria in Module 06 (Qualitative Assessment).
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══ TAB 5: AI FRAME CHECK ═══════════════════════════ */}
+          {tab==="validation" && (
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                    fontWeight:700, color:DS.ink, marginBottom:3 }}>AI Frame Check</div>
+                  <div style={{ fontSize:12, color:DS.inkTer, lineHeight:1.5 }}>
+                    AI evaluates your decision frame against DQ methodology. Run it at any time.
+                  </div>
+                </div>
+                <Btn variant="primary" size="sm" icon="spark"
+                  onClick={validateWithAI} disabled={aiBusy||checking}>
+                  {checking ? "Checking…" : v ? "Re-run Frame Check" : "Run Frame Check"}
                 </Btn>
               </div>
-            ) : (
-              <div>
-                {/* Score banner */}
-                <div style={{ display:"flex", alignItems:"center", gap:16, padding:"18px 22px",
-                  background: data.aiValidation.overallScore>=75 ? DS.successSoft : data.aiValidation.overallScore>=50 ? DS.warnSoft : DS.dangerSoft,
-                  border:`1px solid ${data.aiValidation.overallScore>=75 ? DS.successLine : data.aiValidation.overallScore>=50 ? DS.warnLine : DS.dangerLine}`,
-                  borderRadius:8, marginBottom:20 }}>
-                  <div style={{ fontSize:40, fontWeight:700, fontFamily:"'Libre Baskerville', Georgia, serif",
-                    color:scoreColor(data.aiValidation.overallScore), lineHeight:1 }}>
-                    {data.aiValidation.overallScore}
+
+              {/* ── No result yet ── */}
+              {!v && !checking && (
+                <div style={{ padding:"48px 32px", textAlign:"center",
+                  border:`1.5px dashed ${DS.canvasBdr}`, borderRadius:10, color:DS.inkTer }}>
+                  <div style={{ fontSize:28, marginBottom:12, opacity:.4 }}>✦</div>
+                  <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>
+                    Frame Check not yet run
                   </div>
-                  <div>
-                    <Badge variant={statusVar(data.aiValidation.status)}>
-                      Frame Quality: {data.aiValidation.status}
-                    </Badge>
-                    {data.aiValidation.executiveSummary && (
-                      <div style={{ fontSize:12, color:DS.inkSub, marginTop:6, lineHeight:1.55 }}>
-                        {data.aiValidation.executiveSummary}
-                      </div>
-                    )}
-                  {data.aiValidation.overallScore < 90 && (
-                    <div style={{ marginTop:14,padding:"12px 16px",background:DS.accentSoft,
-                      border:"1px solid "+DS.accentLine,borderRadius:8,
-                      display:"flex",alignItems:"center",gap:12 }}>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontSize:12,fontWeight:700,color:DS.accent,marginBottom:3 }}>Apply AI improvements to all flagged fields</div>
-                        <div style={{ fontSize:11,color:DS.inkTer,lineHeight:1.5 }}>Rewrites flagged fields to address every validation issue, then re-runs Frame Check automatically.</div>
-                      </div>
-                      <Btn variant="primary" onClick={applyImprovements} disabled={applying||aiBusy} style={{ flexShrink:0 }}>
-                        {applying?"Applying…":"✓ Apply All Improvements"}
-                      </Btn>
-                    </div>
-                  )}
+                  <div style={{ fontSize:12, lineHeight:1.6, maxWidth:400, margin:"0 auto" }}>
+                    Complete at least the Decision Statement and Context, then run AI Frame Check
+                    to get a DQ score, validation flags, and improvement suggestions.
                   </div>
                 </div>
+              )}
 
-                {/* Flags */}
-                {data.aiValidation.flags?.length > 0 && (
-                  <SectionCard title="Validation Flags">
-                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                      {data.aiValidation.flags.map((f,i) => (
-                        <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 14px",
-                          background: f.severity==="critical" ? DS.dangerSoft : f.severity==="warning" ? DS.warnSoft : DS.accentSoft,
-                          border:`1px solid ${f.severity==="critical" ? DS.dangerLine : f.severity==="warning" ? DS.warnLine : DS.accentLine}`,
-                          borderRadius:6 }}>
-                          <Badge variant={f.severity==="critical"?"danger":f.severity==="warning"?"warn":"blue"} size="xs">
-                            {f.severity}
-                          </Badge>
-                          <div>
-                            <span style={{ fontSize:11, fontWeight:700, color:DS.inkSub }}>{f.field}: </span>
-                            <span style={{ fontSize:12, color:DS.ink }}>{f.message}</span>
+              {checking && (
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
+                  padding:"48px", gap:14 }}>
+                  <div style={{ display:"flex", gap:6 }}>
+                    {[0,1,2].map(i=>(
+                      <div key={i} style={{ width:8, height:8, borderRadius:"50%",
+                        background:DS.accent,
+                        animation:`pulse 1.2s ${i*.2}s infinite ease-in-out` }}/>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:12, color:DS.inkTer }}>
+                    Evaluating decision frame against DQ methodology…
+                  </div>
+                </div>
+              )}
+
+              {/* ── Results ── */}
+              {v && !checking && (
+                <div>
+
+                  {/* ── Apply Improvements flow ── */}
+                  {improvements && impStep >= 1 && impStep < 3 && (
+                    <div style={{ marginBottom:20, padding:"16px 18px",
+                      background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                      borderRadius:10 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.accent,
+                        textTransform:"uppercase", letterSpacing:.5, marginBottom:12 }}>
+                        {impStep===1?"Step 1 of 2 — Review Suggested Improvements":
+                          "Step 2 of 2 — Confirm and Apply"}
+                      </div>
+
+                      {impStep===1 && (
+                        <div>
+                          <div style={{ fontSize:12, color:DS.ink, marginBottom:14, lineHeight:1.6 }}>
+                            Select the improvements you want to apply. The AI will rewrite
+                            <strong> only the selected fields</strong> — nothing else is touched.
                           </div>
+                          {(improvements.flags||[]).filter(f=>f.after&&f.after!=="EMPTY").map(flag => {
+                            const fc = FLAG_COLORS[flag.severity]||FLAG_COLORS.info;
+                            const isAccepted = accepted[flag.id];
+                            return (
+                              <div key={flag.id}
+                                onClick={()=>acceptSuggestion(flag.id)}
+                                style={{ marginBottom:10, padding:"12px 14px",
+                                  background:isAccepted?"#f0fdf4":DS.canvas,
+                                  border:`1.5px solid ${isAccepted?"#86efac":DS.canvasBdr}`,
+                                  borderRadius:8, cursor:"pointer", transition:"all .15s" }}>
+                                <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+                                  <div style={{ width:20, height:20, borderRadius:5,
+                                    border:`2px solid ${isAccepted?"#22c55e":DS.canvasBdr}`,
+                                    background:isAccepted?"#22c55e":"transparent",
+                                    display:"flex", alignItems:"center", justifyContent:"center",
+                                    flexShrink:0, transition:"all .15s" }}>
+                                    {isAccepted && <span style={{ color:"#fff", fontSize:11 }}>✓</span>}
+                                  </div>
+                                  <div style={{ flex:1 }}>
+                                    <div style={{ display:"flex", alignItems:"center",
+                                      gap:8, marginBottom:5 }}>
+                                      <span style={{ fontSize:9, fontWeight:700,
+                                        color:fc.text, textTransform:"uppercase",
+                                        letterSpacing:.4,
+                                        padding:"1px 6px", background:fc.bg,
+                                        border:`1px solid ${fc.border}`, borderRadius:3 }}>
+                                        {flag.severity}
+                                      </span>
+                                      <span style={{ fontSize:12, fontWeight:700,
+                                        color:DS.ink }}>{flag.title}</span>
+                                    </div>
+                                    <div style={{ fontSize:11, color:DS.inkSub,
+                                      marginBottom:8, lineHeight:1.5 }}>{flag.why}</div>
+                                    {/* Before / After */}
+                                    <div style={{ display:"grid",
+                                      gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                                      <div>
+                                        <div style={{ fontSize:9, fontWeight:700,
+                                          color:DS.inkTer, textTransform:"uppercase",
+                                          letterSpacing:.5, marginBottom:3 }}>Before</div>
+                                        <div style={{ fontSize:11, color:DS.inkTer,
+                                          padding:"6px 9px",
+                                          background:"#fef2f2",
+                                          border:"1px solid #fecaca", borderRadius:4,
+                                          lineHeight:1.5, minHeight:32 }}>
+                                          {flag.before || "(empty)"}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize:9, fontWeight:700,
+                                          color:"#059669", textTransform:"uppercase",
+                                          letterSpacing:.5, marginBottom:3 }}>After</div>
+                                        <div style={{ fontSize:11, color:"#065f46",
+                                          padding:"6px 9px",
+                                          background:"#f0fdf4",
+                                          border:"1px solid #86efac", borderRadius:4,
+                                          lineHeight:1.5, minHeight:32 }}>
+                                          {flag.after}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          <div style={{ marginTop:12, display:"flex", gap:8 }}>
+                            <Btn variant="primary" size="sm"
+                              onClick={()=>setImpStep(2)}
+                              disabled={Object.values(accepted).filter(Boolean).length===0}>
+                              Continue →
+                              {Object.values(accepted).filter(Boolean).length > 0 &&
+                                ` (${Object.values(accepted).filter(Boolean).length} selected)`}
+                            </Btn>
+                            <Btn variant="secondary" size="sm"
+                              onClick={()=>{ setImprovements(null); setImpStep(0); }}>
+                              Cancel
+                            </Btn>
+                          </div>
+                        </div>
+                      )}
+
+                      {impStep===2 && (
+                        <div>
+                          <div style={{ fontSize:12, color:DS.ink, marginBottom:14, lineHeight:1.6 }}>
+                            Ready to apply{" "}
+                            <strong>{Object.values(accepted).filter(Boolean).length} improvement(s)</strong>{" "}
+                            to the selected fields. The AI will rewrite only those fields
+                            following strict DQ guard rails — no invented facts, no solution locking.
+                          </div>
+                          <div style={{ display:"flex", gap:8 }}>
+                            <Btn variant="primary" size="sm"
+                              onClick={applyAccepted} disabled={applying}>
+                              {applying ? "Applying…" : "Apply & Re-run Frame Check"}
+                            </Btn>
+                            <Btn variant="secondary" size="sm" onClick={()=>setImpStep(1)}>
+                              ← Back
+                            </Btn>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {impStep===3 && (
+                    <div style={{ marginBottom:16, padding:"12px 14px",
+                      background:"#f0fdf4", border:"1px solid #86efac", borderRadius:8 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#059669" }}>
+                        ✓ Improvements applied. Frame Check has been re-run above.
+                      </div>
+                      <button onClick={()=>{ setImpStep(0); setImprovements(null); setAccepted({}); }}
+                        style={{ fontSize:11, color:"#059669", background:"none",
+                          border:"none", cursor:"pointer", fontFamily:"inherit",
+                          textDecoration:"underline", marginTop:4 }}>
+                        Review new results
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ── Score overview ── */}
+                  <div style={{ display:"flex", gap:16, marginBottom:20,
+                    padding:"16px 18px", background:DS.canvas,
+                    border:`1px solid ${DS.canvasBdr}`, borderRadius:10 }}>
+                    {/* Big score */}
+                    <div style={{ textAlign:"center", flexShrink:0 }}>
+                      <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:52,
+                        fontWeight:700, lineHeight:1,
+                        color:scoreColor(v.overallScore||0) }}>
+                        {v.overallScore||0}
+                      </div>
+                      <div style={{ fontSize:10, color:DS.inkTer, marginTop:4 }}>/ 100</div>
+                      <div style={{ fontSize:11, fontWeight:700, marginTop:6,
+                        color:scoreColor(v.overallScore||0) }}>
+                        {scoreLabel(v.overallScore||0)}
+                      </div>
+                    </div>
+                    {/* Score bar */}
+                    <div style={{ flex:1 }}>
+                      <div style={{ height:8, background:DS.canvasBdr, borderRadius:4,
+                        overflow:"hidden", marginBottom:10 }}>
+                        <div style={{ height:"100%", borderRadius:4, transition:"width .6s",
+                          background:scoreColor(v.overallScore||0),
+                          width:(v.overallScore||0)+"%" }}/>
+                      </div>
+                      <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
+                        {v.diagnosticSummary||v.executiveSummary}
+                      </div>
+                      {v.improvedStatement && (
+                        <div style={{ marginTop:10, padding:"8px 10px",
+                          background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
+                          borderRadius:5 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:DS.accent,
+                            textTransform:"uppercase", letterSpacing:.5, marginBottom:3 }}>
+                            Suggested statement
+                          </div>
+                          <div style={{ fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                            {v.improvedStatement}
+                          </div>
+                          <button onClick={()=>handleChange("decisionStatement", v.improvedStatement)}
+                            style={{ marginTop:5, fontSize:10, color:DS.accent,
+                              background:"none", border:"none", cursor:"pointer",
+                              fontFamily:"inherit", textDecoration:"underline" }}>
+                            Use this statement
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Dimension scores ── */}
+                  {v.dimensions && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink,
+                        marginBottom:10 }}>DQ Score Breakdown</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                        {Object.entries(v.dimensions).map(([dim, score]) => {
+                          const s = Math.min(10, Math.max(0, score||0));
+                          const pctD = s * 10;
+                          const col = pctD>=80?"#059669":pctD>=60?"#2563eb":pctD>=40?"#d97706":"#dc2626";
+                          return (
+                            <div key={dim} style={{ padding:"7px 10px",
+                              background:DS.canvasAlt, borderRadius:6,
+                              border:`1px solid ${DS.canvasBdr}` }}>
+                              <div style={{ display:"flex", justifyContent:"space-between",
+                                alignItems:"center", marginBottom:4 }}>
+                                <span style={{ fontSize:10, color:DS.inkSub }}>
+                                  {DIM_LABELS[dim]||dim}
+                                </span>
+                                <span style={{ fontSize:11, fontWeight:700, color:col }}>
+                                  {s}/10
+                                </span>
+                              </div>
+                              <div style={{ height:4, background:DS.canvasBdr,
+                                borderRadius:2, overflow:"hidden" }}>
+                                <div style={{ height:"100%", width:pctD+"%",
+                                  background:col, borderRadius:2, transition:"width .4s" }}/>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Validation flags ── */}
+                  {flags.length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:DS.ink }}>
+                          Validation Flags
+                        </div>
+                        {criticalFlags.length>0 && (
+                          <span style={{ fontSize:9, fontWeight:700, padding:"1px 7px",
+                            background:"#fef2f2", border:"1px solid #fecaca",
+                            color:"#dc2626", borderRadius:4 }}>
+                            {criticalFlags.length} Critical
+                          </span>
+                        )}
+                        {warningFlags.length>0 && (
+                          <span style={{ fontSize:9, fontWeight:700, padding:"1px 7px",
+                            background:"#fffbeb", border:"1px solid #fde68a",
+                            color:"#d97706", borderRadius:4 }}>
+                            {warningFlags.length} Warning
+                          </span>
+                        )}
+                        {impStep===0 && flags.length>0 && (
+                          <button onClick={startImprovements}
+                            style={{ marginLeft:"auto", padding:"4px 12px", fontSize:11,
+                              fontWeight:700, fontFamily:"inherit",
+                              border:`1px solid ${DS.accent}`, borderRadius:5,
+                              background:DS.accentSoft, color:DS.accent, cursor:"pointer" }}>
+                            ✦ Apply Improvements
+                          </button>
+                        )}
+                      </div>
+
+                      {flags.map(flag => {
+                        const fc = FLAG_COLORS[flag.severity]||FLAG_COLORS.info;
+                        return (
+                          <div key={flag.id||flag.field} style={{ marginBottom:8,
+                            padding:"10px 14px",
+                            background:fc.bg, border:`1px solid ${fc.border}`,
+                            borderRadius:8 }}>
+                            <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                              <span style={{ flexShrink:0, fontSize:13 }}>{fc.icon}</span>
+                              <div style={{ flex:1 }}>
+                                <div style={{ display:"flex", alignItems:"center",
+                                  gap:8, marginBottom:3 }}>
+                                  <span style={{ fontSize:11, fontWeight:700,
+                                    color:fc.text }}>{flag.title||flag.message}</span>
+                                  <span style={{ fontSize:9, color:fc.text, opacity:.7,
+                                    padding:"0 5px", border:`1px solid ${fc.border}`,
+                                    borderRadius:3 }}>{flag.field}</span>
+                                </div>
+                                <div style={{ fontSize:11, color:DS.ink,
+                                  lineHeight:1.5, marginBottom:4 }}>{flag.message}</div>
+                                {flag.why && (
+                                  <div style={{ fontSize:10, color:DS.inkTer,
+                                    fontStyle:"italic", marginBottom:4 }}>
+                                    Why it matters: {flag.why}
+                                  </div>
+                                )}
+                                {flag.suggestion && (
+                                  <div style={{ fontSize:11, color:fc.text, fontWeight:600 }}>
+                                    → {flag.suggestion}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* ── Hidden assumptions ── */}
+                  {(v.hiddenAssumptions||[]).length>0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink,
+                        marginBottom:8 }}>⚡ Hidden Assumptions Detected</div>
+                      {v.hiddenAssumptions.map((a,i)=>(
+                        <div key={i} style={{ padding:"7px 10px", marginBottom:5,
+                          background:"#fffbeb", border:"1px solid #fde68a",
+                          borderRadius:5, fontSize:11, color:"#92400e" }}>
+                          {typeof a==="string"?a:JSON.stringify(a)}
                         </div>
                       ))}
                     </div>
-                  </SectionCard>
-                )}
-
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-                  {data.aiValidation.improvedStatement && (
-                    <SectionCard title="Improved Decision Statement">
-                      <div style={{ fontSize:13, color:DS.ink, lineHeight:1.6, fontStyle:"italic" }}>
-                        "{data.aiValidation.improvedStatement}"
-                      </div>
-                      <div style={{ marginTop:12 }}>
-                        <Btn variant="secondary" size="sm" onClick={()=>upd("decisionStatement", data.aiValidation.improvedStatement)}>
-                          Apply Improvement
-                        </Btn>
-                      </div>
-                    </SectionCard>
                   )}
-                  {data.aiValidation.hiddenAssumptions?.length > 0 && (
-                    <SectionCard title="Hidden Assumptions Detected">
-                      {data.aiValidation.hiddenAssumptions.map((a,i)=>(
-                        <div key={i} style={{ fontSize:12, color:DS.ink, marginBottom:6,
-                          padding:"6px 10px", background:DS.warnSoft, borderRadius:5,
-                          border:`1px solid ${DS.warnLine}` }}>⚠ {a}</div>
+
+                  {/* ── Facilitator questions ── */}
+                  {(v.facilitatorQuestions||[]).length>0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink,
+                        marginBottom:8 }}>🎙 Facilitator Questions</div>
+                      <div style={{ fontSize:11, color:DS.inkTer, marginBottom:8,
+                        lineHeight:1.5 }}>
+                        Questions to probe in your next facilitation session:
+                      </div>
+                      {v.facilitatorQuestions.map((q,i)=>(
+                        <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                          background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
+                          borderRadius:5, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                          {i+1}. {typeof q==="string"?q:JSON.stringify(q)}
+                        </div>
                       ))}
-                    </SectionCard>
+                    </div>
+                  )}
+
+                  {/* ── Downstream recommendations ── */}
+                  {(v.downstreamRecommendations||[]).length>0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink,
+                        marginBottom:8 }}>→ Recommended Next Modules</div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                        {v.downstreamRecommendations.map((r,i)=>(
+                          <div key={i} style={{ padding:"8px 12px",
+                            background:DS.canvas, border:`1px solid ${DS.canvasBdr}`,
+                            borderRadius:7, fontSize:11 }}>
+                            <div style={{ fontWeight:700, color:DS.ink,
+                              marginBottom:2 }}>
+                              {typeof r==="string"?r:(r.module||"")}
+                            </div>
+                            {r.reason && (
+                              <div style={{ fontSize:10, color:DS.inkTer }}>
+                                {r.reason}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
+        </div>
       </div>
     </div>
   );
 }
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   MODULE 2 — ISSUE RAISING & CATEGORISATION
-───────────────────────────────────────────────────────────────────────────── */
-const SEVERITY_LEVELS = ["Critical","High","Medium","Low"];
-const ISSUE_STATUS    = ["Open","In Review","Resolved","Deferred","Escalated"];
-
-// ── 12-CATEGORY DQ TAXONOMY ──────────────────────────────────────────────────
-const ISSUE_CATEGORIES = [
-  {
-    key:    "focus-decision",
-    label:  "Focus Decisions",
-    short:  "Focus",
-    icon:   "⊕",
-    desc:   "Strategic choices that must be made now — become strategy table columns",
-    color:  "#2563eb",
-    soft:   "#eff4ff",
-    line:   "#bfdbfe",
-    flowTo: "Strategy Table columns",
-    dqRole: "core",
-  },
-  {
-    key:    "given-decision",
-    label:  "Given Decisions",
-    short:  "Given",
-    icon:   "🔒",
-    desc:   "Already decided, locked, or non-negotiable — constrain the decision space",
-    color:  "#6b7280",
-    soft:   "#f9fafb",
-    line:   "#e5e7eb",
-    flowTo: "Decision Hierarchy — Given tier",
-    dqRole: "core",
-  },
-  {
-    key:    "tactical-decision",
-    label:  "Tactical Decisions",
-    short:  "Tactical",
-    icon:   "◎",
-    desc:   "Decisions that flow from focus decisions — cannot be resolved yet",
-    color:  "#7c3aed",
-    soft:   "#f5f3ff",
-    line:   "#ddd6fe",
-    flowTo: "Decision Hierarchy — Tactical tier",
-    dqRole: "core",
-  },
-  {
-    key:    "decision-criteria",
-    label:  "Decision Criteria",
-    short:  "Criteria",
-    icon:   "◫",
-    desc:   "What the organisation values — how competing strategies will be judged",
-    color:  "#059669",
-    soft:   "#ecfdf5",
-    line:   "#a7f3d0",
-    flowTo: "Qualitative Assessment criteria",
-    dqRole: "core",
-  },
-  {
-    key:    "uncertainty-external",
-    label:  "Uncertainties — External",
-    short:  "Ext. Uncertainty",
-    icon:   "◉",
-    desc:   "Unknown external factors outside team control — market, regulatory, competitive",
-    color:  "#dc2626",
-    soft:   "#fef2f2",
-    line:   "#fecaca",
-    flowTo: "Influence Map",
-    dqRole: "analysis",
-  },
-  {
-    key:    "uncertainty-internal",
-    label:  "Uncertainties — Internal",
-    short:  "Int. Uncertainty",
-    icon:   "◑",
-    desc:   "Unknown internal factors the team could resolve with effort or research",
-    color:  "#d97706",
-    soft:   "#fffbeb",
-    line:   "#fde68a",
-    flowTo: "Influence Map",
-    dqRole: "analysis",
-  },
-  {
-    key:    "brutal-truth",
-    label:  "Brutal Truths",
-    short:  "Brutal Truth",
-    icon:   "⚡",
-    desc:   "Realities everyone knows but may avoid stating — must be surfaced explicitly",
-    color:  "#b45309",
-    soft:   "#fffbeb",
-    line:   "#fcd34d",
-    flowTo: "Frame validation",
-    dqRole: "honesty",
-  },
-  {
-    key:    "assumption",
-    label:  "Assumptions",
-    short:  "Assumption",
-    icon:   "◷",
-    desc:   "Things treated as true without verification — if wrong, the frame collapses",
-    color:  "#0891b2",
-    soft:   "#ecfeff",
-    line:   "#a5f3fc",
-    flowTo: "Frame validation",
-    dqRole: "honesty",
-  },
-  {
-    key:    "information-gap",
-    label:  "Information Gaps",
-    short:  "Info Gap",
-    icon:   "◈",
-    desc:   "Things we need to know but don\'t yet have — resolvable with research",
-    color:  "#7c3aed",
-    soft:   "#f5f3ff",
-    line:   "#c4b5fd",
-    flowTo: "Research priorities",
-    dqRole: "analysis",
-  },
-  {
-    key:    "constraint",
-    label:  "Constraints",
-    short:  "Constraint",
-    icon:   "⛓",
-    desc:   "Hard limits that bound the solution space — budget, legal, policy",
-    color:  "#374151",
-    soft:   "#f3f4f6",
-    line:   "#d1d5db",
-    flowTo: "Decision frame — constraints",
-    dqRole: "frame",
-  },
-  {
-    key:    "opportunity",
-    label:  "Opportunities",
-    short:  "Opportunity",
-    icon:   "◆",
-    desc:   "Upside possibilities worth preserving in the strategy design",
-    color:  "#059669",
-    soft:   "#ecfdf5",
-    line:   "#6ee7b7",
-    flowTo: "Strategy options",
-    dqRole: "upside",
-  },
-  {
-    key:    "stakeholder-concern",
-    label:  "Stakeholder Concerns",
-    short:  "Stakeholder",
-    icon:   "◐",
-    desc:   "Issues raised by or about stakeholders critical to alignment and commitment",
-    color:  "#db2777",
-    soft:   "#fdf2f8",
-    line:   "#fbcfe8",
-    flowTo: "Commitment — DQ element 6",
-    dqRole: "commitment",
-  },
-];
-
-const CAT_MAP = Object.fromEntries(ISSUE_CATEGORIES.map(c=>[c.key, c]));
-
-const SEVERITY_COLOR = { Critical:"danger", High:"warn", Medium:"blue", Low:"default" };
-const STATUS_COLOR   = { Open:"default", "In Review":"blue", Resolved:"green", Deferred:"chrome", Escalated:"danger" };
-
-// DQ role grouping for the categorisation view
-const DQ_ROLE_GROUPS = [
-  { key:"core",       label:"Core DQ Decisions",       desc:"Drive the strategy table and hierarchy directly" },
-  { key:"analysis",   label:"Analysis & Uncertainty",  desc:"Feed influence maps and research priorities" },
-  { key:"honesty",    label:"Honesty & Frame Quality",  desc:"Force brutal clarity before strategy work begins" },
-  { key:"frame",      label:"Frame Constraints",        desc:"Hard limits that bound all strategy options" },
-  { key:"upside",     label:"Upside & Commitment",      desc:"Opportunities and stakeholder dynamics" },
-  { key:"commitment", label:"Stakeholder Dynamics",     desc:"Alignment and commitment risks" },
-];
-
-const defaultIssues = () => [
-  { id:uid("iss"), text:"Regulatory approval timelines in Singapore and Japan are highly uncertain and could delay entry by 6–18 months", category:"uncertainty-external", severity:"High",  status:"Open", owner:"Legal & Compliance", votes:3 },
-  { id:uid("iss"), text:"We lack validated local distribution relationships in any APAC market", category:"uncertainty-internal", severity:"High",  status:"Open", owner:"Head of Sales", votes:5 },
-  { id:uid("iss"), text:"Competitor has a 14-month head start — network effects are compounding monthly", category:"brutal-truth", severity:"Critical", status:"Open", owner:"CSO", votes:7 },
-  { id:uid("iss"), text:"Currency exposure across JPY, SGD, and AUD adds P&L volatility under current hedging policy", category:"uncertainty-internal", severity:"Medium", status:"Open", owner:"CFO", votes:2 },
-  { id:uid("iss"), text:"Product requires 4 months of engineering for Japanese market localisation", category:"constraint", severity:"High",  status:"In Review", owner:"Product", votes:4 },
-  { id:uid("iss"), text:"Regional SaaS acquisition target available at 4x ARR — strategic window is time-limited", category:"opportunity", severity:"High",  status:"Open", owner:"CSO", votes:6 },
-  { id:uid("iss"), text:"Customer data residency requirements differ significantly across APAC jurisdictions", category:"uncertainty-external", severity:"High",  status:"Open", owner:"Legal & Compliance", votes:3 },
-  { id:uid("iss"), text:"APAC SaaS hiring is 60% more competitive than our North American benchmark", category:"constraint", severity:"Medium", status:"Open", owner:"HR", votes:2 },
-  { id:uid("iss"), text:"Market entry mode: direct subsidiary vs. partnership vs. acquisition — must be decided before anything else", category:"focus-decision", severity:"Critical", status:"Open", owner:"CSO", votes:8 },
-  { id:uid("iss"), text:"Board has mandated APAC entry by end of FY26 — this is non-negotiable", category:"given-decision", severity:"High",  status:"Open", owner:"Board", votes:5 },
-  { id:uid("iss"), text:"We are assuming APAC regulatory environment stays stable — this may not hold for Japan", category:"assumption", severity:"High",  status:"Open", owner:"Legal", votes:4 },
-  { id:uid("iss"), text:"We don\'t have validated APAC customer acquisition cost data — all modelling is guesswork", category:"information-gap", severity:"High",  status:"Open", owner:"Marketing", votes:6 },
-  { id:uid("iss"), text:"Speed to market should take priority over capital efficiency — board expectation vs. CFO position are in tension", category:"decision-criteria", severity:"High",  status:"Open", owner:"CEO", votes:5 },
-  { id:uid("iss"), text:"Regional HQ location decision depends on entry mode — cannot be made in isolation", category:"tactical-decision", severity:"Medium", status:"Open", owner:"COO", votes:3 },
-  { id:uid("iss"), text:"Head of APAC hasn\'t been hired — we\'re planning market entry without the person who will execute it", category:"brutal-truth", severity:"Critical", status:"Open", owner:"CEO", votes:9 },
-  { id:uid("iss"), text:"The CFO has significant reservations about the $25M budget — risk of mid-year budget pull", category:"stakeholder-concern", severity:"High",  status:"Open", owner:"CEO", votes:4 },
-];
 
 function ModuleIssueRaising({ issues, onChange, decisions, onDecisions, criteria, onCriteria, problem, aiCall, aiBusy, onAIMsg }) {
   const [view, setView]               = useState("raise");   // raise | categorise | heatmap
