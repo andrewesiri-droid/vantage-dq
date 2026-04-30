@@ -5620,33 +5620,50 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       '"insight":"Key observation about the decision structure","missingNodes":["what else should be added"]}',
     (r) => {
       let result = r;
-      if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); } catch(e) { setGenerating(false); return; } }
-      if (result.error) { onAIMsg({ role: "ai", text: "AI error: " + result.error }); setGenerating(false); return; }
-
-      if (result.nodes?.length) {
-        const newNodes = result.nodes.map((n, i) => ({
-          id: uid("n"), type: n.type || "uncertainty",
-          label: n.label, description: n.description || "",
-          owner: n.owner || "", assumptions: "", tags: [],
-          impact: n.impact || "Medium", control: n.control || "Low",
-          x: 150 + (i % 4) * 240, y: 120 + Math.floor(i / 4) * 180,
-        }));
-        setNodes(prev => [...prev, ...newNodes]);
-
-        if (result.edges?.length) {
-          const allNodes = [...nodes, ...newNodes];
-          const newEdges = result.edges.map(e => {
-            const s = allNodes.find(n => n.label.toLowerCase() === (e.from || "").toLowerCase());
-            const t = allNodes.find(n => n.label.toLowerCase() === (e.to || "").toLowerCase());
-            return s && t ? { id: uid("e"), from: s.id, to: t.id, label: e.label || "influences" } : null;
-          }).filter(Boolean);
-          setEdges(prev => [...prev, ...newEdges]);
-        }
-
-        const msg = result.insight || ("Added " + result.nodes.length + " nodes.");
-        const missing = result.missingNodes?.length ? " Consider adding: " + result.missingNodes.join(", ") + "." : "";
-        onAIMsg({ role: "ai", text: msg + missing });
+      if (r && r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
+        catch(e) { setGenerating(false); return; }
       }
+      if (!result || result.error) {
+        onAIMsg({ role:"ai", text:"Error: " + (result?.error||"No response") });
+        setGenerating(false); return;
+      }
+
+      const rawNodes = result.nodes || [];
+      const rawEdges = result.edges || [];
+
+      if (!rawNodes.length) {
+        onAIMsg({ role:"ai", text:"No nodes returned. Try again." });
+        setGenerating(false); return;
+      }
+
+      // Build new nodes with IDs
+      const newNodes = rawNodes.map((n, i) => ({
+        id: uid("n"), type: n.type || "uncertainty",
+        label: n.label || "Node "+(i+1),
+        description: n.description || "",
+        owner: n.owner || "", assumptions: "", tags: [],
+        impact: n.impact || "Medium", control: n.control || "Low",
+        x: 150 + (i % 4) * 260, y: 100 + Math.floor(i / 4) * 180,
+      }));
+
+      // Build edges using newNodes + existing nodes together
+      // Do this BEFORE setNodes so we have the full combined list
+      const allNodes = [...nodes, ...newNodes];
+      const normalize = s => (s||"").toLowerCase().trim();
+      const newEdges = rawEdges.map(e => {
+        const src = allNodes.find(n => normalize(n.label) === normalize(e.from));
+        const tgt = allNodes.find(n => normalize(n.label) === normalize(e.to));
+        return src && tgt ? { id:uid("e"), from:src.id, to:tgt.id, label:e.label||"influences" } : null;
+      }).filter(Boolean);
+
+      // Apply both in one render cycle
+      setNodes(prev => [...prev, ...newNodes]);
+      setEdges(prev => [...prev, ...newEdges]);
+
+      const msg = result.insight || ("Added "+newNodes.length+" nodes"+(newEdges.length?" and "+newEdges.length+" links.":"."));
+      const missing = result.missingNodes?.length ? " Consider adding: "+result.missingNodes.join(", ")+"." : "";
+      onAIMsg({ role:"ai", text: msg + missing });
       setGenerating(false);
     });
   };
@@ -5815,7 +5832,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
         <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 9, color: DS.inkTer, textTransform: "uppercase",
-              fontWeight: 700, letterSpacing: 1 }}>Module 08</div>
+              fontWeight: 700, letterSpacing: 1 }}>Module 09</div>
             <div style={{ fontFamily: "'Libre Baskerville',serif",
               fontSize: 18, fontWeight: 700, color: DS.ink }}>Influence Diagram</div>
           </div>
