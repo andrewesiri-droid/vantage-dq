@@ -7602,15 +7602,839 @@ function VersionPanel({ currentData, onRestore, onClose }) {
 
 
 
-function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy, onAIMsg }) {
+function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy, onAIMsg, nodes: influenceNodes }) {
+
+  // ── CONSTANTS ─────────────────────────────────────────────────────────────
+  const EVENT_TYPES = {
+    decision_gate:   { label:"Decision Gate",         color:"#2563eb", bg:"#eff6ff", icon:"◈" },
+    risk_window:     { label:"Risk Window",           color:"#dc2626", bg:"#fef2f2", icon:"⚠" },
+    uncertainty_red: { label:"Uncertainty Reduction", color:"#059669", bg:"#ecfdf5", icon:"◎" },
+    trigger:         { label:"Trigger Event",         color:"#d97706", bg:"#fffbeb", icon:"⚡" },
+    milestone:       { label:"Milestone",             color:"#7c3aed", bg:"#f5f3ff", icon:"★" },
+  };
+
+  const LANES = [
+    { id:"decisions",    label:"Decision Gates",             types:["decision_gate"] },
+    { id:"risks",        label:"Risk Windows",               types:["risk_window"] },
+    { id:"uncertainty",  label:"Uncertainty Reduction",      types:["uncertainty_red"] },
+    { id:"triggers",     label:"Triggers & Milestones",      types:["trigger","milestone"] },
+  ];
+
+  const SEVERITY = { Critical:"#dc2626", High:"#f97316", Medium:"#d97706", Low:"#059669" };
+
+  // ── STATE ─────────────────────────────────────────────────────────────────
+  const [view,         setView]         = useState("timeline"); // timeline | readiness | risks
+  const [events,       setEvents]       = useState([]);
+  const [selected,     setSelected]     = useState(null);
+  const [generating,   setGenerating]   = useState(false);
+  const [analysing,    setAnalysing]    = useState(false);
+  const [readiness,    setReadiness]    = useState(null);
+  const [zoom,         setZoom]         = useState(1);
+  const [scrollX,      setScrollX]      = useState(0);
+  const [showForm,     setShowForm]     = useState(false);
+  const [collapsed,    setCollapsed]    = useState({});
+  const [newEvent,     setNewEvent]     = useState({
+    type:"decision_gate", title:"", startMonth:3, endMonth:3,
+    owner:"", severity:"Medium", description:"", readinessScore:50,
+    unresolvedUncertainties:"", triggerCondition:"", linkedRisks:"",
+    approvalAuthority:"", pathway:"",
+  });
+
+  // ── HELPERS ───────────────────────────────────────────────────────────────
+  const addEvent = () => {
+    if (!newEvent.title.trim()) return;
+    setEvents(prev => [...prev, { ...newEvent, id:uid("ev") }]);
+    setNewEvent({ type:"decision_gate", title:"", startMonth:3, endMonth:3,
+      owner:"", severity:"Medium", description:"", readinessScore:50,
+      unresolvedUncertainties:"", triggerCondition:"", linkedRisks:"",
+      approvalAuthority:"", pathway:"" });
+    setShowForm(false);
+  };
+
+  const updateEvent = (id, patch) => setEvents(prev => prev.map(e => e.id===id ? {...e,...patch} : e));
+  const removeEvent = (id) => { setEvents(prev => prev.filter(e => e.id!==id)); if(selected===id) setSelected(null); };
+
+  // Timeline geometry
+  const MONTHS = 24;
+  const LANE_H = 90;
+  const HEADER_H = 36;
+  const LEFT_W = 160;
+  const MONTH_W = 80 * zoom;
+  const TOTAL_W = MONTHS * MONTH_W;
+
+  const monthLabel = (m) => {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth() + m - 1);
+    return d.toLocaleDateString("en-GB",{month:"short",year:"2-digit"});
+  };
+
+  const eventsInLane = (laneId) => {
+    const lane = LANES.find(l=>l.id===laneId);
+    return events.filter(e => lane?.types.includes(e.type));
+  };
+
+  const readinessColor = (score) =>
+    score >= 80 ? "#059669" : score >= 50 ? "#d97706" : "#dc2626";
+
+  // ── AI: Generate timeline ─────────────────────────────────────────────────
+  const generateTimeline = () => {
+    setGenerating(true);
+
+    const focusDecs = decisions.filter(d=>d.tier==="focus").map(d=>d.label).join(", ")||"none";
+    const uncNodes = (influenceNodes||[]).filter(n=>n.type==="uncertainty")
+      .map(n=>n.label+" (impact:"+n.impact+")").join(", ")||"none";
+    const critIssues = issues.filter(i=>i.severity==="Critical"||i.severity==="High")
+      .slice(0,6).map(i=>i.text.slice(0,60)).join("; ")||"none";
+    const strats = strategies.map(s=>s.name).join(", ")||"none";
+
+    aiCall(
+      "You are a senior Decision Quality analyst building a Decision Risk Timeline. " +
+      "Create a realistic timeline for this decision with the key gates, risks, and uncertainty reduction activities. " +
+      "Use startMonth and endMonth as months from now (1=next month, 6=6 months from now, etc). " +
+      "Decision: "+(problem?.decisionStatement||"Not defined")+". " +
+      "Focus decisions: "+focusDecs+". " +
+      "Key uncertainties: "+uncNodes+". " +
+      "Critical issues: "+critIssues+". " +
+      "Strategies: "+strats+". " +
+      "Generate: 2-3 decision gates, 2-3 risk windows, 2-3 uncertainty reduction activities, 1-2 triggers. " +
+      "For decision gates include a readinessScore (0-100) and unresolvedUncertainties. " +
+      "For risk windows, startMonth and endMonth define the exposure period. " +
+      "Return ONLY JSON: " +
+      '{"events":[' +
+      '{"type":"decision_gate","title":"FID","startMonth":12,"endMonth":12,"owner":"CEO","readinessScore":45,"severity":"High","description":"Final investment decision","unresolvedUncertainties":"Regulatory approval, Market size","approvalAuthority":"Board"},' +
+      '{"type":"risk_window","title":"Regulatory Risk","startMonth":3,"endMonth":10,"severity":"High","description":"Permit approval uncertainty","linkedRisks":"approval delay"},' +
+      '{"type":"uncertainty_red","title":"Market Research","startMonth":1,"endMonth":4,"severity":"Medium","description":"Customer discovery to validate demand assumptions"},' +
+      '{"type":"trigger","title":"Competitor Entry Signal","startMonth":6,"endMonth":6,"severity":"Medium","description":"If competitor announces entry, accelerate decision"}' +
+      '],"insight":"key observation about the decision timing"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setGenerating(false);return;}}
+      if (!result||result.error){setGenerating(false);return;}
+      const newEvents = (result.events||[]).map(e => ({
+        id:uid("ev"), type:e.type||"milestone",
+        title:e.title||"Event",
+        startMonth:Math.max(1,parseInt(e.startMonth)||3),
+        endMonth:Math.max(1,parseInt(e.endMonth)||3),
+        owner:e.owner||"", severity:e.severity||"Medium",
+        description:e.description||"",
+        readinessScore:parseInt(e.readinessScore)||0,
+        unresolvedUncertainties:e.unresolvedUncertainties||"",
+        approvalAuthority:e.approvalAuthority||"",
+        linkedRisks:e.linkedRisks||"",
+        triggerCondition:e.triggerCondition||"",
+        pathway:e.pathway||"",
+      }));
+      setEvents(prev => [...prev, ...newEvents]);
+      onAIMsg({role:"ai", text: result.insight||("Added "+newEvents.length+" timeline events.")});
+      setGenerating(false);
+    });
+  };
+
+  // ── AI: Readiness analysis ────────────────────────────────────────────────
+  const analyseReadiness = () => {
+    setAnalysing(true);
+    const gates = events.filter(e=>e.type==="decision_gate");
+    if (!gates.length) { onAIMsg({role:"ai",text:"Add decision gates first."}); setAnalysing(false); return; }
+    const risks = events.filter(e=>e.type==="risk_window");
+    const uncActivities = events.filter(e=>e.type==="uncertainty_red");
+
+    const gateList = gates.map(g =>
+      g.title+" (month "+g.startMonth+", readiness:"+g.readinessScore+"%, unresolved:"+g.unresolvedUncertainties+")"
+    ).join(" | ");
+    const riskList = risks.map(r=>r.title+" (months "+r.startMonth+"-"+r.endMonth+", "+r.severity+")").join(" | ");
+    const uncList = uncActivities.map(u=>u.title+" (months "+u.startMonth+"-"+u.endMonth+")").join(" | ");
+
+    aiCall(
+      "You are a senior DQ analyst assessing decision readiness and timing risks. " +
+      "Decision: "+(problem?.decisionStatement||"Not defined")+". " +
+      "Decision gates: "+gateList+". " +
+      "Risk windows: "+riskList+". " +
+      "Uncertainty reduction activities: "+uncList+". " +
+      "Assess: (1) Is each gate sufficiently prepared? (2) Are any risk windows overlapping commitment points? (3) Will uncertainty reduction activities complete before the gate? (4) What is the last responsible moment? " +
+      "Return ONLY JSON: " +
+      '{"gateAssessments":[{"title":"gate name","readinessGap":"what is missing","bottlenecks":["item1"],"recommendation":"what to do","alertLevel":"Green|Amber|Red"}],' +
+      '"timingRisks":[{"risk":"description","severity":"Critical|High|Medium","mitigation":"action"}],' +
+      '"lastResponsibleMoment":{"month":8,"rationale":"why this is the LRM"},' +
+      '"overallReadiness":"Green|Amber|Red",' +
+      '"executiveSummary":"2-3 sentence summary for the board"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
+      if (!result||result.error){setAnalysing(false);return;}
+      setReadiness(result);
+      onAIMsg({role:"ai",text:result.executiveSummary||"Readiness analysis complete."});
+      setAnalysing(false);
+    });
+  };
+
+  const selectedEvent = events.find(e=>e.id===selected);
+  const decisionGates = events.filter(e=>e.type==="decision_gate").sort((a,b)=>a.startMonth-b.startMonth);
+
   return (
-    <div style={{ padding:24, color:DS.ink }}>
-      <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:20, fontWeight:700, marginBottom:8 }}>Decision Risk Timeline</div>
-      <div style={{ fontSize:12, color:DS.inkSub }}>Module 10 — Timeline will be fully restored in the next update.</div>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden",
+      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif" }}>
+
+      {/* ── HEADER ── */}
+      <div style={{ background:DS.canvas, borderBottom:"1px solid "+DS.canvasBdr, flexShrink:0 }}>
+        <div style={{ padding:"10px 20px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
+              fontWeight:700, letterSpacing:1 }}>Module 10</div>
+            <div style={{ fontFamily:"'Libre Baskerville',serif",
+              fontSize:18, fontWeight:700, color:DS.ink }}>Decision Risk Timeline</div>
+          </div>
+          <Btn variant="secondary" size="sm" onClick={()=>setShowForm(f=>!f)}>+ Add Event</Btn>
+          <Btn variant="secondary" size="sm" onClick={generateTimeline} disabled={aiBusy||generating}>
+            {generating?"Generating…":"AI Generate"}
+          </Btn>
+          <Btn variant="primary" size="sm" onClick={analyseReadiness} disabled={aiBusy||analysing}>
+            {analysing?"Analysing…":"AI Readiness Check"}
+          </Btn>
+        </div>
+
+        {/* View tabs + zoom */}
+        <div style={{ padding:"0 20px 8px", display:"flex", alignItems:"center", gap:8 }}>
+          {[{id:"timeline",label:"Timeline"},{id:"readiness",label:"Readiness"},{id:"risks",label:"Risk Summary"}].map(v=>(
+            <button key={v.id} onClick={()=>setView(v.id)}
+              style={{ padding:"4px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
+                border:"none", borderRadius:5, cursor:"pointer",
+                background:view===v.id?DS.accent:"transparent",
+                color:view===v.id?"#fff":DS.inkSub }}>
+              {v.label}
+            </button>
+          ))}
+          {view==="timeline"&&(
+            <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ fontSize:10, color:DS.inkTer }}>Zoom</span>
+              {[0.6,0.8,1,1.3,1.6].map(z=>(
+                <button key={z} onClick={()=>setZoom(z)}
+                  style={{ padding:"2px 7px", fontSize:10, fontFamily:"inherit",
+                    border:"1px solid "+(zoom===z?DS.accent:DS.canvasBdr),
+                    borderRadius:4, background:zoom===z?DS.accentSoft:"transparent",
+                    color:zoom===z?DS.accent:DS.inkTer, cursor:"pointer" }}>
+                  {Math.round(z*100)}%
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── ADD EVENT FORM ── */}
+      {showForm&&(
+        <div style={{ padding:"14px 20px", background:DS.canvasAlt,
+          borderBottom:"1px solid "+DS.canvasBdr, flexShrink:0 }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"flex-end" }}>
+            <div>
+              <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:4 }}>Type</div>
+              <select value={newEvent.type} onChange={e=>setNewEvent(p=>({...p,type:e.target.value}))}
+                style={{ padding:"6px 8px",fontSize:11,fontFamily:"inherit",background:DS.canvas,
+                  border:"1px solid "+DS.canvasBdr,borderRadius:5,color:DS.ink,outline:"none" }}>
+                {Object.entries(EVENT_TYPES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+            <div style={{ flex:2,minWidth:160 }}>
+              <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:4 }}>Title</div>
+              <input value={newEvent.title} onChange={e=>setNewEvent(p=>({...p,title:e.target.value}))}
+                placeholder="Event name…"
+                style={{ width:"100%",padding:"6px 8px",fontSize:11,fontFamily:"inherit",
+                  background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:5,
+                  color:DS.ink,outline:"none",boxSizing:"border-box" }}/>
+            </div>
+            {[{key:"startMonth",label:"Start (month)"},{key:"endMonth",label:"End (month)"}].map(f=>(
+              <div key={f.key}>
+                <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:4 }}>{f.label}</div>
+                <input type="number" min="1" max={MONTHS} value={newEvent[f.key]}
+                  onChange={e=>setNewEvent(p=>({...p,[f.key]:parseInt(e.target.value)||1}))}
+                  style={{ width:70,padding:"6px 8px",fontSize:11,fontFamily:"inherit",
+                    background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:5,
+                    color:DS.ink,outline:"none" }}/>
+              </div>
+            ))}
+            <div>
+              <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:4 }}>Severity</div>
+              <select value={newEvent.severity} onChange={e=>setNewEvent(p=>({...p,severity:e.target.value}))}
+                style={{ padding:"6px 8px",fontSize:11,fontFamily:"inherit",background:DS.canvas,
+                  border:"1px solid "+DS.canvasBdr,borderRadius:5,color:DS.ink,outline:"none" }}>
+                {["Critical","High","Medium","Low"].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <Btn variant="primary" size="sm" onClick={addEvent}>Add</Btn>
+            <Btn variant="secondary" size="sm" onClick={()=>setShowForm(false)}>Cancel</Btn>
+          </div>
+          {newEvent.type==="decision_gate"&&(
+            <div style={{ marginTop:8,display:"flex",gap:8,flexWrap:"wrap" }}>
+              <div style={{ flex:1,minWidth:140 }}>
+                <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Owner</div>
+                <input value={newEvent.owner} onChange={e=>setNewEvent(p=>({...p,owner:e.target.value}))}
+                  placeholder="Decision owner"
+                  style={{ width:"100%",padding:"5px 7px",fontSize:11,fontFamily:"inherit",
+                    background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:4,
+                    color:DS.ink,outline:"none",boxSizing:"border-box" }}/>
+              </div>
+              <div style={{ flex:1,minWidth:100 }}>
+                <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Readiness %</div>
+                <input type="number" min="0" max="100" value={newEvent.readinessScore}
+                  onChange={e=>setNewEvent(p=>({...p,readinessScore:parseInt(e.target.value)||0}))}
+                  style={{ width:"100%",padding:"5px 7px",fontSize:11,fontFamily:"inherit",
+                    background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:4,
+                    color:DS.ink,outline:"none",boxSizing:"border-box" }}/>
+              </div>
+              <div style={{ flex:3,minWidth:200 }}>
+                <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Unresolved Uncertainties</div>
+                <input value={newEvent.unresolvedUncertainties}
+                  onChange={e=>setNewEvent(p=>({...p,unresolvedUncertainties:e.target.value}))}
+                  placeholder="e.g. Regulatory approval, Market size…"
+                  style={{ width:"100%",padding:"5px 7px",fontSize:11,fontFamily:"inherit",
+                    background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:4,
+                    color:DS.ink,outline:"none",boxSizing:"border-box" }}/>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── MAIN CONTENT ── */}
+      <div style={{ flex:1, overflow:"hidden", display:"flex" }}>
+
+        {/* ── TIMELINE VIEW ── */}
+        {view==="timeline"&&(
+          <div style={{ flex:1, overflow:"auto" }}>
+            {events.length===0&&!showForm?(
+              <div style={{ display:"flex",flexDirection:"column",alignItems:"center",
+                justifyContent:"center",height:"100%",color:DS.inkTer,gap:12,padding:40 }}>
+                <div style={{ fontSize:32,opacity:.4 }}>⊳</div>
+                <div style={{ fontSize:14,fontWeight:700 }}>No timeline events yet</div>
+                <div style={{ fontSize:12,textAlign:"center",maxWidth:440,lineHeight:1.6 }}>
+                  Click <strong>AI Generate</strong> to build a timeline from your decisions and uncertainties,
+                  or <strong>+ Add Event</strong> to add manually.
+                </div>
+              </div>
+            ):(
+              <div style={{ minWidth:LEFT_W+TOTAL_W+40, padding:"0 0 20px 0" }}>
+
+                {/* Month header */}
+                <div style={{ display:"flex", position:"sticky", top:0, zIndex:10,
+                  background:DS.chrome, borderBottom:"2px solid "+DS.border }}>
+                  <div style={{ width:LEFT_W, flexShrink:0, padding:"8px 16px",
+                    fontSize:9,fontWeight:700,color:DS.textTer,
+                    textTransform:"uppercase",letterSpacing:.5 }}>Track</div>
+                  {Array.from({length:MONTHS},(_,i)=>(
+                    <div key={i} style={{ width:MONTH_W, flexShrink:0,
+                      padding:"8px 4px", fontSize:9, color:DS.textTer,
+                      fontWeight:700, borderLeft:"1px solid "+DS.border,
+                      textAlign:"center" }}>
+                      {monthLabel(i+1)}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Swimlanes */}
+                {LANES.map(lane=>{
+                  const laneEvents = eventsInLane(lane.id);
+                  const isCollapsed = collapsed[lane.id];
+                  return (
+                    <div key={lane.id}>
+                      {/* Lane header */}
+                      <div style={{ display:"flex", alignItems:"center",
+                        background:DS.chromeAlt, borderBottom:"1px solid "+DS.border,
+                        borderTop:"1px solid "+DS.border, cursor:"pointer" }}
+                        onClick={()=>setCollapsed(p=>({...p,[lane.id]:!p[lane.id]}))}>
+                        <div style={{ width:LEFT_W, flexShrink:0, padding:"6px 16px",
+                          display:"flex",alignItems:"center",gap:6 }}>
+                          <span style={{ fontSize:10,color:DS.textTer }}>{isCollapsed?"▶":"▼"}</span>
+                          <span style={{ fontSize:10,fontWeight:700,color:DS.textSec,
+                            textTransform:"uppercase",letterSpacing:.3 }}>{lane.label}</span>
+                          <span style={{ fontSize:9,color:DS.textTer,
+                            background:DS.chrome,borderRadius:8,padding:"0 5px" }}>
+                            {laneEvents.length}
+                          </span>
+                        </div>
+                        <div style={{ flex:1, height:28 }}/>
+                      </div>
+
+                      {/* Lane content */}
+                      {!isCollapsed&&(
+                        <div style={{ display:"flex", alignItems:"flex-start",
+                          minHeight:LANE_H, position:"relative" }}>
+                          <div style={{ width:LEFT_W, flexShrink:0,
+                            height:LANE_H, borderRight:"1px solid "+DS.border }}/>
+
+                          {/* Month grid lines */}
+                          <div style={{ position:"absolute", left:LEFT_W, top:0,
+                            width:TOTAL_W, height:"100%", pointerEvents:"none" }}>
+                            {Array.from({length:MONTHS},(_,i)=>(
+                              <div key={i} style={{ position:"absolute",
+                                left:i*MONTH_W, top:0, width:1,
+                                height:"100%", background:DS.canvasBdr }}/>
+                            ))}
+                          </div>
+
+                          {/* Events */}
+                          <div style={{ position:"relative", flex:1, height:LANE_H }}>
+                            {laneEvents.map((ev,ei)=>{
+                              const et = EVENT_TYPES[ev.type]||EVENT_TYPES.milestone;
+                              const isGate = ev.type==="decision_gate";
+                              const isSel = selected===ev.id;
+                              const x = (ev.startMonth-1) * MONTH_W;
+                              const w = Math.max(MONTH_W*0.8,
+                                (ev.endMonth-ev.startMonth+1)*MONTH_W - 8);
+                              const topOffset = ei*42 + 8;
+
+                              if (isGate) {
+                                // Vertical line for gates
+                                return (
+                                  <div key={ev.id} onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}
+                                    style={{ position:"absolute",
+                                      left:x + MONTH_W/2 - 1,
+                                      top:0, height:"100%",
+                                      cursor:"pointer" }}>
+                                    {/* Vertical line */}
+                                    <div style={{ position:"absolute", left:0, top:0,
+                                      width:3, height:"100%",
+                                      background:isSel?et.color:et.color+"99",
+                                      borderRadius:2 }}/>
+                                    {/* Diamond marker */}
+                                    <div style={{ position:"absolute", left:-8, top:8,
+                                      width:16, height:16,
+                                      background:isSel?et.color:et.bg,
+                                      border:"2px solid "+et.color,
+                                      transform:"rotate(45deg)",
+                                      borderRadius:2 }}/>
+                                    {/* Label */}
+                                    <div style={{ position:"absolute", left:8, top:6,
+                                      fontSize:10, fontWeight:700, color:et.color,
+                                      whiteSpace:"nowrap",
+                                      background:DS.canvas+"ee",
+                                      padding:"1px 5px", borderRadius:3 }}>
+                                      {ev.title}
+                                      {ev.readinessScore>0&&(
+                                        <span style={{ marginLeft:4, fontSize:9,
+                                          color:readinessColor(ev.readinessScore) }}>
+                                          {ev.readinessScore}%
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              // Horizontal bar for windows/activities
+                              return (
+                                <div key={ev.id} onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}
+                                  style={{ position:"absolute",
+                                    left:x, top:topOffset,
+                                    width:w, height:30,
+                                    background:isSel?et.color:et.bg,
+                                    border:"1.5px solid "+et.color,
+                                    borderRadius:6, cursor:"pointer",
+                                    display:"flex", alignItems:"center",
+                                    padding:"0 8px", gap:5,
+                                    boxShadow:isSel?"0 2px 8px "+et.color+"44":"none",
+                                    transition:"all .15s" }}>
+                                  <span style={{ fontSize:11, flexShrink:0,
+                                    color:isSel?"#fff":et.color }}>{et.icon}</span>
+                                  <span style={{ fontSize:10, fontWeight:700,
+                                    color:isSel?"#fff":et.color,
+                                    overflow:"hidden", textOverflow:"ellipsis",
+                                    whiteSpace:"nowrap" }}>{ev.title}</span>
+                                  {ev.severity&&(
+                                    <span style={{ fontSize:8, marginLeft:"auto",
+                                      flexShrink:0,
+                                      color:isSel?"rgba(255,255,255,.7)":SEVERITY[ev.severity]||DS.inkTer }}>
+                                      {ev.severity}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Today marker */}
+                <div style={{ position:"relative", height:0 }}>
+                  <div style={{ position:"absolute", left:LEFT_W, top:-LANE_H*LANES.length-HEADER_H,
+                    width:2, height:LANE_H*LANES.length+HEADER_H,
+                    background:DS.danger, opacity:.4, pointerEvents:"none" }}>
+                    <div style={{ position:"absolute", top:0, left:-16, fontSize:8,
+                      color:DS.danger, fontWeight:700, whiteSpace:"nowrap" }}>TODAY</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── READINESS VIEW ── */}
+        {view==="readiness"&&(
+          <div style={{ flex:1, overflow:"auto", padding:20 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+              <div>
+                <div style={{ fontSize:13,fontWeight:700,color:DS.ink,marginBottom:3 }}>Decision Readiness</div>
+                <div style={{ fontSize:11,color:DS.inkTer }}>
+                  Track how prepared each decision gate is before commitment.
+                </div>
+              </div>
+              {readiness&&(
+                <div style={{ marginLeft:"auto", padding:"6px 14px",
+                  background:readiness.overallReadiness==="Green"?DS.successSoft:
+                    readiness.overallReadiness==="Red"?DS.dangerSoft:DS.warnSoft,
+                  border:"1px solid "+(readiness.overallReadiness==="Green"?DS.success:
+                    readiness.overallReadiness==="Red"?DS.danger:DS.warning),
+                  borderRadius:7, fontSize:12, fontWeight:700,
+                  color:readiness.overallReadiness==="Green"?DS.success:
+                    readiness.overallReadiness==="Red"?DS.danger:DS.warning }}>
+                  Overall: {readiness.overallReadiness}
+                </div>
+              )}
+            </div>
+
+            {/* Readiness summary from AI */}
+            {readiness?.executiveSummary&&(
+              <div style={{ padding:"12px 16px", background:DS.accentSoft,
+                border:"1px solid "+DS.accentLine, borderRadius:8, marginBottom:16,
+                fontSize:12, color:DS.ink, lineHeight:1.7 }}>
+                {readiness.executiveSummary}
+              </div>
+            )}
+
+            {/* Last Responsible Moment */}
+            {readiness?.lastResponsibleMoment&&(
+              <div style={{ padding:"12px 16px", background:DS.warnSoft,
+                border:"1px solid "+DS.warnLine, borderRadius:8, marginBottom:16,
+                display:"flex", alignItems:"flex-start", gap:12 }}>
+                <div style={{ fontSize:20,flexShrink:0 }}>⏱</div>
+                <div>
+                  <div style={{ fontSize:11,fontWeight:700,color:DS.warning,
+                    textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>
+                    Last Responsible Moment
+                  </div>
+                  <div style={{ fontSize:13,fontWeight:700,color:DS.ink,marginBottom:3 }}>
+                    Month {readiness.lastResponsibleMoment.month} — {monthLabel(readiness.lastResponsibleMoment.month)}
+                  </div>
+                  <div style={{ fontSize:11,color:DS.inkSub,lineHeight:1.6 }}>
+                    {readiness.lastResponsibleMoment.rationale}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Decision gate cards */}
+            {decisionGates.length===0?(
+              <div style={{ color:DS.inkTer,fontSize:13,textAlign:"center",padding:40 }}>
+                Add decision gates to the timeline first.
+              </div>
+            ):(
+              decisionGates.map(gate=>{
+                const et = EVENT_TYPES.decision_gate;
+                const rc = readinessColor(gate.readinessScore);
+                const aiAssess = readiness?.gateAssessments?.find(a=>
+                  a.title?.toLowerCase()===gate.title?.toLowerCase()
+                );
+                return (
+                  <div key={gate.id} style={{ marginBottom:14, padding:"16px 18px",
+                    background:DS.canvas, border:"1px solid "+DS.canvasBdr,
+                    borderRadius:10, borderLeft:"4px solid "+et.color }}>
+                    <div style={{ display:"flex", alignItems:"flex-start", gap:14, marginBottom:10 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:15,fontWeight:700,color:DS.ink,marginBottom:3 }}>
+                          {gate.title}
+                        </div>
+                        <div style={{ fontSize:11,color:DS.inkTer }}>
+                          {gate.owner&&<span>Owner: {gate.owner} · </span>}
+                          Month {gate.startMonth} ({monthLabel(gate.startMonth)})
+                          {gate.approvalAuthority&&<span> · Approval: {gate.approvalAuthority}</span>}
+                        </div>
+                      </div>
+                      {/* Readiness gauge */}
+                      <div style={{ textAlign:"center", minWidth:80 }}>
+                        <div style={{ fontSize:28, fontWeight:700,
+                          fontFamily:"'Libre Baskerville',serif",
+                          color:rc, lineHeight:1 }}>{gate.readinessScore}%</div>
+                        <div style={{ fontSize:9,color:DS.inkTer,marginTop:2 }}>ready</div>
+                        <input type="range" min="0" max="100" value={gate.readinessScore}
+                          onChange={e=>updateEvent(gate.id,{readinessScore:parseInt(e.target.value)})}
+                          style={{ width:"100%",marginTop:4,accentColor:rc }}/>
+                      </div>
+                    </div>
+
+                    {/* Readiness bar */}
+                    <div style={{ height:6, background:DS.canvasBdr,
+                      borderRadius:3, overflow:"hidden", marginBottom:10 }}>
+                      <div style={{ height:"100%", borderRadius:3,
+                        background:rc, width:gate.readinessScore+"%",
+                        transition:"width .4s" }}/>
+                    </div>
+
+                    {gate.unresolvedUncertainties&&(
+                      <div style={{ padding:"8px 10px", background:DS.dangerSoft,
+                        border:"1px solid "+DS.dangerLine, borderRadius:6, marginBottom:8 }}>
+                        <div style={{ fontSize:9,fontWeight:700,color:DS.danger,
+                          textTransform:"uppercase",letterSpacing:.4,marginBottom:3 }}>
+                          ⚠ Unresolved Uncertainties
+                        </div>
+                        <div style={{ fontSize:11,color:DS.ink,lineHeight:1.5 }}>
+                          {gate.unresolvedUncertainties}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* AI assessment */}
+                    {aiAssess&&(
+                      <div style={{ padding:"8px 10px",
+                        background:aiAssess.alertLevel==="Green"?DS.successSoft:
+                          aiAssess.alertLevel==="Red"?DS.dangerSoft:DS.warnSoft,
+                        border:"1px solid "+(aiAssess.alertLevel==="Green"?DS.successLine:
+                          aiAssess.alertLevel==="Red"?DS.dangerLine:DS.warnLine),
+                        borderRadius:6 }}>
+                        <div style={{ fontSize:9,fontWeight:700,
+                          color:aiAssess.alertLevel==="Green"?DS.success:
+                            aiAssess.alertLevel==="Red"?DS.danger:DS.warning,
+                          textTransform:"uppercase",letterSpacing:.4,marginBottom:3 }}>
+                          ✦ AI Assessment — {aiAssess.alertLevel}
+                        </div>
+                        {aiAssess.readinessGap&&(
+                          <div style={{ fontSize:11,color:DS.ink,marginBottom:4 }}>
+                            {aiAssess.readinessGap}
+                          </div>
+                        )}
+                        {(aiAssess.bottlenecks||[]).length>0&&(
+                          <div style={{ fontSize:10,color:DS.inkSub,marginBottom:4 }}>
+                            Bottlenecks: {aiAssess.bottlenecks.join(" · ")}
+                          </div>
+                        )}
+                        {aiAssess.recommendation&&(
+                          <div style={{ fontSize:11,fontWeight:700,color:DS.ink }}>
+                            → {aiAssess.recommendation}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+
+            {/* Timing risks from AI */}
+            {readiness?.timingRisks?.length>0&&(
+              <div style={{ marginTop:16 }}>
+                <div style={{ fontSize:12,fontWeight:700,color:DS.ink,marginBottom:8 }}>
+                  ⚡ Timing Risks Detected
+                </div>
+                {readiness.timingRisks.map((tr,i)=>(
+                  <div key={i} style={{ padding:"10px 12px", marginBottom:6,
+                    background:DS.dangerSoft, border:"1px solid "+DS.dangerLine,
+                    borderRadius:7, display:"flex", gap:10 }}>
+                    <div style={{ flex:1 }}>
+                      <span style={{ fontSize:9,fontWeight:700,
+                        color:SEVERITY[tr.severity]||DS.danger,
+                        textTransform:"uppercase",letterSpacing:.3 }}>
+                        {tr.severity} · </span>
+                      <span style={{ fontSize:11,color:DS.ink }}>{tr.risk}</span>
+                    </div>
+                    {tr.mitigation&&(
+                      <div style={{ fontSize:10,color:DS.success,fontStyle:"italic" }}>
+                        → {tr.mitigation}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── RISK SUMMARY VIEW ── */}
+        {view==="risks"&&(
+          <div style={{ flex:1, overflow:"auto", padding:20 }}>
+            <div style={{ fontSize:13,fontWeight:700,color:DS.ink,marginBottom:16 }}>Risk Exposure Summary</div>
+            {events.filter(e=>e.type==="risk_window").length===0?(
+              <div style={{ color:DS.inkTer,fontSize:13,textAlign:"center",padding:40 }}>
+                No risk windows on the timeline yet. Add them using + Add Event.
+              </div>
+            ):(
+              <>
+                {/* Risk heat bar */}
+                <div style={{ marginBottom:20, padding:"14px 16px",
+                  background:DS.canvas, border:"1px solid "+DS.canvasBdr, borderRadius:10 }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:DS.inkTer,
+                    textTransform:"uppercase",letterSpacing:.5,marginBottom:8 }}>
+                    Risk Exposure by Month
+                  </div>
+                  <div style={{ display:"flex", gap:2, height:32 }}>
+                    {Array.from({length:Math.min(MONTHS,18)},(_,i)=>{
+                      const m = i+1;
+                      const overlapping = events.filter(e=>
+                        e.type==="risk_window" && e.startMonth<=m && e.endMonth>=m
+                      );
+                      const maxSev = overlapping.reduce((max,e)=>{
+                        const order={Critical:4,High:3,Medium:2,Low:1};
+                        return (order[e.severity]||0) > (order[max]||0) ? e.severity : max;
+                      }, "None");
+                      const col = SEVERITY[maxSev]||DS.canvasBdr;
+                      return (
+                        <div key={i} style={{ flex:1, background:col+"33",
+                          border:"1px solid "+col+"66", borderRadius:3,
+                          display:"flex",alignItems:"flex-end",justifyContent:"center",
+                          cursor:"default" }} title={monthLabel(m)+": "+overlapping.length+" risks"}>
+                          <div style={{ width:"100%",
+                            height:(overlapping.length/3*100)+"%",
+                            minHeight:overlapping.length?4:0,
+                            background:col, borderRadius:2 }}/>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
+                    <span style={{ fontSize:8,color:DS.inkTer }}>{monthLabel(1)}</span>
+                    <span style={{ fontSize:8,color:DS.inkTer }}>{monthLabel(18)}</span>
+                  </div>
+                </div>
+
+                {/* Risk list */}
+                {events.filter(e=>e.type==="risk_window")
+                  .sort((a,b)=>{const o={Critical:4,High:3,Medium:2,Low:1};return (o[b.severity]||0)-(o[a.severity]||0);})
+                  .map(r=>(
+                  <div key={r.id} style={{ marginBottom:8, padding:"12px 14px",
+                    background:DS.canvas, border:"1px solid "+DS.canvasBdr,
+                    borderRadius:8, borderLeft:"4px solid "+(SEVERITY[r.severity]||DS.canvasBdr) }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+                      <span style={{ fontSize:12,fontWeight:700,color:DS.ink,flex:1 }}>{r.title}</span>
+                      <span style={{ fontSize:9,fontWeight:700,
+                        color:SEVERITY[r.severity]||DS.inkTer,
+                        padding:"1px 7px",borderRadius:3,
+                        background:(SEVERITY[r.severity]||DS.inkTer)+"18" }}>
+                        {r.severity}
+                      </span>
+                      <span style={{ fontSize:10,color:DS.inkTer }}>
+                        {monthLabel(r.startMonth)} – {monthLabel(r.endMonth)}
+                      </span>
+                    </div>
+                    {r.description&&(
+                      <div style={{ fontSize:11,color:DS.inkSub,lineHeight:1.5 }}>{r.description}</div>
+                    )}
+                    {/* Check if any decision gate falls in this risk window */}
+                    {decisionGates.filter(g=>g.startMonth>=r.startMonth&&g.startMonth<=r.endMonth).map(g=>(
+                      <div key={g.id} style={{ marginTop:6,padding:"4px 8px",
+                        background:"#fef3c7",border:"1px solid #fde68a",borderRadius:4,
+                        fontSize:10,color:"#92400e" }}>
+                        ⚠ Decision gate "{g.title}" falls within this risk window
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── DETAIL PANEL ── */}
+        {selectedEvent&&view==="timeline"&&(
+          <div style={{ width:280, borderLeft:"1px solid "+DS.canvasBdr,
+            background:DS.canvas, padding:16, overflowY:"auto", flexShrink:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+              <div style={{ width:24,height:24,borderRadius:5,
+                background:EVENT_TYPES[selectedEvent.type]?.bg||DS.canvasAlt,
+                border:"1.5px solid "+(EVENT_TYPES[selectedEvent.type]?.color||DS.canvasBdr),
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:12,color:EVENT_TYPES[selectedEvent.type]?.color||DS.ink }}>
+                {EVENT_TYPES[selectedEvent.type]?.icon}
+              </div>
+              <div style={{ flex:1,fontSize:12,fontWeight:700,color:DS.ink }}>
+                {selectedEvent.title}
+              </div>
+              <button onClick={()=>removeEvent(selectedEvent.id)}
+                style={{ background:"none",border:"none",cursor:"pointer",
+                  color:DS.inkTer,fontSize:14 }}>×</button>
+            </div>
+
+            {/* Editable fields */}
+            {[
+              {key:"title",label:"Title"},
+              {key:"owner",label:"Owner"},
+              {key:"description",label:"Description",multi:true},
+              {key:"unresolvedUncertainties",label:"Unresolved Uncertainties",multi:true},
+              {key:"approvalAuthority",label:"Approval Authority"},
+              {key:"linkedRisks",label:"Linked Risks"},
+              {key:"triggerCondition",label:"Trigger Condition"},
+            ].map(f=>(
+              <div key={f.key} style={{ marginBottom:10 }}>
+                <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,
+                  textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>{f.label}</div>
+                {f.multi?(
+                  <textarea value={selectedEvent[f.key]||""} rows={2}
+                    onChange={e=>updateEvent(selectedEvent.id,{[f.key]:e.target.value})}
+                    style={{ width:"100%",padding:"5px 7px",fontSize:11,fontFamily:"inherit",
+                      background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,
+                      borderRadius:5,color:DS.ink,outline:"none",resize:"none",
+                      lineHeight:1.5,boxSizing:"border-box" }}/>
+                ):(
+                  <input value={selectedEvent[f.key]||""}
+                    onChange={e=>updateEvent(selectedEvent.id,{[f.key]:e.target.value})}
+                    style={{ width:"100%",padding:"5px 7px",fontSize:11,fontFamily:"inherit",
+                      background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,
+                      borderRadius:5,color:DS.ink,outline:"none",boxSizing:"border-box" }}/>
+                )}
+              </div>
+            ))}
+
+            {/* Month range */}
+            <div style={{ display:"flex",gap:8,marginBottom:10 }}>
+              {[{key:"startMonth",label:"Start"},{key:"endMonth",label:"End"}].map(f=>(
+                <div key={f.key} style={{ flex:1 }}>
+                  <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,
+                    textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>{f.label} Month</div>
+                  <input type="number" min="1" max={MONTHS} value={selectedEvent[f.key]||1}
+                    onChange={e=>updateEvent(selectedEvent.id,{[f.key]:parseInt(e.target.value)||1})}
+                    style={{ width:"100%",padding:"5px 7px",fontSize:11,fontFamily:"inherit",
+                      background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,
+                      borderRadius:5,color:DS.ink,outline:"none",boxSizing:"border-box" }}/>
+                </div>
+              ))}
+            </div>
+
+            {selectedEvent.type==="decision_gate"&&(
+              <div style={{ marginBottom:10 }}>
+                <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,
+                  textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Readiness %</div>
+                <input type="range" min="0" max="100" value={selectedEvent.readinessScore||0}
+                  onChange={e=>updateEvent(selectedEvent.id,{readinessScore:parseInt(e.target.value)})}
+                  style={{ width:"100%",accentColor:readinessColor(selectedEvent.readinessScore||0) }}/>
+                <div style={{ fontSize:12,fontWeight:700,
+                  color:readinessColor(selectedEvent.readinessScore||0),
+                  textAlign:"center",marginTop:2 }}>
+                  {selectedEvent.readinessScore||0}%
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginBottom:10 }}>
+              <div style={{ fontSize:9,fontWeight:700,color:DS.inkTer,
+                textTransform:"uppercase",letterSpacing:.5,marginBottom:4 }}>Severity</div>
+              <div style={{ display:"flex",gap:4 }}>
+                {["Critical","High","Medium","Low"].map(s=>(
+                  <button key={s} onClick={()=>updateEvent(selectedEvent.id,{severity:s})}
+                    style={{ flex:1,padding:"3px 0",fontSize:9,fontWeight:700,
+                      fontFamily:"inherit",cursor:"pointer",
+                      border:"1.5px solid "+(selectedEvent.severity===s?(SEVERITY[s]||DS.ink):DS.canvasBdr),
+                      borderRadius:4,
+                      background:selectedEvent.severity===s?(SEVERITY[s]||DS.ink)+"18":"transparent",
+                      color:selectedEvent.severity===s?(SEVERITY[s]||DS.ink):DS.inkTer }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
 
 function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges, aiCall, aiBusy, onAIMsg }) {
 
@@ -11594,7 +12418,7 @@ export default function App() {
     scorecard: { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     export:    { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, aiCall, aiBusy, onAIMsg:pushAIMsg },
     influence: { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg, problem, onNodesChange:setInfluenceNodes, onEdgesChange:setInfluenceEdges },
-    timeline:  { decisions, strategies, issues, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    timeline:  { decisions, strategies, issues, problem, nodes:influenceNodes, aiCall, aiBusy, onAIMsg:pushAIMsg },
     voi:       { nodes:influenceNodes, edges:influenceEdges, issues, strategies, decisions, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
   };
 
