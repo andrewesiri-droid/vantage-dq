@@ -8810,7 +8810,6 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
         <div style={{padding:"10px 20px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div style={{flex:1}}>
             <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Module 05</div>
-            <div <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1,marginBottom:2}}>Module 05</div>
             <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:18,fontWeight:700,color:DS.ink}}>Scenario Planning</div>
           </div>
           {view==="uncertainties" && (
@@ -9471,7 +9470,6 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
         <div style={{padding:"10px 20px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div style={{flex:1}}>
             <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Module 11</div>
-            <div <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1,marginBottom:2}}>Module 11</div>
             <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:18,fontWeight:700,color:DS.ink}}>Value of Information</div>
           </div>
           <Btn variant="secondary" size="sm" onClick={addItem}>+ Add Uncertainty</Btn>
