@@ -8493,9 +8493,9 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
         <div style={{padding:"0 20px 8px",display:"flex",gap:2}}>
           {[
             {id:"uncertainties",label:"1. Uncertainties"},
-            {id:"matrix2x2",label:"2. Select Axes",hidden:scenarioMode==="multi"},
-            {id:"multi",label:"2. Multi-Scenario",hidden:scenarioMode==="2x2"},
-            {id:"scenarios",label:"3. Scenarios",hidden:scenarioMode==="multi"},
+            {id:"matrix2x2",label:scenarioMode===null?"2a. Select Axes":"2. Select Axes",hidden:scenarioMode==="multi"},
+            {id:"multi",label:scenarioMode===null?"2b. Multi-Scenario":"2. Multi-Scenario",hidden:scenarioMode==="2x2"},
+            {id:"scenarios",label:scenarioMode==="multi"?"3. Scenarios":"3. Scenarios",hidden:scenarioMode==="multi"},
             {id:"test",label:scenarioMode==="multi"?"3. Test Strategies":"4. Test Strategies"},
             {id:"insights",label:scenarioMode==="multi"?"4. Robustness":"5. Robustness"},
           ].filter(v=>!v.hidden).map((v,i)=>{
@@ -11068,7 +11068,7 @@ function SessionHealthBar({ problem, issues, decisions, strategies, criteria, as
 }
 
 /* ── TOOLS DROPDOWN ────────────────────────────────────────────────────────── */
-function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, aiBusy }) {
+function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, onNew, aiBusy }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -11081,7 +11081,8 @@ function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, aiBus
   }, []);
 
   const items = [
-    { icon:"⊕", label:"AI Deep Dive",     sub:"Analyse a problem brief",      action:onDeepDive },
+    { icon:"◌", label:"New Workspace",    sub:"Start a fresh decision",        action:onNew, highlight:true },
+    { icon:"⊕", label:"AI Deep Dive",     sub:"Analyse a problem brief",       action:onDeepDive },
     { icon:"◉", label:"Workshop Mode",    sub:"Live facilitation view",        action:onWorkshop },
     { icon:"◷", label:"Version History",  sub:"Snapshots & restore",           action:onVersions },
     { icon:"◎", label:"DQi Dashboard",    sub:"Organisation performance",      action:onDqi },
@@ -12366,6 +12367,7 @@ export default function App() {
               onVersions={()=>setVersionOpen(true)}
               onDqi={()=>setDqiOpen(true)}
               onProject={()=>setProjectSetupOpen(true)}
+              onNew={()=>setShowQuickStart(true)}
               aiBusy={aiBusy}/>
 
             {/* Co-Pilot toggle */}
