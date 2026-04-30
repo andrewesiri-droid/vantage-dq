@@ -2840,6 +2840,107 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
     });
   };
 
+  // ── Fill missing fields on existing strategies ───────────────────────────
+  const fillExistingStrategies = () => {
+    const incomplete = strategies.filter(s =>
+      !s.objective || !s.description ||
+      nowDecisions.some(d => s.selections[d.id] === undefined)
+    );
+    if (incomplete.length === 0) {
+      onAIMsg({role:"ai", text:"All existing strategies already have objectives, rationale and selections filled in."});
+      return;
+    }
+    setSuggesting(true);
+
+    const decMenu = nowDecisions.map((d, di) =>
+      "D" + (di+1) + " [id:" + d.id + "]: " + d.label + " → " +
+      d.choices.map((ch, ci) => ci + "=" + ch).join(" | ")
+    ).join("\n");
+
+    const stratList = incomplete.map((s, i) => {
+      const existing = nowDecisions.map(d => {
+        const v = s.selections[d.id];
+        const ci = typeof v === "number" ? v : (Array.isArray(v) ? v[0] : undefined);
+        return "D" + (nowDecisions.indexOf(d)+1) + "=" + (ci !== undefined ? d.choices[ci] : "NOT SELECTED");
+      }).join(", ");
+      return (i+1) + ". Strategy name: " + s.name +
+        " | Objective: " + (s.objective || "MISSING") +
+        " | Rationale: " + (s.description || "MISSING") +
+        " | Current selections: " + existing;
+    }).join("\n");
+
+    aiCall(
+      "You are a Decision Quality strategist. Complete the missing fields for these existing strategies. " +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + ".\n" +
+      "DECISIONS:\n" + decMenu + "\n\n" +
+      "STRATEGIES TO COMPLETE:\n" + stratList + "\n\n" +
+      "For each strategy: write a clear objective (what it aims to achieve), " +
+      "a rationale (why the option choices are coherent together), " +
+      "and pick the best option index for any unselected decisions. " +
+      "Match the strategy name and intent — don't change what's already there, only fill what's missing. " +
+      "Return ONLY JSON:\n" +
+      '{"strategies":[{"name":"exact strategy name","objective":"clear objective","rationale":"why coherent","selections":{"D1":0,"D2":1}}],"insight":"observation"}',
+    (r) => {
+      let result = r;
+      if (r && r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
+        catch(e) { onAIMsg({role:"ai",text:"Could not parse response. Try again."}); setSuggesting(false); return; }
+      }
+      if (!result || result.error) {
+        onAIMsg({role:"ai", text:"Error: " + (result?.error||"No response")}); setSuggesting(false); return;
+      }
+
+      const aiStrats = result.strategies || [];
+      if (!aiStrats.length) {
+        onAIMsg({role:"ai", text:"No updates returned. Try again."}); setSuggesting(false); return;
+      }
+
+      // Merge updates into existing strategies by matching name
+      const updated = strategies.map(s => {
+        const match = aiStrats.find(ai =>
+          ai.name?.toLowerCase().trim() === s.name?.toLowerCase().trim()
+        );
+        if (!match) return s;
+
+        // Build updated selections — merge AI picks with existing
+        const newSelections = { ...s.selections };
+        const rawSel = match.selections || {};
+        if (Array.isArray(rawSel)) {
+          rawSel.forEach((optIdx, j) => {
+            if (nowDecisions[j] && typeof optIdx === "number" &&
+                newSelections[nowDecisions[j].id] === undefined) {
+              newSelections[nowDecisions[j].id] = optIdx;
+            }
+          });
+        } else {
+          Object.entries(rawSel).forEach(([key, optIdx]) => {
+            const decPos = parseInt(key.replace(/\D/g,"")) - 1;
+            const dec = nowDecisions[decPos];
+            if (dec && typeof optIdx === "number" &&
+                newSelections[dec.id] === undefined) {
+              newSelections[dec.id] = optIdx;
+            }
+          });
+        }
+
+        return {
+          ...s,
+          objective: s.objective || match.objective || s.objective,
+          description: s.description || match.rationale || s.description,
+          selections: newSelections,
+        };
+      });
+
+      onChange(updated);
+      onAIMsg({role:"ai", text:
+        "Filled in " + aiStrats.length + " existing strategies with objectives, rationale and missing option selections. " +
+        (result.insight || "Review and adjust as needed.")
+      });
+      setSuggesting(false);
+    });
+  };
+
+
   const aiValidate = () => {
     if (strategies.length === 0 || nowDecisions.length === 0) {
       onAIMsg({ role: "ai", text: "Add strategies and focus decisions before validating." });
@@ -2931,6 +3032,13 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
           disabled={aiBusy || suggesting || nowDecisions.length === 0}>
           {suggesting ? "Suggesting…" : "AI Suggest Strategies"}
         </Btn>
+        {strategies.length > 0 && (
+          <Btn variant="secondary" size="sm"
+            disabled={suggesting || aiBusy}
+            onClick={fillExistingStrategies}>
+            {suggesting ? "Filling…" : "AI Fill Existing"}
+          </Btn>
+        )}
         <Btn variant="primary" size="sm"
           disabled={recommending || aiBusy || strategies.length < 2}
           onClick={recommendStrategy}>
