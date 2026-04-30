@@ -2844,104 +2844,48 @@ Return ONLY JSON:
                   </div>
                 )}
 
+                {/* Add Focus Decision — top right of table */}
+                <div style={{ padding:"12px 28px 0", display:"flex", justifyContent:"flex-end" }}>
+                  {onDecisions && (
+                    <button
+                      onClick={()=>{
+                        const newDec = { id:uid("d"), label:"New Decision",
+                          tier:"focus", choices:["Option A","Option B"], rationale:"" };
+                        onDecisions(prev=>[...prev, newDec]);
+                      }}
+                      style={{ fontSize:11, fontWeight:700, fontFamily:"inherit",
+                        padding:"5px 12px", border:`1px solid ${DS.accent}`,
+                        borderRadius:6, background:DS.accentSoft,
+                        color:DS.accent, cursor:"pointer" }}>
+                      + Add Focus Decision
+                    </button>
+                  )}
+                </div>
+
                 {/* MAIN TABLE */}
-                <div style={{ padding:"16px 28px", minWidth: 280 + nowDecisions.length*220 }}>
+                <div style={{ padding:"12px 28px 0", minWidth: 260 + nowDecisions.length*220 }}>
                   <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
 
-                    {/* Column headers — decisions */}
+                    {/* Column headers: strategy name col + one col per decision (name only) */}
                     <thead>
                       <tr>
-                        {/* Strategy col header + Add Decision button */}
                         <th style={{ width:240, padding:"10px 14px",
                           background:DS.chrome, borderBottom:`2px solid ${DS.border}`,
-                          textAlign:"left", position:"sticky", left:0, zIndex:3 }}>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                            <span style={{ fontSize:11, fontWeight:700, color:DS.textSec, letterSpacing:.3 }}>Strategy</span>
-                            {onDecisions && (
-                              <button
-                                onClick={()=>{
-                                  const newDec = { id:uid("d"), label:"New Decision",
-                                    tier:"focus", choices:["Option A","Option B"], rationale:"" };
-                                  onDecisions(prev=>[...prev, newDec]);
-                                }}
-                                style={{ fontSize:10, fontWeight:700, fontFamily:"inherit",
-                                  padding:"3px 8px", border:`1px solid ${DS.border}`,
-                                  borderRadius:5, background:DS.chromeMid,
-                                  color:DS.textSec, cursor:"pointer" }}>
-                                + Decision
-                              </button>
-                            )}
-                          </div>
+                          textAlign:"left", position:"sticky", left:0, zIndex:3,
+                          fontSize:11, fontWeight:700, color:DS.textSec, letterSpacing:.3 }}>
+                          Strategy
                         </th>
-
-                        {/* Decision column headers — name only, choices editable below */}
                         {nowDecisions.map((d,di)=>(
-                          <th key={d.id} style={{ padding:"10px 12px",
+                          <th key={d.id} style={{ padding:"10px 14px",
                             background:DS.chrome, borderBottom:`2px solid ${DS.border}`,
-                            textAlign:"left", verticalAlign:"top",
-                            minWidth:220, width:220 }}>
-
-                            {/* Decision name — editable */}
-                            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+                            textAlign:"left", minWidth:220, width:220 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                               <span style={{ width:18,height:18,borderRadius:4,
                                 background:DS.chromeSub, flexShrink:0,
                                 display:"flex",alignItems:"center",justifyContent:"center",
                                 fontSize:9,color:DS.textTer,fontWeight:700 }}>{di+1}</span>
-                              <input
-                                value={d.label}
-                                onChange={e=>onDecisions&&onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,label:e.target.value}:x))}
-                                style={{ fontSize:12, fontWeight:700, color:DS.textPri,
-                                  background:"transparent", border:"none", outline:"none",
-                                  fontFamily:"inherit", flex:1, minWidth:0 }}/>
-                            </div>
-
-                            {/* Options — one per line, editable, with + to add more */}
-                            <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                              {d.choices.map((ch,ci)=>(
-                                <div key={ci} style={{ display:"flex", alignItems:"center", gap:4 }}>
-                                  <span style={{ fontSize:9, color:DS.textTer,
-                                    minWidth:14, textAlign:"right" }}>{ci+1}.</span>
-                                  <input
-                                    value={ch}
-                                    onChange={e=>{
-                                      if(!onDecisions) return;
-                                      const newChoices=[...d.choices];
-                                      newChoices[ci]=e.target.value;
-                                      onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,choices:newChoices}:x));
-                                    }}
-                                    style={{ flex:1, fontSize:11, padding:"2px 6px",
-                                      background:DS.chromeMid, border:`1px solid ${DS.border}`,
-                                      borderRadius:4, color:DS.textSec,
-                                      outline:"none", fontFamily:"inherit",
-                                      minWidth:0 }}/>
-                                  {d.choices.length>2&&(
-                                    <button
-                                      onClick={()=>{
-                                        if(!onDecisions) return;
-                                        const newChoices=d.choices.filter((_,i)=>i!==ci);
-                                        onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,choices:newChoices}:x));
-                                      }}
-                                      style={{ background:"none",border:"none",
-                                        cursor:"pointer",color:DS.textTer,
-                                        fontSize:12,padding:"0 2px",flexShrink:0 }}>×</button>
-                                  )}
-                                </div>
-                              ))}
-                              {/* + Add option */}
-                              {onDecisions&&(
-                                <button
-                                  onClick={()=>{
-                                    const newChoices=[...d.choices,"Option "+(d.choices.length+1)];
-                                    onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,choices:newChoices}:x));
-                                  }}
-                                  style={{ fontSize:10, fontFamily:"inherit",
-                                    padding:"2px 6px", border:`1px dashed ${DS.border}`,
-                                    borderRadius:4, background:"transparent",
-                                    color:DS.textTer, cursor:"pointer",
-                                    textAlign:"left", marginTop:1 }}>
-                                  + option
-                                </button>
-                              )}
+                              <span style={{ fontSize:12, fontWeight:700,
+                                color:DS.textPri, lineHeight:1.3 }}>{d.label}</span>
                             </div>
                           </th>
                         ))}
@@ -2953,188 +2897,124 @@ Return ONLY JSON:
                       {strategies.map((s,si)=>{
                         const col = DS.s[s.colorIdx]||DS.s[0];
                         const expanded = activeS===s.id;
-                        const missingInfo = !s.objective||!s.description;
                         return (
                           <tr key={s.id}>
-
-                            {/* ── LEFT: Strategy name + objective/rationale ── */}
+                            {/* Strategy name cell */}
                             <td style={{ padding:"6px 0 6px 0", verticalAlign:"top",
-                              position:"sticky", left:0, zIndex:1,
-                              background:DS.canvasAlt }}>
+                              position:"sticky", left:0, zIndex:1, background:DS.canvasAlt }}>
                               <div style={{ marginRight:8, padding:"12px 14px",
-                                background:col.soft,
-                                border:`1px solid ${col.line}`,
-                                borderLeft:`4px solid ${col.fill}`,
-                                borderRadius:8 }}>
-
-                                {/* Name row */}
-                                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:expanded||s.objective?6:0 }}>
+                                background:col.soft, border:`1px solid ${col.line}`,
+                                borderLeft:`4px solid ${col.fill}`, borderRadius:8 }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:6,
+                                  marginBottom:expanded||s.objective?6:0 }}>
                                   <div style={{ width:8,height:8,borderRadius:"50%",
                                     background:col.fill, flexShrink:0 }}/>
-                                  <input
-                                    value={s.name}
+                                  <input value={s.name}
                                     onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,name:e.target.value}:x))}
                                     placeholder="Strategy name…"
                                     style={{ flex:1, fontSize:13, fontWeight:700,
                                       color:col.fill, background:"transparent",
-                                      border:"none", outline:"none", fontFamily:"inherit",
-                                      minWidth:0 }}/>
-                                  <button
-                                    onClick={()=>setActiveS(activeS===s.id?null:s.id)}
-                                    title={expanded?"Collapse":"Expand objective & rationale"}
-                                    style={{ background:"none",
-                                      border:`1px solid ${col.line}`,
-                                      borderRadius:4, cursor:"pointer",
-                                      color:col.fill, fontSize:9,
-                                      padding:"2px 7px", flexShrink:0,
+                                      border:"none", outline:"none",
+                                      fontFamily:"inherit", minWidth:0 }}/>
+                                  <button onClick={()=>setActiveS(activeS===s.id?null:s.id)}
+                                    style={{ background:"none", border:`1px solid ${col.line}`,
+                                      borderRadius:4, cursor:"pointer", color:col.fill,
+                                      fontSize:9, padding:"2px 7px", flexShrink:0,
                                       fontFamily:"inherit", fontWeight:700 }}>
                                     {expanded?"▲ Less":"▼ More"}
                                   </button>
-                                  {missingInfo&&(
-                                    <span style={{ fontSize:8,color:DS.warning,
-                                      padding:"1px 5px",background:DS.warnSoft,
-                                      borderRadius:3,border:`1px solid ${DS.warnLine}`,
-                                      flexShrink:0 }}>
+                                  {(!s.objective||!s.description)&&(
+                                    <span style={{ fontSize:8,color:DS.warning,padding:"1px 5px",
+                                      background:DS.warnSoft,borderRadius:3,
+                                      border:`1px solid ${DS.warnLine}`,flexShrink:0 }}>
                                       {!s.objective&&!s.description?"no info":"partial"}
                                     </span>
                                   )}
-                                  <button
-                                    onClick={()=>onChange(strategies.filter(x=>x.id!==s.id))}
-                                    style={{ background:"none",border:"none",
-                                      cursor:"pointer",color:DS.inkTer,
-                                      fontSize:13,flexShrink:0 }}>×</button>
+                                  <button onClick={()=>onChange(strategies.filter(x=>x.id!==s.id))}
+                                    style={{ background:"none",border:"none",cursor:"pointer",
+                                      color:DS.inkTer,fontSize:13,flexShrink:0 }}>×</button>
                                 </div>
-
-                                {/* Objective preview when collapsed */}
-                                {!expanded && s.objective && (
-                                  <div style={{ fontSize:10, color:DS.inkSub,
-                                    lineHeight:1.4, paddingLeft:14,
-                                    display:"-webkit-box",
-                                    WebkitLineClamp:2,
-                                    WebkitBoxOrient:"vertical",
-                                    overflow:"hidden" }}>
+                                {!expanded&&s.objective&&(
+                                  <div style={{ fontSize:10,color:DS.inkSub,lineHeight:1.4,paddingLeft:14,
+                                    overflow:"hidden",display:"-webkit-box",
+                                    WebkitLineClamp:2,WebkitBoxOrient:"vertical" }}>
                                     {s.objective}
                                   </div>
                                 )}
-
-                                {/* Expanded: editable objective + rationale */}
-                                {expanded && (
-                                  <div style={{ display:"flex", flexDirection:"column",
-                                    gap:8, paddingLeft:14 }}>
+                                {expanded&&(
+                                  <div style={{ display:"flex",flexDirection:"column",gap:8,paddingLeft:14 }}>
                                     <div>
-                                      <div style={{ fontSize:8, fontWeight:700,
-                                        color:col.fill, textTransform:"uppercase",
-                                        letterSpacing:.5, marginBottom:3 }}>Objective</div>
-                                      <textarea
-                                        value={s.objective||""}
+                                      <div style={{ fontSize:8,fontWeight:700,color:col.fill,
+                                        textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Objective</div>
+                                      <textarea value={s.objective||""}
                                         onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,objective:e.target.value}:x))}
-                                        placeholder="What is this strategy trying to achieve?"
-                                        rows={2}
-                                        style={{ width:"100%", fontSize:11,
-                                          padding:"6px 8px", fontFamily:"inherit",
-                                          background:"rgba(255,255,255,.8)",
-                                          border:`1px solid ${col.line}`,
-                                          borderRadius:5, color:DS.ink,
-                                          outline:"none", resize:"none",
-                                          lineHeight:1.5, boxSizing:"border-box" }}/>
+                                        placeholder="What is this strategy trying to achieve?" rows={2}
+                                        style={{ width:"100%",fontSize:11,padding:"6px 8px",fontFamily:"inherit",
+                                          background:"rgba(255,255,255,.8)",border:`1px solid ${col.line}`,
+                                          borderRadius:5,color:DS.ink,outline:"none",resize:"none",
+                                          lineHeight:1.5,boxSizing:"border-box" }}/>
                                     </div>
                                     <div>
-                                      <div style={{ fontSize:8, fontWeight:700,
-                                        color:col.fill, textTransform:"uppercase",
-                                        letterSpacing:.5, marginBottom:3 }}>Rationale</div>
-                                      <textarea
-                                        value={s.description||""}
+                                      <div style={{ fontSize:8,fontWeight:700,color:col.fill,
+                                        textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Rationale</div>
+                                      <textarea value={s.description||""}
                                         onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,description:e.target.value}:x))}
-                                        placeholder="Why do these choices cohere as a strategy?"
-                                        rows={2}
-                                        style={{ width:"100%", fontSize:11,
-                                          padding:"6px 8px", fontFamily:"inherit",
-                                          background:"rgba(255,255,255,.8)",
-                                          border:`1px solid ${col.line}`,
-                                          borderRadius:5, color:DS.ink,
-                                          outline:"none", resize:"none",
-                                          lineHeight:1.5, boxSizing:"border-box" }}/>
+                                        placeholder="Why do these choices cohere as a strategy?" rows={2}
+                                        style={{ width:"100%",fontSize:11,padding:"6px 8px",fontFamily:"inherit",
+                                          background:"rgba(255,255,255,.8)",border:`1px solid ${col.line}`,
+                                          borderRadius:5,color:DS.ink,outline:"none",resize:"none",
+                                          lineHeight:1.5,boxSizing:"border-box" }}/>
                                     </div>
                                   </div>
                                 )}
                               </div>
                             </td>
 
-                            {/* ── RIGHT: Decision cells with multi-select ── */}
+                            {/* Decision cells — options as vertical list */}
                             {nowDecisions.map(d=>{
                               const rawSel = s.selections[d.id];
                               const selected = Array.isArray(rawSel)?rawSel:
                                 (rawSel!==undefined?[rawSel]:[]);
-                              const hasAny = selected.length > 0;
                               return (
-                                <td key={d.id} style={{ padding:"6px 6px 6px 0",
-                                  verticalAlign:"top" }}>
-                                  <div style={{ padding:"10px 12px",
-                                    minHeight:56,
-                                    background:hasAny?col.soft:DS.canvas,
-                                    border:`1.5px solid ${hasAny?col.line:DS.canvasBdr}`,
-                                    borderRadius:8,
-                                    transition:"border-color .15s" }}>
-
-                                    {/* Selected options as solid pills */}
-                                    {selected.length>0&&(
-                                      <div style={{ display:"flex",flexWrap:"wrap",
-                                        gap:5, marginBottom:8 }}>
-                                        {selected.map(idx=>(
-                                          <span key={idx}
-                                            style={{ display:"inline-flex",
-                                              alignItems:"center", gap:5,
-                                              padding:"4px 10px",
-                                              borderRadius:6,
-                                              fontSize:11, fontWeight:700,
-                                              background:col.fill, color:"#fff",
-                                              boxShadow:"0 1px 3px rgba(0,0,0,.15)" }}>
-                                            {d.choices[idx]}
-                                            <button
-                                              onClick={()=>toggleSelection(s.id,d.id,idx)}
-                                              style={{ background:"rgba(255,255,255,.25)",
-                                                border:"none",borderRadius:"50%",
-                                                cursor:"pointer",color:"#fff",
-                                                fontSize:10,lineHeight:1,
-                                                width:14,height:14,
-                                                display:"flex",alignItems:"center",
-                                                justifyContent:"center",
-                                                padding:0,flexShrink:0 }}>×</button>
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    {/* Unselected options as clickable ghost buttons */}
-                                    <div style={{ display:"flex",flexWrap:"wrap",gap:4 }}>
+                                <td key={d.id} style={{ padding:"6px 6px 6px 0",verticalAlign:"top" }}>
+                                  <div style={{ padding:"8px 10px",
+                                    background:selected.length>0?col.soft:DS.canvas,
+                                    border:`1.5px solid ${selected.length>0?col.line:DS.canvasBdr}`,
+                                    borderRadius:8, minHeight:50 }}>
+                                    <div style={{ display:"flex",flexDirection:"column",gap:4 }}>
                                       {d.choices.map((choice,idx)=>{
-                                        if (selected.includes(idx)) return null;
+                                        const isSel = selected.includes(idx);
                                         return (
                                           <button key={idx}
                                             onClick={()=>toggleSelection(s.id,d.id,idx)}
-                                            style={{ padding:"4px 10px",
-                                              fontSize:11, fontFamily:"inherit",
-                                              cursor:"pointer",
-                                              border:`1.5px dashed ${DS.canvasMid}`,
+                                            style={{ padding:"5px 10px",fontSize:11,
+                                              fontFamily:"inherit",cursor:"pointer",
+                                              textAlign:"left",
+                                              border:`1.5px solid ${isSel?col.fill:DS.canvasBdr}`,
                                               borderRadius:6,
-                                              background:"transparent",
-                                              color:DS.inkTer,
-                                              transition:"all .12s",
-                                              whiteSpace:"nowrap" }}
-                                            onMouseEnter={e=>{
-                                              e.currentTarget.style.borderColor=col.fill;
-                                              e.currentTarget.style.color=col.fill;
-                                              e.currentTarget.style.background=col.soft;
-                                            }}
-                                            onMouseLeave={e=>{
-                                              e.currentTarget.style.borderColor=DS.canvasMid;
-                                              e.currentTarget.style.color=DS.inkTer;
-                                              e.currentTarget.style.background="transparent";
-                                            }}>
-                                            + {choice}
+                                              background:isSel?col.fill:"transparent",
+                                              color:isSel?"#fff":DS.inkTer,
+                                              fontWeight:isSel?700:400,
+                                              transition:"all .12s",width:"100%" }}>
+                                            {isSel?"✓ ":""}{choice}
                                           </button>
                                         );
                                       })}
+                                      {onDecisions&&(
+                                        <button
+                                          onClick={()=>{
+                                            const newChoices=[...d.choices,"Option "+(d.choices.length+1)];
+                                            onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,choices:newChoices}:x));
+                                          }}
+                                          style={{ padding:"3px 8px",fontSize:10,
+                                            fontFamily:"inherit",cursor:"pointer",
+                                            textAlign:"left",
+                                            border:`1px dashed ${DS.canvasMid}`,
+                                            borderRadius:5,background:"transparent",
+                                            color:DS.inkTer,marginTop:2 }}>
+                                          + option
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 </td>
