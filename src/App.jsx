@@ -2800,7 +2800,7 @@ Return ONLY JSON:
 
         {/* BUILDER MODE */}
         {mode==="builder" && (
-          <div style={{ padding:"0", overflow:"hidden" }}>
+          <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
             {nowDecisions.length===0 ? (
               <div style={{ padding:"60px 40px", margin:"24px 28px", textAlign:"center",
                 border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10, color:DS.inkTer }}>
@@ -2808,14 +2808,16 @@ Return ONLY JSON:
                 <div style={{ fontSize:12 }}>Assign decisions to the Focus tier in the Decision Hierarchy module first.</div>
               </div>
             ) : (
-              <div style={{ overflowX:"auto" }}>
+              <div style={{ flex:1, overflowX:"auto", overflowY:"auto" }}>
+
                 {/* Validation banner */}
                 {validation && validation.coherenceFlags?.length > 0 && (
-                  <div style={{ margin:"16px 28px 0", padding:"12px 16px", background:DS.warnSoft,
-                    border:`1px solid ${DS.warnLine}`, borderRadius:8 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:DS.warning, marginBottom:4 }}>⚠ Coherence Flags</div>
+                  <div style={{ margin:"16px 28px 0", padding:"10px 14px", background:DS.warnSoft,
+                    border:`1px solid ${DS.warnLine}`, borderRadius:7 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.warning, marginBottom:4,
+                      textTransform:"uppercase", letterSpacing:.4 }}>⚠ Coherence Flags</div>
                     {validation.coherenceFlags.map((f,i)=>(
-                      <div key={i} style={{ fontSize:12, color:DS.ink, marginBottom:2 }}>
+                      <div key={i} style={{ fontSize:11, color:DS.ink, marginBottom:2 }}>
                         <strong>{f.strategy}:</strong> {f.issue}
                       </div>
                     ))}
@@ -2824,196 +2826,254 @@ Return ONLY JSON:
 
                 {/* Recommendation panel */}
                 {recommendation && (
-                  <div style={{ margin:"16px 28px 0", padding:"16px 18px",
+                  <div style={{ margin:"16px 28px 0", padding:"14px 18px",
                     background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",
                     border:"2px solid "+DS.accent, borderRadius:10, position:"relative" }}>
                     <button onClick={()=>setRecommendation(null)}
-                      style={{ position:"absolute",top:10,right:12,background:"none",border:"none",
+                      style={{ position:"absolute",top:8,right:10,background:"none",border:"none",
                         cursor:"pointer",color:DS.inkTer,fontSize:16 }}>×</button>
                     <div style={{ fontSize:9,fontWeight:700,color:DS.accent,letterSpacing:.6,
-                      textTransform:"uppercase",marginBottom:6 }}>✦ AI Recommendation</div>
-                    <div style={{ fontSize:15,fontWeight:700,color:DS.ink,marginBottom:6,
+                      textTransform:"uppercase",marginBottom:4 }}>✦ AI Recommendation</div>
+                    <div style={{ fontSize:15,fontWeight:700,color:DS.ink,marginBottom:4,
                       fontFamily:"'Libre Baskerville',serif" }}>{recommendation.recommendedStrategy}</div>
-                    <div style={{ fontSize:12,color:DS.inkSub,lineHeight:1.6,marginBottom:8 }}>{recommendation.reasoning}</div>
-                    {recommendation.concerns && (
-                      <div style={{ fontSize:11,color:DS.danger,padding:"5px 10px",
-                        background:DS.dangerSoft,borderRadius:5 }}>⚠ {recommendation.concerns}</div>
+                    <div style={{ fontSize:12,color:DS.inkSub,lineHeight:1.6,marginBottom:6 }}>{recommendation.reasoning}</div>
+                    {recommendation.concerns&&(
+                      <div style={{ fontSize:11,color:DS.danger,padding:"4px 9px",
+                        background:DS.dangerSoft,borderRadius:5,display:"inline-block" }}>⚠ {recommendation.concerns}</div>
                     )}
                   </div>
                 )}
 
-                {/* TABLE: strategies as rows, decisions as columns */}
-                <div style={{ minWidth: 240 + nowDecisions.length*180, padding:"16px 28px" }}>
-                  <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:"0 6px" }}>
+                {/* MAIN TABLE */}
+                <div style={{ padding:"16px 28px", minWidth: 280 + nowDecisions.length*220 }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+
+                    {/* Column headers — decisions */}
                     <thead>
                       <tr>
-                        <th style={{ padding:"8px 14px", background:DS.chrome, color:DS.textSec,
-                          fontSize:10, fontWeight:700, textAlign:"left", letterSpacing:.5,
-                          textTransform:"uppercase", borderRadius:"6px 0 0 6px",
-                          position:"sticky", left:0, zIndex:2, minWidth:220 }}>
+                        <th style={{ width:240, padding:"10px 14px",
+                          background:DS.chrome, borderBottom:`2px solid ${DS.border}`,
+                          textAlign:"left", fontSize:11, fontWeight:700,
+                          color:DS.textSec, letterSpacing:.3,
+                          position:"sticky", left:0, zIndex:3 }}>
                           Strategy
                         </th>
                         {nowDecisions.map((d,di)=>(
-                          <th key={d.id} style={{ padding:"8px 12px", background:DS.chrome,
-                            color:DS.textSec, fontSize:10, fontWeight:700, textAlign:"left",
-                            letterSpacing:.4, minWidth:180 }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                              <span style={{ width:18,height:18,borderRadius:4,background:DS.chromeMid,
+                          <th key={d.id} style={{ padding:"10px 14px",
+                            background:DS.chrome, borderBottom:`2px solid ${DS.border}`,
+                            textAlign:"left", verticalAlign:"top",
+                            minWidth:220, width:220 }}>
+                            <div style={{ display:"flex", alignItems:"flex-start", gap:6 }}>
+                              <span style={{ width:20,height:20,borderRadius:4,
+                                background:DS.chromeSub, flexShrink:0, marginTop:1,
                                 display:"flex",alignItems:"center",justifyContent:"center",
-                                fontSize:9,color:DS.textTer,fontWeight:700,flexShrink:0 }}>{di+1}</span>
-                              <span style={{ color:DS.textPri, lineHeight:1.3 }}>{d.label}</span>
+                                fontSize:9,color:DS.textTer,fontWeight:700 }}>{di+1}</span>
+                              <div>
+                                <div style={{ fontSize:12,fontWeight:700,color:DS.textPri,
+                                  lineHeight:1.3,marginBottom:3 }}>{d.label}</div>
+                                <div style={{ display:"flex",flexWrap:"wrap",gap:3 }}>
+                                  {d.choices.map((ch,ci)=>(
+                                    <span key={ci} style={{ fontSize:9,padding:"1px 6px",
+                                      background:DS.chromeMid,color:DS.textTer,
+                                      borderRadius:3,border:`1px solid ${DS.border}` }}>
+                                      {ch}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           </th>
                         ))}
                       </tr>
                     </thead>
+
+                    {/* Strategy rows */}
                     <tbody>
                       {strategies.map((s,si)=>{
                         const col = DS.s[s.colorIdx]||DS.s[0];
                         const expanded = activeS===s.id;
-                        const hasObjective = !!s.objective;
-                        const hasRationale = !!s.description;
+                        const missingInfo = !s.objective||!s.description;
                         return (
-                          <tr key={s.id} style={{ verticalAlign:"top" }}>
-                            {/* Strategy name cell - sticky left */}
-                            <td style={{ padding:"0 0 0 0",
+                          <tr key={s.id}>
+
+                            {/* ── LEFT: Strategy name + objective/rationale ── */}
+                            <td style={{ padding:"6px 0 6px 0", verticalAlign:"top",
                               position:"sticky", left:0, zIndex:1,
                               background:DS.canvasAlt }}>
-                              <div style={{ padding:"10px 14px", background:col.soft,
-                                border:"1px solid "+col.line, borderRadius:8,
-                                borderLeft:"4px solid "+col.fill, minHeight:56 }}>
+                              <div style={{ marginRight:8, padding:"12px 14px",
+                                background:col.soft,
+                                border:`1px solid ${col.line}`,
+                                borderLeft:`4px solid ${col.fill}`,
+                                borderRadius:8 }}>
 
                                 {/* Name row */}
-                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                                  <input value={s.name}
+                                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:expanded||s.objective?6:0 }}>
+                                  <div style={{ width:8,height:8,borderRadius:"50%",
+                                    background:col.fill, flexShrink:0 }}/>
+                                  <input
+                                    value={s.name}
                                     onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,name:e.target.value}:x))}
-                                    style={{ flex:1, fontSize:13, fontWeight:700, color:col.fill,
-                                      background:"transparent", border:"none", outline:"none",
-                                      fontFamily:"inherit" }}/>
-                                  {/* Expand/collapse toggle */}
-                                  <button onClick={()=>setActiveS(activeS===s.id?null:s.id)}
-                                    title={expanded?"Collapse objective & rationale":"Expand objective & rationale"}
-                                    style={{ background:"none", border:"1px solid "+col.line,
-                                      borderRadius:4, cursor:"pointer", color:col.fill,
-                                      fontSize:10, padding:"1px 6px", flexShrink:0,
-                                      fontFamily:"inherit" }}>
-                                    {expanded?"▲":"▼"}
+                                    placeholder="Strategy name…"
+                                    style={{ flex:1, fontSize:13, fontWeight:700,
+                                      color:col.fill, background:"transparent",
+                                      border:"none", outline:"none", fontFamily:"inherit",
+                                      minWidth:0 }}/>
+                                  <button
+                                    onClick={()=>setActiveS(activeS===s.id?null:s.id)}
+                                    title={expanded?"Collapse":"Expand objective & rationale"}
+                                    style={{ background:"none",
+                                      border:`1px solid ${col.line}`,
+                                      borderRadius:4, cursor:"pointer",
+                                      color:col.fill, fontSize:9,
+                                      padding:"2px 7px", flexShrink:0,
+                                      fontFamily:"inherit", fontWeight:700 }}>
+                                    {expanded?"▲ Less":"▼ More"}
                                   </button>
-                                  {/* Missing indicator */}
-                                  {(!hasObjective||!hasRationale)&&(
-                                    <span style={{ fontSize:8,color:DS.warning,fontWeight:700,
-                                      padding:"1px 5px",background:DS.warnSoft,borderRadius:3,
-                                      border:"1px solid "+DS.warnLine }}>
-                                      {!hasObjective&&!hasRationale?"missing":"partial"}
+                                  {missingInfo&&(
+                                    <span style={{ fontSize:8,color:DS.warning,
+                                      padding:"1px 5px",background:DS.warnSoft,
+                                      borderRadius:3,border:`1px solid ${DS.warnLine}`,
+                                      flexShrink:0 }}>
+                                      {!s.objective&&!s.description?"no info":"partial"}
                                     </span>
                                   )}
-                                  <button onClick={()=>onChange(strategies.filter(x=>x.id!==s.id))}
-                                    style={{ background:"none",border:"none",cursor:"pointer",
-                                      color:DS.inkTer,fontSize:14,flexShrink:0 }}>×</button>
+                                  <button
+                                    onClick={()=>onChange(strategies.filter(x=>x.id!==s.id))}
+                                    style={{ background:"none",border:"none",
+                                      cursor:"pointer",color:DS.inkTer,
+                                      fontSize:13,flexShrink:0 }}>×</button>
                                 </div>
 
-                                {/* Collapsed preview */}
-                                {!expanded && hasObjective && (
-                                  <div style={{ fontSize:10,color:DS.inkTer,lineHeight:1.4,
-                                    overflow:"hidden",textOverflow:"ellipsis",
-                                    display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical" }}>
+                                {/* Objective preview when collapsed */}
+                                {!expanded && s.objective && (
+                                  <div style={{ fontSize:10, color:DS.inkSub,
+                                    lineHeight:1.4, paddingLeft:14,
+                                    display:"-webkit-box",
+                                    WebkitLineClamp:2,
+                                    WebkitBoxOrient:"vertical",
+                                    overflow:"hidden" }}>
                                     {s.objective}
                                   </div>
                                 )}
 
-                                {/* Expanded: objective + rationale */}
+                                {/* Expanded: editable objective + rationale */}
                                 {expanded && (
-                                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:8 }}>
+                                  <div style={{ display:"flex", flexDirection:"column",
+                                    gap:8, paddingLeft:14 }}>
                                     <div>
-                                      <div style={{ fontSize:8,fontWeight:700,color:col.fill,
-                                        textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>
-                                        Objective
-                                      </div>
-                                      <textarea value={s.objective||""}
+                                      <div style={{ fontSize:8, fontWeight:700,
+                                        color:col.fill, textTransform:"uppercase",
+                                        letterSpacing:.5, marginBottom:3 }}>Objective</div>
+                                      <textarea
+                                        value={s.objective||""}
                                         onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,objective:e.target.value}:x))}
                                         placeholder="What is this strategy trying to achieve?"
                                         rows={2}
-                                        style={{ width:"100%",fontSize:11,padding:"5px 7px",
-                                          fontFamily:"inherit",background:"rgba(255,255,255,.7)",
-                                          border:"1px solid "+col.line,borderRadius:5,
-                                          color:DS.ink,outline:"none",resize:"none",
-                                          lineHeight:1.5,boxSizing:"border-box" }}/>
+                                        style={{ width:"100%", fontSize:11,
+                                          padding:"6px 8px", fontFamily:"inherit",
+                                          background:"rgba(255,255,255,.8)",
+                                          border:`1px solid ${col.line}`,
+                                          borderRadius:5, color:DS.ink,
+                                          outline:"none", resize:"none",
+                                          lineHeight:1.5, boxSizing:"border-box" }}/>
                                     </div>
                                     <div>
-                                      <div style={{ fontSize:8,fontWeight:700,color:col.fill,
-                                        textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>
-                                        Rationale
-                                      </div>
-                                      <textarea value={s.description||""}
+                                      <div style={{ fontSize:8, fontWeight:700,
+                                        color:col.fill, textTransform:"uppercase",
+                                        letterSpacing:.5, marginBottom:3 }}>Rationale</div>
+                                      <textarea
+                                        value={s.description||""}
                                         onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,description:e.target.value}:x))}
-                                        placeholder="Why are these choices internally coherent?"
+                                        placeholder="Why do these choices cohere as a strategy?"
                                         rows={2}
-                                        style={{ width:"100%",fontSize:11,padding:"5px 7px",
-                                          fontFamily:"inherit",background:"rgba(255,255,255,.7)",
-                                          border:"1px solid "+col.line,borderRadius:5,
-                                          color:DS.ink,outline:"none",resize:"none",
-                                          lineHeight:1.5,boxSizing:"border-box" }}/>
+                                        style={{ width:"100%", fontSize:11,
+                                          padding:"6px 8px", fontFamily:"inherit",
+                                          background:"rgba(255,255,255,.8)",
+                                          border:`1px solid ${col.line}`,
+                                          borderRadius:5, color:DS.ink,
+                                          outline:"none", resize:"none",
+                                          lineHeight:1.5, boxSizing:"border-box" }}/>
                                     </div>
                                   </div>
                                 )}
                               </div>
                             </td>
 
-                            {/* Decision cells - multi-select option pills */}
+                            {/* ── RIGHT: Decision cells with multi-select ── */}
                             {nowDecisions.map(d=>{
                               const rawSel = s.selections[d.id];
-                              const selected = Array.isArray(rawSel) ? rawSel :
-                                (rawSel!==undefined ? [rawSel] : []);
+                              const selected = Array.isArray(rawSel)?rawSel:
+                                (rawSel!==undefined?[rawSel]:[]);
+                              const hasAny = selected.length > 0;
                               return (
-                                <td key={d.id} style={{ padding:"0 6px 0 0",
+                                <td key={d.id} style={{ padding:"6px 6px 6px 0",
                                   verticalAlign:"top" }}>
-                                  <div style={{ padding:"8px 10px",
-                                    background:selected.length>0?col.soft:DS.canvas,
-                                    border:"1px solid "+(selected.length>0?col.line:DS.canvasBdr),
-                                    borderRadius:8, minHeight:56 }}>
-                                    {/* Selected pills */}
-                                    {selected.length>0 && (
-                                      <div style={{ display:"flex",flexWrap:"wrap",gap:4,marginBottom:6 }}>
+                                  <div style={{ padding:"10px 12px",
+                                    minHeight:56,
+                                    background:hasAny?col.soft:DS.canvas,
+                                    border:`1.5px solid ${hasAny?col.line:DS.canvasBdr}`,
+                                    borderRadius:8,
+                                    transition:"border-color .15s" }}>
+
+                                    {/* Selected options as solid pills */}
+                                    {selected.length>0&&(
+                                      <div style={{ display:"flex",flexWrap:"wrap",
+                                        gap:5, marginBottom:8 }}>
                                         {selected.map(idx=>(
-                                          <span key={idx} style={{ display:"inline-flex",
-                                            alignItems:"center",gap:4,
-                                            padding:"2px 8px",borderRadius:10,
-                                            fontSize:10,fontWeight:700,
-                                            background:col.fill,color:"#fff" }}>
+                                          <span key={idx}
+                                            style={{ display:"inline-flex",
+                                              alignItems:"center", gap:5,
+                                              padding:"4px 10px",
+                                              borderRadius:6,
+                                              fontSize:11, fontWeight:700,
+                                              background:col.fill, color:"#fff",
+                                              boxShadow:"0 1px 3px rgba(0,0,0,.15)" }}>
                                             {d.choices[idx]}
                                             <button
                                               onClick={()=>toggleSelection(s.id,d.id,idx)}
-                                              style={{ background:"none",border:"none",
-                                                cursor:"pointer",color:"rgba(255,255,255,.7)",
-                                                fontSize:11,lineHeight:1,padding:0 }}>×</button>
+                                              style={{ background:"rgba(255,255,255,.25)",
+                                                border:"none",borderRadius:"50%",
+                                                cursor:"pointer",color:"#fff",
+                                                fontSize:10,lineHeight:1,
+                                                width:14,height:14,
+                                                display:"flex",alignItems:"center",
+                                                justifyContent:"center",
+                                                padding:0,flexShrink:0 }}>×</button>
                                           </span>
                                         ))}
                                       </div>
                                     )}
-                                    {/* Option menu - show remaining unselected */}
-                                    <div style={{ display:"flex",flexWrap:"wrap",gap:3 }}>
+
+                                    {/* Unselected options as clickable ghost buttons */}
+                                    <div style={{ display:"flex",flexWrap:"wrap",gap:4 }}>
                                       {d.choices.map((choice,idx)=>{
-                                        const isSel = selected.includes(idx);
-                                        if (isSel) return null; // already shown as pill
+                                        if (selected.includes(idx)) return null;
                                         return (
                                           <button key={idx}
                                             onClick={()=>toggleSelection(s.id,d.id,idx)}
-                                            style={{ padding:"2px 8px",fontSize:10,
-                                              fontFamily:"inherit",cursor:"pointer",
-                                              border:"1px solid "+DS.canvasBdr,
-                                              borderRadius:10,
+                                            style={{ padding:"4px 10px",
+                                              fontSize:11, fontFamily:"inherit",
+                                              cursor:"pointer",
+                                              border:`1.5px dashed ${DS.canvasMid}`,
+                                              borderRadius:6,
                                               background:"transparent",
-                                              color:DS.inkSub,
-                                              transition:"all .1s" }}
-                                            onMouseEnter={e=>{e.currentTarget.style.borderColor=col.fill;e.currentTarget.style.color=col.fill;}}
-                                            onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.canvasBdr;e.currentTarget.style.color=DS.inkSub;}}>
+                                              color:DS.inkTer,
+                                              transition:"all .12s",
+                                              whiteSpace:"nowrap" }}
+                                            onMouseEnter={e=>{
+                                              e.currentTarget.style.borderColor=col.fill;
+                                              e.currentTarget.style.color=col.fill;
+                                              e.currentTarget.style.background=col.soft;
+                                            }}
+                                            onMouseLeave={e=>{
+                                              e.currentTarget.style.borderColor=DS.canvasMid;
+                                              e.currentTarget.style.color=DS.inkTer;
+                                              e.currentTarget.style.background="transparent";
+                                            }}>
                                             + {choice}
                                           </button>
                                         );
                                       })}
-                                      {selected.length===d.choices.length && (
-                                        <span style={{ fontSize:9,color:DS.inkTer,fontStyle:"italic" }}>All selected</span>
-                                      )}
                                     </div>
                                   </div>
                                 </td>
@@ -3025,13 +3085,14 @@ Return ONLY JSON:
                     </tbody>
                   </table>
 
-                  {/* Add strategy button */}
+                  {/* Add strategy row */}
                   <button onClick={addStrategy}
-                    style={{ marginTop:10, padding:"8px 16px", fontSize:11, fontWeight:700,
+                    style={{ marginTop:12, width:"100%",
+                      padding:"10px 16px", fontSize:12, fontWeight:700,
                       fontFamily:"inherit", cursor:"pointer",
-                      border:`1.5px dashed ${DS.canvasMid}`, borderRadius:7,
-                      background:"transparent", color:DS.inkTer, width:"100%",
-                      transition:"all .12s" }}
+                      border:`1.5px dashed ${DS.canvasMid}`,
+                      borderRadius:8, background:"transparent",
+                      color:DS.inkTer, transition:"all .12s" }}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=DS.accent;e.currentTarget.style.color=DS.accent;}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.canvasMid;e.currentTarget.style.color=DS.inkTer;}}>
                     + Add Strategy
