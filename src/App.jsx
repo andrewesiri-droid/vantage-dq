@@ -6148,7 +6148,6 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
         )}
 
       </div>
-    </div>
 
 
       {/* ── FINANCIAL MODEL MODAL ── */}
@@ -6219,6 +6218,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
           </div>
         </div>
       )}
+    </div>
   );
 }
 
