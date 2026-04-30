@@ -560,36 +560,106 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
 
   const applyImprovements = () => {
     const v = data.aiValidation;
-    if (!v) { onAIMsg({role:"ai",text:"Run Frame Check first."}); return; }
+    if (!v) { onAIMsg({role:"ai",text:"Run Frame Check first to identify what needs fixing."}); return; }
     setApplying(true);
-    onAIMsg({role:"ai",text:"Rewriting flagged fields — 10-15 seconds…"});
-    const flaggedFields = (v.flags||[]).map(f=>f.field+": "+f.message).join("\n");
-    const missingElements = (v.missingElements||[]).join(", ");
+    onAIMsg({role:"ai",text:"Improving decision frame to raise DQ score — 15 seconds…"});
+
+    const flags = (v.flags||[]).map(f=>"["+f.severity+"] "+f.field+": "+f.message).join("\n")||"none";
+    const missing = (v.missingElements||[]).join(", ")||"none";
+
     const improvePrompt =
-      "You are fixing specific DQ validation failures in a decision frame. Address ONLY the flagged issues. Keep responses concise and specific. " +
-      "Current values:\ndecisionStatement: "+(data.decisionStatement||"empty")+"\ncontext: "+(data.context||"empty")+"\nscopeIn: "+(data.scopeIn||"empty")+"\nscopeOut: "+(data.scopeOut||"empty")+"\nsuccessCriteria: "+(data.successCriteria||"empty")+"\nconstraints: "+(data.constraints||"empty")+"\nassumptions: "+(data.assumptions||"empty")+"\n\n" +
-      "FLAGS TO FIX:\n"+flaggedFields+"\n"+(missingElements?"MISSING: "+missingElements+"\n":"")+(v.improvedStatement?"USE THIS STATEMENT: "+v.improvedStatement+"\n":"")+"\n" +
-      "Return ONLY JSON with only the fields that need changing. Keep each field under 3 sentences. " +
-      '{"decisionStatement":"only if flagged","context":"only if flagged","scopeIn":"only if flagged","scopeOut":"only if flagged","successCriteria":"only if flagged","constraints":"only if flagged","assumptions":"only if flagged"}';
-    aiCall(improvePrompt, (r)=>{
-      let result=r;
-      if(r&&typeof r==="object"&&r._raw){const raw=typeof r._raw==="string"?r._raw:JSON.stringify(r._raw);try{result=JSON.parse(raw.replace(/```json|```/g,"").trim());}catch(e){setApplying(false);onAIMsg({role:"ai",text:"Could not parse improvements. Try again."});return;}}
-      else if(typeof r==="string"){try{result=JSON.parse(r.replace(/```json|```/g,"").trim());}catch(e){setApplying(false);return;}}
-      if(!result||typeof result!=="object"||result.error){setApplying(false);onAIMsg({role:"ai",text:"Error: "+(result?.error||"unexpected response")});return;}
-      const updates={};
-      ["decisionStatement","context","scopeIn","scopeOut","successCriteria","constraints","assumptions","owner"].forEach(key=>{const val=result[key];if(val&&typeof val==="string"&&val.trim())updates[key]=val.trim();});
-      const newData={...data,...updates};
+      "You are a senior Decision Quality expert rewriting a decision frame to achieve a score of 80+ on a DQ frame check. " +
+      "Rewrite EVERY flagged field to directly fix the issue identified. " +
+      "A high-quality DQ frame requires: " +
+      "(1) Decision statement: open question starting with How/What/Which, names the decision-maker, specifies scope " +
+      "(2) Context: explains the strategic situation and why this decision matters now " +
+      "(3) Scope In: what IS within the decision boundary " +
+      "(4) Scope Out: what is explicitly excluded " +
+      "(5) Success Criteria: measurable outcomes that define a good decision " +
+      "(6) Constraints: non-negotiable limits and boundaries " +
+      "(7) Assumptions: explicit statements of what is being assumed true " +
+      "\n\nCURRENT VALUES:\n" +
+      "decisionStatement: " + (data.decisionStatement||"EMPTY") + "\n" +
+      "context: " + (data.context||"EMPTY") + "\n" +
+      "scopeIn: " + (data.scopeIn||"EMPTY") + "\n" +
+      "scopeOut: " + (data.scopeOut||"EMPTY") + "\n" +
+      "successCriteria: " + (data.successCriteria||"EMPTY") + "\n" +
+      "constraints: " + (data.constraints||"EMPTY") + "\n" +
+      "assumptions: " + (data.assumptions||"EMPTY") + "\n\n" +
+      "FLAGS TO FIX:\n" + flags + "\n" +
+      "MISSING ELEMENTS: " + missing + "\n" +
+      (v.improvedStatement ? "AI SUGGESTED STATEMENT: " + v.improvedStatement + "\n" : "") +
+      "\nReturn ONLY a JSON object with the improved values for every field that needs work. " +
+      "Write real content — not placeholders. Each field should be 1-3 concise sentences. " +
+      '{"decisionStatement":"improved","context":"improved","scopeIn":"improved","scopeOut":"improved","successCriteria":"improved","constraints":"improved","assumptions":"improved"}';
+
+    aiCall(improvePrompt, (r) => {
+      let result = r;
+      if (r && r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
+        catch(e) { setApplying(false); onAIMsg({role:"ai",text:"Could not parse improvements. Try again."}); return; }
+      }
+      if (!result || typeof result !== "object" || result.error) {
+        setApplying(false);
+        onAIMsg({role:"ai", text:"Error applying improvements. Try again."});
+        return;
+      }
+
+      // Apply all returned fields (skip placeholder values)
+      const PLACEHOLDERS = ["improved","only if flagged","empty","n/a",""];
+      const updates = {};
+      ["decisionStatement","context","scopeIn","scopeOut","successCriteria","constraints","assumptions","owner"].forEach(key => {
+        const val = result[key];
+        if (val && typeof val === "string") {
+          const clean = val.trim();
+          if (clean && !PLACEHOLDERS.includes(clean.toLowerCase())) {
+            updates[key] = clean;
+          }
+        }
+      });
+
+      if (Object.keys(updates).length === 0) {
+        setApplying(false);
+        onAIMsg({role:"ai", text:"No improvements returned. The frame may already be good or try again."});
+        return;
+      }
+
+      const newData = {...data, ...updates};
       onChange(newData);
       setApplying(false);
-      onAIMsg({role:"ai",text:"Fixed "+Object.keys(updates).length+" field(s): "+Object.keys(updates).join(", ")+". Running Frame Check now…"});
-      setTimeout(()=>{
+      onAIMsg({role:"ai", text:"Improved " + Object.keys(updates).length + " field(s). Running Frame Check to verify score improvement…"});
+
+      // Re-run frame check after 600ms
+      setTimeout(() => {
         setChecking(true);
-        const recheckPrompt="Decision Quality frame validation. Decision: \""+newData.decisionStatement+"\". Context: \""+newData.context+"\". Scope In: \""+newData.scopeIn+"\". Scope Out: \""+newData.scopeOut+"\". Owner: \""+newData.owner+"\". Constraints: \""+newData.constraints+"\". Assumptions: \""+newData.assumptions+"\". Success Criteria: \""+newData.successCriteria+"\". Evaluate strictly. Return ONLY JSON: "+
-          '{"overallScore":0,"status":"strong","flags":[{"severity":"critical","field":"f","message":"m"}],"improvedStatement":null,"hiddenAssumptions":["string only"],"missingElements":["string only"],"executiveSummary":"summary"}';
-        aiCall(dqPrompt(recheckPrompt),(r2)=>{upd("aiValidation",r2);setChecking(false);const score=r2.overallScore;onAIMsg({role:"ai",text:"Frame Check complete. New score: "+(score||"?")+" /100. "+(r2.executiveSummary||"")});});
-      },500);
+        const recheckPrompt =
+          "You are a senior Decision Quality expert. Evaluate this improved decision frame strictly. " +
+          "Decision Statement: \"" + (newData.decisionStatement||"") + "\". " +
+          "Context: \"" + (newData.context||"") + "\". " +
+          "Scope In: \"" + (newData.scopeIn||"") + "\". " +
+          "Scope Out: \"" + (newData.scopeOut||"") + "\". " +
+          "Owner: \"" + (newData.owner||"") + "\". " +
+          "Constraints: \"" + (newData.constraints||"") + "\". " +
+          "Assumptions: \"" + (newData.assumptions||"") + "\". " +
+          "Success Criteria: \"" + (newData.successCriteria||"") + "\". " +
+          "Score this frame 0-100. A frame with clear decision statement, context, scope, criteria, constraints and assumptions should score 75+. " +
+          "Return ONLY JSON: " +
+          '{"overallScore":82,"status":"strong|adequate|weak","flags":[{"severity":"warning","field":"field","message":"issue"}],"improvedStatement":null,"hiddenAssumptions":["string"],"missingElements":["string"],"executiveSummary":"summary"}';
+        aiCall(recheckPrompt, (r2) => {
+          let res2 = r2;
+          if (r2 && r2._raw) {
+            try { res2 = JSON.parse(r2._raw.replace(/```json|```/g,"").trim()); } catch(e) {}
+          }
+          upd("aiValidation", res2);
+          setChecking(false);
+          const score = res2?.overallScore;
+          const summary = typeof res2?.executiveSummary === "string" ? res2.executiveSummary : "";
+          onAIMsg({role:"ai", text:"Frame Check complete. Score: " + (score||"?") + "/100. " + summary});
+        });
+      }, 600);
     });
   };
+
 
   const scoreColor = (s) => s>=75 ? DS.success : s>=50 ? DS.warning : DS.danger;
   const statusVar = (s) => s==="strong"?"green":s==="adequate"?"warn":"danger";
