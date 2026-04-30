@@ -2509,7 +2509,7 @@ const defaultStrategies = () => ([
   { id:uid("s"), colorIdx:1, name:"Beta", description:"Asset-light partnership model", selections:{}, rationale:{} },
 ]);
 
-function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, problem, onAIMsg }) {
+function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiCall, aiBusy, problem, onAIMsg }) {
   const [mode, setMode] = useState("builder"); // builder | workshop | review
   const [activeS, setActiveS] = useState(strategies[0]?.id || null);
   const [suggesting, setSuggesting] = useState(false);
@@ -2851,36 +2851,97 @@ Return ONLY JSON:
                     {/* Column headers — decisions */}
                     <thead>
                       <tr>
+                        {/* Strategy col header + Add Decision button */}
                         <th style={{ width:240, padding:"10px 14px",
                           background:DS.chrome, borderBottom:`2px solid ${DS.border}`,
-                          textAlign:"left", fontSize:11, fontWeight:700,
-                          color:DS.textSec, letterSpacing:.3,
-                          position:"sticky", left:0, zIndex:3 }}>
-                          Strategy
+                          textAlign:"left", position:"sticky", left:0, zIndex:3 }}>
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                            <span style={{ fontSize:11, fontWeight:700, color:DS.textSec, letterSpacing:.3 }}>Strategy</span>
+                            {onDecisions && (
+                              <button
+                                onClick={()=>{
+                                  const newDec = { id:uid("d"), label:"New Decision",
+                                    tier:"focus", choices:["Option A","Option B"], rationale:"" };
+                                  onDecisions(prev=>[...prev, newDec]);
+                                }}
+                                style={{ fontSize:10, fontWeight:700, fontFamily:"inherit",
+                                  padding:"3px 8px", border:`1px solid ${DS.border}`,
+                                  borderRadius:5, background:DS.chromeMid,
+                                  color:DS.textSec, cursor:"pointer" }}>
+                                + Decision
+                              </button>
+                            )}
+                          </div>
                         </th>
+
+                        {/* Decision column headers — name only, choices editable below */}
                         {nowDecisions.map((d,di)=>(
-                          <th key={d.id} style={{ padding:"10px 14px",
+                          <th key={d.id} style={{ padding:"10px 12px",
                             background:DS.chrome, borderBottom:`2px solid ${DS.border}`,
                             textAlign:"left", verticalAlign:"top",
                             minWidth:220, width:220 }}>
-                            <div style={{ display:"flex", alignItems:"flex-start", gap:6 }}>
-                              <span style={{ width:20,height:20,borderRadius:4,
-                                background:DS.chromeSub, flexShrink:0, marginTop:1,
+
+                            {/* Decision name — editable */}
+                            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+                              <span style={{ width:18,height:18,borderRadius:4,
+                                background:DS.chromeSub, flexShrink:0,
                                 display:"flex",alignItems:"center",justifyContent:"center",
                                 fontSize:9,color:DS.textTer,fontWeight:700 }}>{di+1}</span>
-                              <div>
-                                <div style={{ fontSize:12,fontWeight:700,color:DS.textPri,
-                                  lineHeight:1.3,marginBottom:3 }}>{d.label}</div>
-                                <div style={{ display:"flex",flexWrap:"wrap",gap:3 }}>
-                                  {d.choices.map((ch,ci)=>(
-                                    <span key={ci} style={{ fontSize:9,padding:"1px 6px",
-                                      background:DS.chromeMid,color:DS.textTer,
-                                      borderRadius:3,border:`1px solid ${DS.border}` }}>
-                                      {ch}
-                                    </span>
-                                  ))}
+                              <input
+                                value={d.label}
+                                onChange={e=>onDecisions&&onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,label:e.target.value}:x))}
+                                style={{ fontSize:12, fontWeight:700, color:DS.textPri,
+                                  background:"transparent", border:"none", outline:"none",
+                                  fontFamily:"inherit", flex:1, minWidth:0 }}/>
+                            </div>
+
+                            {/* Options — one per line, editable, with + to add more */}
+                            <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                              {d.choices.map((ch,ci)=>(
+                                <div key={ci} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                                  <span style={{ fontSize:9, color:DS.textTer,
+                                    minWidth:14, textAlign:"right" }}>{ci+1}.</span>
+                                  <input
+                                    value={ch}
+                                    onChange={e=>{
+                                      if(!onDecisions) return;
+                                      const newChoices=[...d.choices];
+                                      newChoices[ci]=e.target.value;
+                                      onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,choices:newChoices}:x));
+                                    }}
+                                    style={{ flex:1, fontSize:11, padding:"2px 6px",
+                                      background:DS.chromeMid, border:`1px solid ${DS.border}`,
+                                      borderRadius:4, color:DS.textSec,
+                                      outline:"none", fontFamily:"inherit",
+                                      minWidth:0 }}/>
+                                  {d.choices.length>2&&(
+                                    <button
+                                      onClick={()=>{
+                                        if(!onDecisions) return;
+                                        const newChoices=d.choices.filter((_,i)=>i!==ci);
+                                        onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,choices:newChoices}:x));
+                                      }}
+                                      style={{ background:"none",border:"none",
+                                        cursor:"pointer",color:DS.textTer,
+                                        fontSize:12,padding:"0 2px",flexShrink:0 }}>×</button>
+                                  )}
                                 </div>
-                              </div>
+                              ))}
+                              {/* + Add option */}
+                              {onDecisions&&(
+                                <button
+                                  onClick={()=>{
+                                    const newChoices=[...d.choices,"Option "+(d.choices.length+1)];
+                                    onDecisions(prev=>prev.map(x=>x.id===d.id?{...x,choices:newChoices}:x));
+                                  }}
+                                  style={{ fontSize:10, fontFamily:"inherit",
+                                    padding:"2px 6px", border:`1px dashed ${DS.border}`,
+                                    borderRadius:4, background:"transparent",
+                                    color:DS.textTer, cursor:"pointer",
+                                    textAlign:"left", marginTop:1 }}>
+                                  + option
+                                </button>
+                              )}
                             </div>
                           </th>
                         ))}
@@ -11630,7 +11691,7 @@ export default function App() {
     problem:   { data:problem, onChange:setProblem, aiCall, aiBusy, messages:aiMessages, onAIMsg:pushAIMsg, onAISend:handleAISend },
     issues:    { issues, onChange:setIssues, decisions, onDecisions:setDecisions, criteria, onCriteria:setCriteria, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
     hierarchy: { decisions, criteria, onDecisions:setDecisions, onCriteria:setCriteria, issues, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    strategy:  { decisions, strategies, onChange:setStrategies, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
+    strategy:  { decisions, strategies, onChange:setStrategies, onDecisions:setDecisions, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
     scenarios: { strategies, decisions, issues, problem, nodes:influenceNodes, edges:influenceEdges, aiCall, aiBusy, onAIMsg:pushAIMsg },
     assessment:{ strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     scorecard: { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
