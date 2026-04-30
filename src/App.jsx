@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
-const _SB_URL = import.meta.env.VITE_SUPABASE_URL || "";
-const _SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const _SB_URL = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL) || "";
+const _SB_KEY = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_ANON_KEY) || "";
 const _sbHeaders = () => ({
   "apikey": _SB_KEY,
   "Authorization": "Bearer " + _SB_KEY,
@@ -36,6 +36,129 @@ const sbList = async () => {
     const r = await fetch(_SB_URL + "/rest/v1/decisions?select=id,project_name,updated_at,created_at&order=updated_at.desc&limit=20", { headers: _sbHeaders() });
     return await r.json();
   } catch(e) { return []; }
+};
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+const sbGetSession = async () => {
+  if (!_SB_URL || !_SB_KEY) return null;
+  try {
+    const stored = localStorage.getItem("sb_session");
+    if (stored) {
+      const s = JSON.parse(stored);
+      if (s.expires_at && s.expires_at * 1000 > Date.now()) return s;
+      localStorage.removeItem("sb_session");
+    }
+    return null;
+  } catch(e) { return null; }
+};
+
+const sbSignInWithEmail = async (email) => {
+  if (!_SB_URL || !_SB_KEY) return { error:"No Supabase config" };
+  try {
+    const redirectTo = window.location.origin + window.location.pathname;
+    const r = await fetch(_SB_URL + "/auth/v1/otp", {
+      method:"POST",
+      headers: { ..._sbHeaders(), "Content-Type":"application/json" },
+      body: JSON.stringify({ email, create_user:true, options:{ emailRedirectTo: redirectTo } })
+    });
+    if (r.ok) return { success:true };
+    const d = await r.json();
+    return { error: d.msg || d.error_description || "Failed to send link" };
+  } catch(e) { return { error: e.message }; }
+};
+
+const sbVerifyOtp = async (email, token) => {
+  if (!_SB_URL || !_SB_KEY) return null;
+  try {
+    const r = await fetch(_SB_URL + "/auth/v1/verify", {
+      method:"POST",
+      headers: { ..._sbHeaders(), "Content-Type":"application/json" },
+      body: JSON.stringify({ email, token, type:"magiclink" })
+    });
+    const d = await r.json();
+    if (d.access_token) {
+      const session = { access_token: d.access_token, user: d.user,
+        expires_at: d.expires_at || Math.floor(Date.now()/1000) + 3600 };
+      localStorage.setItem("sb_session", JSON.stringify(session));
+      return session;
+    }
+    return null;
+  } catch(e) { return null; }
+};
+
+const sbExchangeToken = async (accessToken) => {
+  if (!_SB_URL || !_SB_KEY) return null;
+  try {
+    const r = await fetch(_SB_URL + "/auth/v1/user", {
+      headers: { ..._sbHeaders(), "Authorization": "Bearer " + accessToken }
+    });
+    const user = await r.json();
+    if (user?.id) {
+      const session = { access_token: accessToken, user,
+        expires_at: Math.floor(Date.now()/1000) + 3600 };
+      localStorage.setItem("sb_session", JSON.stringify(session));
+      return session;
+    }
+    return null;
+  } catch(e) { return null; }
+};
+
+const sbSignOut = () => { localStorage.removeItem("sb_session"); };
+
+// ─── COMMENTS ────────────────────────────────────────────────────────────────
+const sbGetComments = async (decisionId, module) => {
+  if (!_SB_URL || !_SB_KEY || !decisionId) return [];
+  try {
+    const r = await fetch(
+      _SB_URL + "/rest/v1/comments?decision_id=eq." + decisionId +
+      "&module=eq." + module + "&order=created_at.asc",
+      { headers: _sbHeaders() }
+    );
+    return await r.json();
+  } catch(e) { return []; }
+};
+
+const sbAddComment = async (decisionId, module, text, authorEmail, authorName) => {
+  if (!_SB_URL || !_SB_KEY) return null;
+  try {
+    const r = await fetch(_SB_URL + "/rest/v1/comments", {
+      method:"POST",
+      headers: _sbHeaders(),
+      body: JSON.stringify({ decision_id:decisionId, module, text, author_email:authorEmail, author_name:authorName })
+    });
+    const d = await r.json();
+    return d?.[0] || null;
+  } catch(e) { return null; }
+};
+
+// ─── REALTIME ────────────────────────────────────────────────────────────────
+let _realtimeChannel = null;
+const sbSubscribe = (decisionId, onUpdate) => {
+  if (!_SB_URL || !_SB_KEY || !decisionId) return ()=>{};
+  const wsUrl = _SB_URL.replace("https://","wss://").replace("http://","ws://");
+  const ws = new WebSocket(wsUrl + "/realtime/v1/websocket?apikey=" + _SB_KEY + "&vsn=1.0.0");
+  let hbInterval;
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ topic:"realtime:public:decisions:id=eq."+decisionId,
+      event:"phx_join", payload:{}, ref:"1" }));
+    ws.send(JSON.stringify({ topic:"realtime:public:comments:decision_id=eq."+decisionId,
+      event:"phx_join", payload:{}, ref:"2" }));
+    hbInterval = setInterval(()=>{
+      ws.send(JSON.stringify({ topic:"phoenix", event:"heartbeat", payload:{}, ref:"hb" }));
+    }, 25000);
+  };
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.event === "INSERT" || msg.event === "UPDATE" || msg.event === "DELETE") {
+        onUpdate(msg);
+      }
+    } catch(e) {}
+  };
+  return () => {
+    clearInterval(hbInterval);
+    ws.close();
+  };
 };
 
 // ─── API KEY CONFIGURATION ────────────────────────────────────────────────────
@@ -11161,6 +11284,320 @@ const ANALYSIS_STEPS = [
   { id:"strategy",  label:"Drafting initial strategies",    icon:"⊞", module:"Strategy Table" },
 ];
 
+function LoginScreen({ onLogin }) {
+  const [email, setEmail]       = useState("");
+  const [sent, setSent]         = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
+  const [guestName, setGuestName] = useState("");
+  const [showGuest, setShowGuest] = useState(false);
+
+  const sendLink = async () => {
+    if (!email.trim() || !email.includes("@")) {
+      setError("Enter a valid email address."); return;
+    }
+    setLoading(true); setError("");
+    const result = await sbSignInWithEmail(email.trim().toLowerCase());
+    setLoading(false);
+    if (result.success) { setSent(true); }
+    else { setError(result.error || "Failed to send link. Try again."); }
+  };
+
+  const continueAsGuest = () => {
+    const name = guestName.trim() || "Guest";
+    const guestUser = { id:"guest_" + Date.now(), email:"guest@local", user_metadata:{ name } };
+    onLogin({ user:guestUser, access_token:"guest" });
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#0f1117",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif", zIndex:999 }}>
+      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}`}</style>
+
+      <div style={{ width:"100%", maxWidth:420, padding:"0 24px", animation:"fadeUp .4s ease" }}>
+        {/* Logo */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:40 }}>
+          <div style={{ width:36, height:36, borderRadius:9,
+            background:"linear-gradient(135deg,#2563eb,#7c3aed)",
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize:18, fontWeight:700, color:"#f1f5f9",
+              fontFamily:"'Libre Baskerville',serif" }}>Vantage DQ</div>
+            <div style={{ fontSize:10, color:"#475569", letterSpacing:1.5,
+              textTransform:"uppercase" }}>Decision Platform</div>
+          </div>
+        </div>
+
+        {!sent ? (
+          <div>
+            <div style={{ fontSize:22, fontWeight:700, color:"#f1f5f9",
+              fontFamily:"'Libre Baskerville',serif", marginBottom:8 }}>
+              Sign in
+            </div>
+            <div style={{ fontSize:13, color:"#64748b", marginBottom:28, lineHeight:1.6 }}>
+              Enter your email and we'll send you a magic link — no password needed.
+            </div>
+
+            <div style={{ marginBottom:12 }}>
+              <input
+                type="email"
+                value={email}
+                onChange={e=>setEmail(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&sendLink()}
+                placeholder="your@email.com"
+                autoFocus
+                style={{ width:"100%", padding:"12px 14px", fontSize:14,
+                  fontFamily:"inherit", background:"rgba(255,255,255,.07)",
+                  border:"1px solid rgba(255,255,255,.12)", borderRadius:8,
+                  color:"#f1f5f9", outline:"none", boxSizing:"border-box",
+                  transition:"border-color .15s" }}
+                onFocus={e=>e.target.style.borderColor="#3b82f6"}
+                onBlur={e=>e.target.style.borderColor="rgba(255,255,255,.12)"}/>
+            </div>
+
+            {error && (
+              <div style={{ fontSize:12, color:"#fca5a5", marginBottom:10 }}>{error}</div>
+            )}
+
+            <button onClick={sendLink} disabled={loading}
+              style={{ width:"100%", padding:"12px", fontSize:13, fontWeight:700,
+                fontFamily:"inherit", border:"none", borderRadius:8, cursor:"pointer",
+                background:"linear-gradient(135deg,#2563eb,#3b82f6)",
+                color:"#fff", opacity:loading?0.7:1, transition:"opacity .15s" }}>
+              {loading ? "Sending…" : "Send Magic Link →"}
+            </button>
+
+            <div style={{ margin:"20px 0", display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ flex:1, height:1, background:"rgba(255,255,255,.08)" }}/>
+              <span style={{ fontSize:11, color:"#475569" }}>or</span>
+              <div style={{ flex:1, height:1, background:"rgba(255,255,255,.08)" }}/>
+            </div>
+
+            {!showGuest ? (
+              <button onClick={()=>setShowGuest(true)}
+                style={{ width:"100%", padding:"11px", fontSize:12, fontWeight:600,
+                  fontFamily:"inherit", border:"1px solid rgba(255,255,255,.1)",
+                  borderRadius:8, cursor:"pointer", background:"transparent",
+                  color:"#64748b", transition:"all .15s" }}
+                onMouseEnter={e=>{e.target.style.borderColor="rgba(255,255,255,.2)";e.target.style.color="#94a3b8";}}
+                onMouseLeave={e=>{e.target.style.borderColor="rgba(255,255,255,.1)";e.target.style.color="#64748b";}}>
+                Continue as Guest
+              </button>
+            ) : (
+              <div style={{ display:"flex", gap:8 }}>
+                <input value={guestName} onChange={e=>setGuestName(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&continueAsGuest()}
+                  placeholder="Your name (optional)"
+                  autoFocus
+                  style={{ flex:1, padding:"11px 12px", fontSize:12, fontFamily:"inherit",
+                    background:"rgba(255,255,255,.06)", border:"1px solid rgba(255,255,255,.1)",
+                    borderRadius:7, color:"#f1f5f9", outline:"none" }}/>
+                <button onClick={continueAsGuest}
+                  style={{ padding:"11px 16px", fontSize:12, fontWeight:700,
+                    fontFamily:"inherit", border:"1px solid rgba(255,255,255,.15)",
+                    borderRadius:7, background:"transparent", color:"#94a3b8",
+                    cursor:"pointer" }}>
+                  Go →
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:40, marginBottom:20 }}>📬</div>
+            <div style={{ fontSize:20, fontWeight:700, color:"#f1f5f9",
+              fontFamily:"'Libre Baskerville',serif", marginBottom:10 }}>
+              Check your email
+            </div>
+            <div style={{ fontSize:13, color:"#64748b", lineHeight:1.7, marginBottom:28 }}>
+              We sent a magic link to <strong style={{color:"#94a3b8"}}>{email}</strong>.
+              Click the link to sign in — it expires in 1 hour.
+            </div>
+            <button onClick={()=>{setSent(false);setError("");}}
+              style={{ fontSize:12, color:"#475569", background:"none",
+                border:"none", cursor:"pointer", textDecoration:"underline",
+                fontFamily:"inherit" }}>
+              Use a different email
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CommentsPanel({ decisionId, module, currentUser, onClose }) {
+  const [comments, setComments]   = useState([]);
+  const [text, setText]           = useState("");
+  const [sending, setSending]     = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    if (!decisionId) return;
+    sbGetComments(decisionId, module).then(setComments);
+  }, [decisionId, module]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior:"smooth" });
+  }, [comments]);
+
+  const send = async () => {
+    if (!text.trim() || !decisionId) return;
+    setSending(true);
+    const name = currentUser?.user_metadata?.name ||
+      currentUser?.email?.split("@")[0] || "Anonymous";
+    const comment = await sbAddComment(
+      decisionId, module, text.trim(),
+      currentUser?.email, name
+    );
+    if (comment) setComments(prev => [...prev, comment]);
+    setText("");
+    setSending(false);
+  };
+
+  const userName = (c) => c.author_name || c.author_email?.split("@")[0] || "Anonymous";
+  const initials = (c) => userName(c).slice(0,2).toUpperCase();
+  const timeAgo = (ts) => {
+    const d = Math.floor((Date.now() - new Date(ts)) / 1000);
+    if (d < 60) return "just now";
+    if (d < 3600) return Math.floor(d/60) + "m ago";
+    if (d < 86400) return Math.floor(d/3600) + "h ago";
+    return new Date(ts).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  };
+
+  const COLORS = ["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2"];
+  const colorFor = (email) => COLORS[(email||"").charCodeAt(0) % COLORS.length];
+
+  return (
+    <div style={{ width:300, height:"100%", borderLeft:"1px solid",
+      borderColor:"var(--canvasBdr, #e2e8f0)",
+      background:"var(--canvas, #ffffff)",
+      display:"flex", flexDirection:"column",
+      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif" }}>
+
+      {/* Header */}
+      <div style={{ padding:"12px 16px", borderBottom:"1px solid",
+        borderColor:"var(--canvasBdr, #e2e8f0)",
+        display:"flex", alignItems:"center", gap:8 }}>
+        <div style={{ flex:1, fontSize:12, fontWeight:700,
+          color:"var(--ink, #1e293b)" }}>
+          💬 Comments
+          {comments.length > 0 && (
+            <span style={{ marginLeft:6, fontSize:10,
+              color:"var(--inkTer, #94a3b8)" }}>
+              {comments.length}
+            </span>
+          )}
+        </div>
+        <button onClick={onClose}
+          style={{ background:"none", border:"none", cursor:"pointer",
+            color:"var(--inkTer, #94a3b8)", fontSize:16 }}>×</button>
+      </div>
+
+      {/* Comments list */}
+      <div style={{ flex:1, overflowY:"auto", padding:"12px 16px" }}>
+        {comments.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"32px 0",
+            color:"var(--inkTer, #94a3b8)", fontSize:12 }}>
+            No comments yet.<br/>Be the first to add one.
+          </div>
+        ) : (
+          comments.map(comment => (
+            <div key={comment.id} style={{ marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                <div style={{ width:28, height:28, borderRadius:"50%",
+                  background:colorFor(comment.author_email),
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:10, fontWeight:700, color:"#fff", flexShrink:0 }}>
+                  {initials(comment)}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:3 }}>
+                    <span style={{ fontSize:11, fontWeight:700,
+                      color:"var(--ink, #1e293b)" }}>{userName(comment)}</span>
+                    <span style={{ fontSize:9,
+                      color:"var(--inkTer, #94a3b8)" }}>
+                      {timeAgo(comment.created_at)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize:12, color:"var(--inkSub, #475569)",
+                    lineHeight:1.5, padding:"7px 10px",
+                    background:"var(--canvasAlt, #f8fafc)",
+                    borderRadius:"0 8px 8px 8px",
+                    border:"1px solid var(--canvasBdr, #e2e8f0)" }}>
+                    {comment.text}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+        <div ref={bottomRef}/>
+      </div>
+
+      {/* Input */}
+      <div style={{ padding:"10px 16px",
+        borderTop:"1px solid var(--canvasBdr, #e2e8f0)" }}>
+        <div style={{ display:"flex", gap:6 }}>
+          <textarea
+            value={text}
+            onChange={e=>setText(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } }}
+            placeholder="Add a comment… (Enter to send)"
+            rows={2}
+            style={{ flex:1, padding:"7px 10px", fontSize:12,
+              fontFamily:"inherit", resize:"none", outline:"none",
+              background:"var(--canvasAlt, #f8fafc)",
+              border:"1px solid var(--canvasBdr, #e2e8f0)",
+              borderRadius:6, color:"var(--ink, #1e293b)",
+              lineHeight:1.5, boxSizing:"border-box" }}/>
+          <button onClick={send} disabled={sending||!text.trim()}
+            style={{ padding:"7px 12px", fontSize:11, fontWeight:700,
+              fontFamily:"inherit", border:"none", borderRadius:6,
+              background:"#2563eb", color:"#fff", cursor:"pointer",
+              alignSelf:"flex-end", opacity:sending||!text.trim()?0.5:1 }}>
+            {sending ? "…" : "↑"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PresenceBar({ presence }) {
+  if (!presence || presence.length === 0) return null;
+  const COLORS = ["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2"];
+  const colorFor = (email) => COLORS[(email||"").charCodeAt(0) % COLORS.length];
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 0" }}>
+      {presence.slice(0,5).map((p,i) => (
+        <div key={i} title={p.name + (p.module ? " — " + p.module : "")}
+          style={{ width:24, height:24, borderRadius:"50%",
+            background:colorFor(p.email),
+            border:"2px solid white",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:9, fontWeight:700, color:"#fff",
+            marginLeft:i>0?-6:0, cursor:"default" }}>
+          {(p.name||p.email||"?").slice(0,2).toUpperCase()}
+        </div>
+      ))}
+      {presence.length > 5 && (
+        <div style={{ fontSize:9, color:"#94a3b8", marginLeft:4 }}>
+          +{presence.length-5}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function QuickStartScreen({ onComplete, onSkip }) {
   const [phase, setPhase] = useState("landing");
   const [inputMode, setInputMode] = useState("paste");
@@ -12448,6 +12885,14 @@ export default function App() {
   const [showQuickStart, setShowQuickStart] = useState(true);
   const [workshopOpen, setWorkshopOpen]   = useState(false);
   const [gameTheoryOpen, setGameTheoryOpen] = useState(false);
+
+  // ── Auth & collaboration state ───────────────────────────────────────────
+  const [currentUser, setCurrentUser]       = useState(null);
+  const [authChecked, setAuthChecked]       = useState(false);
+  const [presence, setPresence]             = useState([]);
+  const [showComments, setShowComments]     = useState(false);
+  const [notifications, setNotifications]   = useState([]);
+  const [toastMsg, setToastMsg]             = useState(null);
   const [decisionId, setDecisionId]         = useState(null);
   const [syncStatus, setSyncStatus]         = useState("local"); // local | saving | saved | error
   const [showDecisions, setShowDecisions]   = useState(false);
@@ -12468,6 +12913,83 @@ export default function App() {
   useEffect(() => {
     saveSession({ problem, issues, decisions, criteria, strategies, assessmentScores, dqScores });
   }, [problem, issues, decisions, criteria, strategies, assessmentScores, dqScores]);
+
+  // ── Auth: check session on load + handle magic link callback ──────────────
+  useEffect(() => {
+    // Handle magic link token in URL hash
+    const hash = window.location.hash;
+    if (hash.includes("access_token=")) {
+      const params = new URLSearchParams(hash.slice(1));
+      const token = params.get("access_token");
+      if (token) {
+        sbExchangeToken(token).then(session => {
+          if (session) {
+            setCurrentUser(session.user);
+            window.history.replaceState({}, "", window.location.pathname + window.location.search);
+          }
+          setAuthChecked(true);
+        });
+        return;
+      }
+    }
+    // Check stored session
+    sbGetSession().then(session => {
+      if (session) setCurrentUser(session.user);
+      setAuthChecked(true);
+    });
+  }, []);
+
+  // ── Realtime: subscribe when decision loaded ───────────────────────────────
+  useEffect(() => {
+    if (!decisionId || !_SB_URL) return;
+    const unsubscribe = sbSubscribe(decisionId, (msg) => {
+      if (msg.topic?.includes("decisions")) {
+        // Another user updated the decision
+        const name = msg.payload?.new?.updated_by_name || "A teammate";
+        showToast(name + " updated this decision");
+        // Reload if we're not the one saving
+        if (syncStatus !== "saving") {
+          sbGet(decisionId).then(row => {
+            if (row?.data) {
+              const d = row.data;
+              if (d.problem)          setProblem(d.problem);
+              if (d.issues)           setIssues(d.issues);
+              if (d.decisions)        setDecisions(d.decisions);
+              if (d.criteria)         setCriteria(d.criteria);
+              if (d.strategies)       setStrategies(d.strategies);
+              if (d.assessmentScores) setAssessmentScores(d.assessmentScores);
+              if (d.dqScores)         setDqScores(d.dqScores);
+            }
+          });
+        }
+      }
+    });
+    return unsubscribe;
+  }, [decisionId]);
+
+  // ── Toast helper ──────────────────────────────────────────────────────────
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  // ── Presence: broadcast current module ────────────────────────────────────
+  useEffect(() => {
+    if (!currentUser || !decisionId || !_SB_URL) return;
+    const name = currentUser.user_metadata?.name || currentUser.email?.split("@")[0] || "Anonymous";
+    const presenceKey = "presence_" + decisionId;
+    const myPresence = { id: currentUser.id, name, email: currentUser.email, module, lastSeen: Date.now() };
+    try {
+      // Store presence in sessionStorage
+      const all = JSON.parse(sessionStorage.getItem(presenceKey)||"{}");
+      all[currentUser.id] = myPresence;
+      sessionStorage.setItem(presenceKey, JSON.stringify(all));
+      // Read all presence
+      const active = Object.values(all).filter(p => Date.now() - p.lastSeen < 30000);
+      setPresence(active);
+    } catch(e) {}
+  }, [module, currentUser, decisionId]);
+
 
   // ── Cloud sync ────────────────────────────────────────────────────────────
   // Load from URL if ?d=ID is present
@@ -12672,6 +13194,23 @@ export default function App() {
         }
       `}</style>
 
+      {/* ── Auth gate ── */}
+      {authChecked && !currentUser && _SB_URL && (
+        <LoginScreen onLogin={(session)=>setCurrentUser(session.user)}/>
+      )}
+
+      {/* ── Toast notification ── */}
+      {toastMsg && (
+        <div style={{ position:"fixed", bottom:24, right:24, zIndex:999,
+          padding:"10px 16px", borderRadius:8, fontSize:12, fontWeight:600,
+          background:"#1e293b", color:"#f1f5f9",
+          boxShadow:"0 8px 24px rgba(0,0,0,.3)",
+          display:"flex", alignItems:"center", gap:8,
+          animation:"fadeUp .2s ease" }}>
+          <span>🔔</span> {toastMsg}
+        </div>
+      )}
+
       {/* Quick Start */}
       {showQuickStart && (
         <QuickStartScreen onComplete={handleQuickStartComplete} onSkip={(mode)=>{
@@ -12731,6 +13270,44 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* User info */}
+        {!navCollapsed && currentUser && (
+          <div style={{ padding:"8px 14px", borderBottom:`1px solid ${DS.border}`,
+            display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ width:24, height:24, borderRadius:"50%",
+              background:"linear-gradient(135deg,#2563eb,#7c3aed)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:10, fontWeight:700, color:"#fff", flexShrink:0 }}>
+              {(currentUser.user_metadata?.name || currentUser.email||"?").slice(0,2).toUpperCase()}
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:11, fontWeight:600, color:DS.textPri,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {currentUser.user_metadata?.name || currentUser.email?.split("@")[0] || "Anonymous"}
+              </div>
+              {currentUser.id?.startsWith("guest_") && (
+                <div style={{ fontSize:9, color:DS.textTer }}>Guest</div>
+              )}
+            </div>
+            {!currentUser.id?.startsWith("guest_") && (
+              <button onClick={()=>{ sbSignOut(); setCurrentUser(null); }}
+                style={{ fontSize:9, color:DS.textTer, background:"none",
+                  border:"none", cursor:"pointer", fontFamily:"inherit" }}>
+                Sign out
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Presence bar */}
+        {!navCollapsed && presence.length > 1 && (
+          <div style={{ padding:"6px 14px", borderBottom:`1px solid ${DS.border}` }}>
+            <div style={{ fontSize:8, color:DS.textTer, textTransform:"uppercase",
+              letterSpacing:.5, marginBottom:4 }}>Online</div>
+            <PresenceBar presence={presence}/>
+          </div>
+        )}
 
         {/* Sync status + Share */}
         {!navCollapsed && _SB_URL && (
@@ -13026,6 +13603,19 @@ export default function App() {
             display:"flex", flexDirection:"column",
             animation:"fadeIn .2s ease" }} key={module}>
             <NudgeBar module={module} problem={problem} issues={issues} strategies={strategies} decisions={decisions}/>
+            {/* Comments toggle */}
+            {decisionId && (
+              <button onClick={()=>setShowComments(s=>!s)}
+                style={{ position:"absolute", right:12, top:"50%",
+                  transform:"translateY(-50%)",
+                  padding:"4px 10px", fontSize:10, fontWeight:700,
+                  fontFamily:"inherit", border:`1px solid ${DS.border}`,
+                  borderRadius:5, background:showComments?DS.accentSoft:"transparent",
+                  color:showComments?DS.accent:DS.textTer, cursor:"pointer",
+                  display:"flex", alignItems:"center", gap:4 }}>
+                💬 Comments
+              </button>
+            )}
             {module==="problem"    && <ModuleProblemDefinition    {...moduleProps.problem}/>}
             {module==="issues"     && <ModuleIssueRaising         {...moduleProps.issues}/>}
             {module==="hierarchy"  && <ModuleDecisionHierarchy    {...moduleProps.hierarchy}/>}
@@ -13057,6 +13647,18 @@ export default function App() {
           strategies={strategies}
           onClose={()=>setGameTheoryOpen(false)}
           aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
+      )}
+
+      {/* ── Comments Panel ── */}
+      {showComments && decisionId && (
+        <div style={{ position:"fixed", right:0, top:0, bottom:0,
+          zIndex:200, display:"flex", flexDirection:"column" }}>
+          <CommentsPanel
+            decisionId={decisionId}
+            module={module}
+            currentUser={currentUser}
+            onClose={()=>setShowComments(false)}/>
+        </div>
       )}
 
       {workshopOpen && (
