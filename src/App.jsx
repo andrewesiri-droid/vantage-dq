@@ -611,15 +611,32 @@ Evaluate strictly. Return ONLY valid JSON:
     const flaggedFields = (v.flags||[]).map(f => f.field + ": " + f.message).join("\n");
     const missingElements = (v.missingElements||[]).join(", ");
 
+    // Build a surgical fix prompt - one instruction per flag
+    const flagInstructions = (v.flags||[]).map(f => {
+      const severity = f.severity === "critical" ? "CRITICAL" : f.severity === "warning" ? "WARNING" : "INFO";
+      return severity + " — field [" + f.field + "]: " + f.message;
+    }).join("\n");
+
     const improvePrompt =
-      "Rewrite this decision frame to fix all validation issues. " +
-      "Decision: " + (data.decisionStatement||"") + ". " +
-      "Context: " + (data.context||"none") + ". " +
-      "Flags to fix: " + flaggedFields + ". " +
-      "Missing: " + missingElements + ". " +
-      "Suggested statement: " + (v.improvedStatement||"") + ". " +
-      "Return ONLY JSON: " +
-      '{"decisionStatement":"rewritten","context":"rewritten","scopeIn":"explicit scope in","scopeOut":"explicit scope out","successCriteria":"measurable criteria","constraints":"real constraints","assumptions":"explicit assumptions"}';
+      "You are fixing specific DQ validation failures in a decision frame. " +
+      "Address ONLY the flagged issues below — do not make other changes. " +
+      "Keep responses concise and specific — no padding or generic statements. " +
+      "Current values:\n" +
+      "decisionStatement: " + (data.decisionStatement||"empty") + "\n" +
+      "context: " + (data.context||"empty") + "\n" +
+      "scopeIn: " + (data.scopeIn||"empty") + "\n" +
+      "scopeOut: " + (data.scopeOut||"empty") + "\n" +
+      "successCriteria: " + (data.successCriteria||"empty") + "\n" +
+      "constraints: " + (data.constraints||"empty") + "\n" +
+      "assumptions: " + (data.assumptions||"empty") + "\n" +
+      "owner: " + (data.owner||"empty") + "\n\n" +
+      "FLAGS TO FIX (address each one precisely):\n" + flagInstructions + "\n" +
+      (missingElements ? "MISSING ELEMENTS TO ADD: " + missingElements + "\n" : "") +
+      (v.improvedStatement ? "USE THIS IMPROVED STATEMENT: " + v.improvedStatement + "\n" : "") +
+      "\nReturn ONLY a JSON object with ONLY the fields that need changing. " +
+      "Each value must directly fix the flag — be specific, not generic. " +
+      "Keep each field under 3 sentences. " +
+      '{"decisionStatement":"only if flagged","context":"only if flagged","scopeIn":"only if flagged","scopeOut":"only if flagged","successCriteria":"only if flagged","constraints":"only if flagged","assumptions":"only if flagged","owner":"only if flagged"}';
     aiCall(improvePrompt, (r) => {
       // Normalise response — proxy may return parsed object or {_raw:string}
       let result = r;
@@ -648,9 +665,33 @@ Evaluate strictly. Return ONLY valid JSON:
       });
 
       // Apply all updates at once
-      onChange({ ...data, ...updates });
+      const newData = { ...data, ...updates };
+      onChange(newData);
       setApplying(false);
-      onAIMsg({ role:"ai", text: "Applied improvements to " + Object.keys(updates).length + " fields: " + Object.keys(updates).join(", ") + ". Re-run Frame Check to see the new score." });
+      onAIMsg({ role:"ai", text: "Fixed " + Object.keys(updates).length + " field(s): " + Object.keys(updates).join(", ") + ". Running Frame Check now to get your new score…" });
+      // Auto re-run frame check after a brief delay
+      setTimeout(() => {
+        setChecking(true);
+        const recheckPrompt =
+          "Decision Quality frame validation. Decision Statement: \"" + (newData.decisionStatement||"") + "\". " +
+          "Context: \"" + (newData.context||"") + "\". " +
+          "Root Decision: \"" + (newData.rootDecision||"") + "\". " +
+          "Scope In: \"" + (newData.scopeIn||"") + "\". " +
+          "Scope Out: \"" + (newData.scopeOut||"") + "\". " +
+          "Owner: \"" + (newData.owner||"") + "\". " +
+          "Deadline: \"" + (newData.deadline||"") + "\". " +
+          "Constraints: \"" + (newData.constraints||"") + "\". " +
+          "Assumptions: \"" + (newData.assumptions||"") + "\". " +
+          "Success Criteria: \"" + (newData.successCriteria||"") + "\". " +
+          "Evaluate strictly. Return ONLY valid JSON: " +
+          '{"overallScore":0,"status":"strong","flags":[{"severity":"critical","field":"f","message":"m"}],"improvedStatement":null,"hiddenAssumptions":[],"missingElements":[],"executiveSummary":"summary"}';
+        aiCall(dqPrompt(recheckPrompt), (r2) => {
+          upd("aiValidation", r2);
+          setChecking(false);
+          const score = r2.overallScore || r2._raw?.overallScore;
+          onAIMsg({ role:"ai", text: "Frame Check complete. New score: " + (score||"?") + "/100. " + (r2.executiveSummary||"") });
+        });
+      }, 500);
     });
   };
 
