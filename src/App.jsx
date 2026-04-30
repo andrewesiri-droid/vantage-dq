@@ -3316,6 +3316,59 @@ function ModuleQualitativeAssessment({
   const getWeight = (critId) => weights[critId] ?? 2;
   const setWeight = (critId, val) => setWeights(w => ({ ...w, [critId]: val }));
 
+  // ── AI INITIAL ASSESSMENT ────────────────────────────────────────────────────
+  const [assessing, setAssessing] = useState(false);
+
+  const aiInitialAssessment = () => {
+    if (!strategies.length || !criteria.length) {
+      onAIMsg({role:"ai",text:"Add strategies and criteria first."});
+      return;
+    }
+    setAssessing(true);
+
+    const critList = criteria.map((cr,i) =>
+      (i+1)+". "+cr.label+(cr.description?" — "+cr.description.slice(0,60):"")+" [weight:"+getWeight(cr.id)+"]"
+    ).join("\n");
+
+    const stratList = strategies.map((s,i) => {
+      const choices = focusDecisions.map(d => {
+        const v = s.selections?.[d.id];
+        const idxs = Array.isArray(v)?v:(v!==undefined?[v]:[]);
+        return d.label+"→"+(idxs.length?idxs.map(i=>d.choices[i]).join("+"):"?");
+      }).join(", ");
+      return (i+1)+". "+s.name+
+        (s.objective?" | Objective: "+s.objective:"")+
+        (s.description?" | Rationale: "+s.description:"")+
+        " | Choices: "+choices;
+    }).join("\n");
+
+    aiCall(
+      "You are a Decision Quality expert. Score each strategy against each criterion (1=poor, 2=below average, 3=adequate, 4=good, 5=excellent). " +
+      "Be rigorous and differentiated — avoid scoring everything the same. " +
+      "Decision: "+(problem?.decisionStatement||"Not defined")+"\n" +
+      "CRITERIA (score each of these):\n"+critList+"\n\n" +
+      "STRATEGIES (score each of these):\n"+stratList+"\n\n" +
+      "Return ONLY JSON: " +
+      '{"scores":[{"strategyName":"name","criterionName":"name","score":4,"rationale":"one sentence why"}],"insight":"key observation about the comparison"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAssessing(false);return;}}
+      if (!result||result.error){setAssessing(false);return;}
+
+      const newScores = {...scores};
+      (result.scores||[]).forEach(cell => {
+        const strat = strategies.find(s=>s.name.toLowerCase()===cell.strategyName?.toLowerCase());
+        const crit  = criteria.find(cr=>cr.label.toLowerCase()===cell.criterionName?.toLowerCase());
+        if (strat&&crit&&typeof cell.score==="number"&&cell.score>=1&&cell.score<=5) {
+          newScores[scoreKey(strat.id,crit.id)] = cell.score;
+        }
+      });
+      onScores(newScores);
+      onAIMsg({role:"ai",text:result.insight||("Initial assessment complete. "+((result.scores||[]).length)+" cells scored. Review and adjust as needed.")});
+      setAssessing(false);
+    });
+  };
+
   // ── COMPUTED TOTALS ──────────────────────────────────────────────────────────
   const weightedTotal = (stratId) =>
     criteria.reduce((sum, c) => sum + getScore(stratId, c.id) * getWeight(c.id), 0);
@@ -3449,6 +3502,11 @@ Return ONLY valid JSON:
         <Btn variant="secondary" size="sm" icon="filter"
           onClick={() => setWeightsOpen(w => !w)}>
           {weightsOpen ? "Hide Weights" : "Edit Weights"}
+        </Btn>
+        <Btn variant="secondary" size="sm" icon="spark"
+          onClick={aiInitialAssessment}
+          disabled={aiBusy || assessing || !strategies.length || !criteria.length}>
+          {assessing ? "Assessing…" : "AI Initial Assessment"}
         </Btn>
         <Btn variant="primary" size="sm" icon="spark"
           onClick={generateBrief}
@@ -7780,11 +7838,12 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
         <div style={{padding:"0 20px 8px",display:"flex",gap:2}}>
           {[
             {id:"uncertainties",label:"1. Uncertainties"},
-            {id:"matrix2x2",label:"2. Select Axes"},
-            {id:"scenarios",label:"3. Scenarios"},
-            {id:"test",label:"4. Test Strategies"},
-            {id:"insights",label:"5. Robustness"},
-          ].map((v,i)=>{
+            {id:"matrix2x2",label:scenarioMode===null?"2a. Select Axes":"2. Select Axes",hidden:scenarioMode==="multi"},
+            {id:"multi",label:scenarioMode===null?"2b. Multi-Scenario":"2. Multi-Scenario",hidden:scenarioMode==="2x2"},
+            {id:"scenarios",label:"3. Scenarios",hidden:scenarioMode==="multi"},
+            {id:"test",label:scenarioMode==="multi"?"3. Test Strategies":"4. Test Strategies"},
+            {id:"insights",label:scenarioMode==="multi"?"4. Robustness":"5. Robustness"},
+          ].filter(v=>!v.hidden).map((v,i)=>{
             const done = (v.id==="uncertainties"&&uncertainties.length>0) ||
               (v.id==="matrix2x2"&&axis1&&axis2) ||
               (v.id==="scenarios"&&scenarios.length>0&&scenarios.some(s=>s.narrative)) ||
@@ -7895,11 +7954,18 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
                     </div>
                   ))}
                 </div>
-                <div style={{marginTop:12}}>
+                <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
                   <Btn variant="secondary" size="sm" onClick={addUnc}>+ Add Uncertainty</Btn>
                   {axis1&&axis2&&(
-                    <Btn variant="primary" size="sm" onClick={()=>setView("matrix2x2")} style={{marginLeft:8}}>
-                      Build 2×2 Matrix →
+                    <Btn variant="secondary" size="sm"
+                      onClick={()=>{setScenarioMode("2x2");setView("matrix2x2");}}>
+                      2a. Build 2×2 Matrix →
+                    </Btn>
+                  )}
+                  {uncertainties.length>=2&&(
+                    <Btn variant="primary" size="sm"
+                      onClick={()=>{setScenarioMode("multi");setView("multi");}}>
+                      2b. Multi-Uncertainty Mode →
                     </Btn>
                   )}
                 </div>
@@ -8005,6 +8071,85 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
               })}
             </div>
             {scenarios.length>0&&(
+              <div style={{marginTop:16,textAlign:"center"}}>
+                <Btn variant="primary" size="sm" onClick={()=>setView("test")}>Test Strategies →</Btn>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MULTI-SCENARIO MODE ── */}
+        {view==="multi" && (
+          <div>
+            <div style={{fontSize:12,color:DS.inkSub,marginBottom:16,lineHeight:1.6,maxWidth:700}}>
+              With <strong>{uncertainties.length} uncertainties</strong>, AI builds 4 coherent scenarios
+              where every uncertainty informs the narrative.
+            </div>
+            <div style={{display:"flex",gap:10,marginBottom:20,alignItems:"center",flexWrap:"wrap"}}>
+              <Btn variant="primary" onClick={generateMultiScenarios} disabled={aiBusy||fillingScenarios}>
+                {fillingScenarios?"Generating…":"AI Generate 4 Scenarios"}
+              </Btn>
+              <Btn variant="secondary" size="sm"
+                onClick={()=>{setScenarioMode("2x2");setView("uncertainties");}}>
+                Switch to 2×2 instead
+              </Btn>
+            </div>
+            {multiScenarios.length===0?(
+              <div style={{textAlign:"center",padding:"40px",color:DS.inkTer,
+                border:"1.5px dashed "+DS.canvasBdr,borderRadius:10}}>
+                <div style={{fontSize:28,opacity:.4,marginBottom:8}}>◈</div>
+                <div style={{fontSize:13,fontWeight:700}}>Click AI Generate to build your scenarios</div>
+                <div style={{fontSize:11,marginTop:6}}>
+                  All {uncertainties.length} uncertainties will inform each scenario.
+                </div>
+              </div>
+            ):(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                {multiScenarios.map(s=>(
+                  <div key={s.id} style={{padding:"16px 18px",background:DS.canvas,
+                    border:"1px solid "+DS.canvasBdr,borderRadius:10,
+                    borderTop:"3px solid "+DS.accent}}>
+                    <input value={s.name}
+                      onChange={e=>setMultiScenarios(prev=>prev.map(x=>x.id===s.id?{...x,name:e.target.value}:x))}
+                      style={{width:"100%",fontSize:14,fontWeight:700,color:DS.ink,
+                        background:"transparent",border:"none",outline:"none",
+                        fontFamily:"inherit",marginBottom:8,boxSizing:"border-box"}}/>
+                    {Object.keys(s.uncertaintyResolutions||{}).length>0&&(
+                      <div style={{marginBottom:10,padding:"8px 10px",
+                        background:DS.canvasAlt,borderRadius:6,border:"1px solid "+DS.canvasBdr}}>
+                        <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,
+                          textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>How Uncertainties Resolve</div>
+                        {Object.entries(s.uncertaintyResolutions).map(([k,v])=>(
+                          <div key={k} style={{display:"flex",gap:6,marginBottom:3,fontSize:10}}>
+                            <span style={{color:DS.inkTer,minWidth:120,flexShrink:0}}>{k.slice(0,28)}{k.length>28?"…":""}:</span>
+                            <span style={{color:DS.ink,fontWeight:600}}>{typeof v==="string"?v:JSON.stringify(v)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {[
+                      {key:"narrative",label:"Narrative",rows:3},
+                      {key:"earlyWarningIndicators",label:"Early Warning Indicators",rows:2},
+                      {key:"risks",label:"Strategic Risks",rows:2},
+                      {key:"opportunities",label:"Opportunities",rows:2},
+                    ].map(f=>(
+                      <div key={f.key} style={{marginBottom:8}}>
+                        <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,
+                          textTransform:"uppercase",letterSpacing:.5,marginBottom:2}}>{f.label}</div>
+                        <textarea value={s[f.key]||""}
+                          onChange={e=>setMultiScenarios(prev=>prev.map(x=>x.id===s.id?{...x,[f.key]:e.target.value}:x))}
+                          rows={f.rows}
+                          style={{width:"100%",fontSize:11,padding:"5px 7px",fontFamily:"inherit",
+                            background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,borderRadius:5,
+                            color:DS.ink,outline:"none",resize:"vertical",lineHeight:1.5,
+                            boxSizing:"border-box"}}/>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            {multiScenarios.length>0&&(
               <div style={{marginTop:16,textAlign:"center"}}>
                 <Btn variant="primary" size="sm" onClick={()=>setView("test")}>Test Strategies →</Btn>
               </div>
