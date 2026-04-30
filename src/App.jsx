@@ -90,40 +90,32 @@ const useAI = () => {
   const [busy, setBusy] = useState(false);
   const [lastError, setLastError] = useState(null);
   const call = useCallback(async (prompt, cb) => {
-    const apiKey = HARDCODED_API_KEY
-      || (typeof localStorage !== "undefined" ? localStorage.getItem("vantage_api_key") || "" : "")
-      || "";
-    if (!apiKey) {
-      cb({ error: "API key missing. Paste your Anthropic API key into the HARDCODED_API_KEY variable at the top of dq-enterprise.jsx" });
-      return;
-    }
     setBusy(true);
     setLastError(null);
     try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{
-          "Content-Type":"application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1400,
-          messages:[{ role:"user", content: prompt }] }),
+      const r = await fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
       });
       if (!r.ok) {
-        const errData = await r.json().catch(()=>({error:{message:`HTTP ${r.status}`}}));
-        const msg = errData?.error?.message || `API error ${r.status}`;
+        const errData = await r.json().catch(()=>({error:`HTTP ${r.status}`}));
+        const msg = errData?.error || `API error ${r.status}`;
         setLastError(msg);
         cb({ error: msg });
         setBusy(false);
         return;
       }
       const d = await r.json();
-      console.log("[VantageDQ] Response status:", r.status, "Content items:", d.content?.length);
-      const raw = (d.content||[]).map(b=>b.text||"").join("").trim();
-      console.log("[VantageDQ] Raw length:", raw.length, "Preview:", raw.slice(0,100));
-      try { cb(JSON.parse(raw.replace(/```json|```/g,"").trim())); }
-      catch(e) { console.error("[VantageDQ] Parse error:", e.message); cb({ _raw: raw }); }
+      // Proxy returns parsed JSON directly, or { _raw: text } if not JSON
+      if (d._raw !== undefined) {
+        try { cb(JSON.parse(d._raw.replace(/```json|```/g,"").trim())); }
+        catch(e) { cb({ _raw: d._raw }); }
+      } else if (d.error) {
+        cb({ error: d.error });
+      } else {
+        cb(d);
+      }
     } catch(e) {
       const msg = String(e);
       setLastError(msg);
@@ -131,7 +123,23 @@ const useAI = () => {
     }
     setBusy(false);
   }, []);
-  return { busy, call, lastError };
+
+  const validateDQOutput = useCallback(async (outputType, data, context, onResult) => {
+    const checks = {
+      decisionStatement: (d) => {
+        const stmt = d?.frame?.decisionStatement || d?.decisionStatement || "";
+        const isQuestion = /^(how|what|which|should|where|when|who|why)/i.test(stmt.trim());
+        const isSolution = /^(we should|we will|implement|deploy|use|adopt|choose|select)/i.test(stmt.trim());
+        if (!isQuestion) return "Decision statement is not framed as a question.";
+        if (isSolution) return "Decision statement reads as a solution. Reframe as an open question.";
+        return null;
+      },
+    };
+    const check = checks[outputType];
+    if (check) { const warning = check(data); if (warning && onResult) onResult(warning); }
+  }, []);
+
+  return { busy, call, lastError, validateDQOutput };
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -513,34 +521,30 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
 
   const validateWithAI = () => {
     setChecking(true);
-    const prompt = `You are a senior Decision Quality expert. Perform a rigorous validation of this decision frame.
-
-Decision Statement: "${data.decisionStatement}"
-Context: "${data.context}"
-Root Decision: "${data.rootDecision}"
-Scope In: "${data.scopeIn}"
-Scope Out: "${data.scopeOut}"
-Owner: "${data.owner}"
-Time Horizon: "${data.timeHorizon}"
-Deadline: "${data.deadline}"
-Constraints: "${data.constraints}"
-Assumptions: "${data.assumptions}"
-Success Criteria: "${data.successCriteria}"
-
-Evaluate strictly. Return ONLY valid JSON:
-{
-  "overallScore": 0-100,
-  "status": "strong"|"adequate"|"weak",
-  "flags": [{"severity":"critical"|"warning"|"info","field":"fieldName","message":"specific issue"}],
-  "improvedStatement": "rewritten decision statement if needed, else null",
-  "hiddenAssumptions": ["assumption 1","assumption 2"],
-  "missingElements": ["missing item 1"],
-  "executiveSummary": "2-sentence summary of the decision frame quality"
-}`;
-    aiCall(prompt, (r) => {
-      upd("aiValidation", r);
+    const validatePrompt =
+      "You are a senior Decision Quality expert. Validate this decision frame strictly. " +
+      "Decision Statement: \"" + (data.decisionStatement||"") + "\". " +
+      "Context: \"" + (data.context||"") + "\". " +
+      "Scope In: \"" + (data.scopeIn||"") + "\". " +
+      "Scope Out: \"" + (data.scopeOut||"") + "\". " +
+      "Owner: \"" + (data.owner||"") + "\". " +
+      "Deadline: \"" + (data.deadline||"") + "\". " +
+      "Constraints: \"" + (data.constraints||"") + "\". " +
+      "Assumptions: \"" + (data.assumptions||"") + "\". " +
+      "Success Criteria: \"" + (data.successCriteria||"") + "\". " +
+      "Return ONLY valid JSON: " +
+      '{"overallScore":75,"status":"strong|adequate|weak","flags":[{"severity":"critical|warning|info","field":"fieldName","message":"specific issue"}],"improvedStatement":"rewritten statement or null","hiddenAssumptions":["plain string assumption"],"missingElements":["missing item"],"executiveSummary":"2-sentence summary"}';
+    aiCall(validatePrompt, (r) => {
+      // Normalise response
+      let result = r;
+      if (r && typeof r === "object" && r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) {}
+      }
+      upd("aiValidation", result);
       setChecking(false);
-      onAIMsg({ role:"ai", text: r.executiveSummary || (r._raw ? r._raw.slice(0,200) : "Validation complete. Check the frame quality panel.") });
+      const score = result.overallScore;
+      const summary = typeof result.executiveSummary === "string" ? result.executiveSummary : "";
+      onAIMsg({ role:"ai", text: (score ? "DQ Score: " + score + "/100. " : "") + (summary || "Validation complete. Check the AI Validation tab.") });
     });
   };
 
@@ -2509,6 +2513,8 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
   const [mode, setMode] = useState("builder"); // builder | workshop | review
   const [activeS, setActiveS] = useState(strategies[0]?.id || null);
   const [suggesting, setSuggesting] = useState(false);
+  const [recommending, setRecommending] = useState(false);
+  const [recommendation, setRecommendation] = useState(null);
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null); // { stratId, decId }
@@ -11495,21 +11501,36 @@ export default function App() {
           })}
         </nav>
 
-        {/* Progress footer */}
+        {/* Session Snapshot */}
         {!navCollapsed && (
-          <div style={{ padding:"12px 16px", borderTop:`1px solid ${DS.border}` }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
-              <span style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
-                textTransform:"uppercase", fontWeight:700 }}>Session Progress</span>
-              <span style={{ fontSize:10, color:DS.textSec, fontWeight:700 }}>{overall}%</span>
+          <div style={{ padding:"10px 14px", borderTop:`1px solid ${DS.border}`,
+            marginTop:"auto" }}>
+            <div style={{ fontSize:7, color:DS.textTer, letterSpacing:1.2,
+              textTransform:"uppercase", fontWeight:700, marginBottom:6 }}>Session</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5, marginBottom:8 }}>
+              {[
+                { label:"Issues",    value:issues.length,                              color:DS.accent },
+                { label:"Decisions", value:decisions.filter(d=>d.tier==="focus").length, color:"#7c3aed" },
+                { label:"Strategies",value:strategies.length,                          color:"#059669" },
+                { label:"Criteria",  value:criteria.length,                            color:"#d97706" },
+              ].map(tile=>(
+                <div key={tile.label} style={{ padding:"5px 7px",
+                  background:DS.chromeSub, borderRadius:5,
+                  border:`1px solid ${DS.border}` }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:tile.color,
+                    fontFamily:"'Libre Baskerville',serif", lineHeight:1 }}>{tile.value}</div>
+                  <div style={{ fontSize:8, color:DS.textTer, marginTop:2 }}>{tile.label}</div>
+                </div>
+              ))}
             </div>
-            <div style={{ height:3, background:DS.chromeMid, borderRadius:2, overflow:"hidden" }}>
+            <div style={{ height:3, background:DS.chromeMid, borderRadius:2, overflow:"hidden", marginBottom:4 }}>
               <div style={{ height:"100%", borderRadius:2, transition:"width .5s",
                 background:`linear-gradient(90deg, ${DS.accent}, #60a5fa)`,
                 width:`${overall}%` }}/>
             </div>
-            <div style={{ fontSize:8, color:DS.textTer, marginTop:5 }}>
-              {issues.length} issues · {decisions.filter(d=>d.tier==="focus").length} focus · {strategies.length} strategies
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <span style={{ fontSize:8, color:DS.textTer }}>Progress</span>
+              <span style={{ fontSize:8, color:DS.textSec, fontWeight:700 }}>{overall}%</span>
             </div>
           </div>
         )}
@@ -11519,7 +11540,7 @@ export default function App() {
       <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
 
         {/* API key warning */}
-        {!import.meta.env.VITE_ANTHROPIC_API_KEY && !HARDCODED_API_KEY && (
+        {false && (
           <div style={{ padding:"8px 16px", background:"#7c3aed22", borderBottom:"1px solid #7c3aed44",
             display:"flex", alignItems:"center", gap:8, flexShrink:0, fontSize:11, color:"#a78bfa" }}>
             <span>⚠</span>
@@ -11610,6 +11631,7 @@ export default function App() {
           <div style={{ flex:1, background:DS.canvasAlt, overflow:"hidden",
             display:"flex", flexDirection:"column",
             animation:"fadeIn .2s ease" }} key={module}>
+            <NudgeBar module={module} problem={problem} issues={issues} strategies={strategies} decisions={decisions}/>
             {module==="problem"    && <ModuleProblemDefinition    {...moduleProps.problem}/>}
             {module==="issues"     && <ModuleIssueRaising         {...moduleProps.issues}/>}
             {module==="hierarchy"  && <ModuleDecisionHierarchy    {...moduleProps.hierarchy}/>}
