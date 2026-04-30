@@ -7,6 +7,24 @@ import { useState, useRef, useEffect, useCallback } from "react";
 const HARDCODED_API_KEY = "";  // <-- paste key here if .env is not working
 // ─────────────────────────────────────────────────────────────────────────────
 
+const SESSION_KEY = "vantage_dq_session_v1";
+const saveSession = (data) => {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); } catch(e) {}
+};
+const loadSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+};
+
+const DQ_SYSTEM_BRIEF = "You are a Decision Quality expert. Apply DQ principles: appropriate frame, creative alternatives, meaningful information, clear values and tradeoffs, sound reasoning, commitment to action.";
+const DQ_SELF_CHECK = "Before responding, verify your answer reinforces Decision Quality principles.";
+const dqPrompt = (prompt, includeSelfCheck = true) => {
+  return DQ_SYSTEM_BRIEF + " " + prompt + (includeSelfCheck ? " " + DQ_SELF_CHECK : "");
+};
+
+
 /* ─────────────────────────────────────────────────────────────────────────────
    DESIGN SYSTEM
 ───────────────────────────────────────────────────────────────────────────── */
