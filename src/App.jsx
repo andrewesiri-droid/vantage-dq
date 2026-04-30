@@ -8257,6 +8257,8 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
   const [generating, setGenerating]   = useState(false);
   const [filling, setFilling]         = useState(false);
   const [fillingScenarios, setFillingScenarios] = useState(false);
+  const [scenarioMode, setScenarioMode]         = useState(null); // null | '2x2' | 'multi'
+  const [multiScenarios, setMultiScenarios]     = useState([]); // for multi mode
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const addUnc = () => setUncs(prev => [...prev, {
@@ -8368,6 +8370,41 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
     });
   };
 
+  // ── AI: generate multi-uncertainty scenarios ─────────────────────────────
+  const generateMultiScenarios = () => {
+    setFillingScenarios(true);
+    const uncList = sortedUncs.map((u,i) =>
+      (i+1)+". "+u.label+" (Impact: "+u.impact+", Uncertainty: "+u.uncertainty+")"
+    ).join("\n");
+    aiCall(
+      "You are a scenario planning expert. Generate 4 distinct, plausible future scenarios from this full set of uncertainties. " +
+      "Each scenario should be a coherent 'future world' that specifies how each uncertainty resolves — some favourably, some unfavourably. " +
+      "Scenarios must be meaningfully different — not simply optimistic/pessimistic. " +
+      "Decision: "+(problem?.decisionStatement||"Not defined")+".\n" +
+      "Uncertainties:\n"+uncList+"\n\n" +
+      "For each scenario name it evocatively (3-5 words), write a narrative, state how each key uncertainty resolves, list early warning indicators. " +
+      "Return ONLY JSON: " +
+      '{"scenarios":[{"id":"s1","name":"Scenario name","narrative":"2-3 sentence story of this future","uncertaintyResolutions":{"uncertainty label":"how it resolves in this scenario"},"assumptions":"key assumptions","earlyWarningIndicators":"2-3 signposts","risks":"strategic risks","opportunities":"strategic opportunities"}],"insight":"observation"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setFillingScenarios(false);return;}}
+      if (!result||result.error){setFillingScenarios(false);return;}
+      const newScens = (result.scenarios||[]).map((s,i)=>({
+        id: uid("sc"), name:s.name||"Scenario "+(i+1),
+        narrative:s.narrative||"", assumptions:s.assumptions||"",
+        earlyWarningIndicators:s.earlyWarningIndicators||"",
+        risks:s.risks||"", opportunities:s.opportunities||"",
+        uncertaintyResolutions:s.uncertaintyResolutions||{},
+        pos:null, // no quadrant in multi mode
+      }));
+      setMultiScenarios(newScens);
+      // Also populate scenarios state so the test/robustness steps work
+      setScenarios(newScens);
+      onAIMsg({role:"ai",text:result.insight||("Generated "+newScens.length+" scenarios from all "+sortedUncs.length+" uncertainties.")});
+      setFillingScenarios(false);
+    });
+  };
+
   // ── AI: fill performance matrix ───────────────────────────────────────────
   const fillMatrix = () => {
     if (!scenarios.length||!strategies.length) return;
@@ -8456,11 +8493,12 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
         <div style={{padding:"0 20px 8px",display:"flex",gap:2}}>
           {[
             {id:"uncertainties",label:"1. Uncertainties"},
-            {id:"matrix2x2",label:"2. Select Axes"},
-            {id:"scenarios",label:"3. Scenarios"},
-            {id:"test",label:"4. Test Strategies"},
-            {id:"insights",label:"5. Robustness"},
-          ].map((v,i)=>{
+            {id:"matrix2x2",label:"2. Select Axes",hidden:scenarioMode==="multi"||scenarioMode===null},
+            {id:"multi",label:"2. Multi-Scenario",hidden:scenarioMode==="2x2"||scenarioMode===null},
+            {id:"scenarios",label:"3. Scenarios",hidden:scenarioMode==="multi"},
+            {id:"test",label:scenarioMode==="multi"?"3. Test Strategies":"4. Test Strategies"},
+            {id:"insights",label:scenarioMode==="multi"?"4. Robustness":"5. Robustness"},
+          ].filter(v=>!v.hidden).map((v,i)=>{
             const done = (v.id==="uncertainties"&&uncertainties.length>0) ||
               (v.id==="matrix2x2"&&axis1&&axis2) ||
               (v.id==="scenarios"&&scenarios.length>0&&scenarios.some(s=>s.narrative)) ||
@@ -8573,11 +8611,20 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
                 </div>
                 <div style={{marginTop:12}}>
                   <Btn variant="secondary" size="sm" onClick={addUnc}>+ Add Uncertainty</Btn>
-                  {axis1&&axis2&&(
-                    <Btn variant="primary" size="sm" onClick={()=>setView("matrix2x2")} style={{marginLeft:8}}>
-                      Build 2×2 Matrix →
-                    </Btn>
-                  )}
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
+                    {axis1&&axis2&&(
+                      <Btn variant="secondary" size="sm"
+                        onClick={()=>{setScenarioMode("2x2");setView("matrix2x2");}}>
+                        Build 2×2 Matrix →
+                      </Btn>
+                    )}
+                    {uncertainties.length>=2&&(
+                      <Btn variant="primary" size="sm"
+                        onClick={()=>{setScenarioMode("multi");setView("multi");}}>
+                        {uncertainties.length>2?"Multi-Uncertainty Mode →":"Multi-Scenario Mode →"}
+                      </Btn>
+                    )}
+                  </div>
                 </div>
               </>
             )}
@@ -8681,6 +8728,168 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
               })}
             </div>
             {scenarios.length>0&&(
+              <div style={{marginTop:16,textAlign:"center"}}>
+                <Btn variant="primary" size="sm" onClick={()=>setView("test")}>Test Strategies →</Btn>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MULTI-SCENARIO MODE ── */}
+        {view==="multi" && (
+          <div>
+            <div style={{fontSize:12,color:DS.inkSub,marginBottom:16,lineHeight:1.6,maxWidth:700}}>
+              With <strong>{uncertainties.length} uncertainties</strong>, the AI will build 4 coherent scenarios
+              that specify how all uncertainties resolve together — richer than a 2×2 because every
+              uncertainty informs every scenario.
+            </div>
+            <div style={{display:"flex",gap:10,marginBottom:20,alignItems:"center"}}>
+              <Btn variant="primary" onClick={generateMultiScenarios} disabled={aiBusy||fillingScenarios}>
+                {fillingScenarios?"Generating…":"AI Generate 4 Scenarios from All Uncertainties"}
+              </Btn>
+              {uncertainties.length>=2&&(
+                <Btn variant="secondary" size="sm"
+                  onClick={()=>{setScenarioMode("2x2");setView("matrix2x2");}}>
+                  Switch to 2×2 instead
+                </Btn>
+              )}
+            </div>
+
+            {multiScenarios.length===0?(
+              <div style={{textAlign:"center",padding:"40px",color:DS.inkTer,
+                border:"1.5px dashed "+DS.canvasBdr,borderRadius:10}}>
+                <div style={{fontSize:28,opacity:.4,marginBottom:8}}>◈</div>
+                <div style={{fontSize:13,fontWeight:700}}>Click AI Generate to build your scenarios</div>
+                <div style={{fontSize:11,marginTop:6,color:DS.inkTer}}>
+                  The AI will combine all {uncertainties.length} uncertainties into 4 distinct future worlds.
+                </div>
+              </div>
+            ):(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                {multiScenarios.map((s,i)=>(
+                  <div key={s.id} style={{padding:"16px 18px",background:DS.canvas,
+                    border:"1px solid "+DS.canvasBdr,borderRadius:10,
+                    borderTop:"3px solid "+DS.accent}}>
+                    <input value={s.name}
+                      onChange={e=>setMultiScenarios(prev=>prev.map(x=>x.id===s.id?{...x,name:e.target.value}:x))}
+                      style={{width:"100%",fontSize:14,fontWeight:700,color:DS.ink,
+                        background:"transparent",border:"none",outline:"none",
+                        fontFamily:"inherit",marginBottom:8,boxSizing:"border-box"}}/>
+                    {/* How each uncertainty resolves */}
+                    {Object.keys(s.uncertaintyResolutions||{}).length>0&&(
+                      <div style={{marginBottom:10,padding:"8px 10px",
+                        background:DS.canvasAlt,borderRadius:6,
+                        border:"1px solid "+DS.canvasBdr}}>
+                        <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,
+                          textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>
+                          Uncertainty Resolutions
+                        </div>
+                        {Object.entries(s.uncertaintyResolutions).map(([k,v])=>(
+                          <div key={k} style={{display:"flex",gap:6,marginBottom:3,fontSize:10}}>
+                            <span style={{color:DS.inkTer,minWidth:120}}>{k.slice(0,25)}{k.length>25?"…":""}:</span>
+                            <span style={{color:DS.ink,fontWeight:600}}>{typeof v==="string"?v:JSON.stringify(v)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {[
+                      {key:"narrative",label:"Narrative",rows:3},
+                      {key:"earlyWarningIndicators",label:"Early Warning Indicators",rows:2},
+                      {key:"risks",label:"Strategic Risks",rows:2},
+                      {key:"opportunities",label:"Opportunities",rows:2},
+                    ].map(f=>(
+                      <div key={f.key} style={{marginBottom:8}}>
+                        <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,
+                          textTransform:"uppercase",letterSpacing:.5,marginBottom:2}}>{f.label}</div>
+                        <textarea value={s[f.key]||""}
+                          onChange={e=>setMultiScenarios(prev=>prev.map(x=>x.id===s.id?{...x,[f.key]:e.target.value}:x))}
+                          rows={f.rows}
+                          style={{width:"100%",fontSize:11,padding:"5px 7px",fontFamily:"inherit",
+                            background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,borderRadius:5,
+                            color:DS.ink,outline:"none",resize:"vertical",lineHeight:1.5,boxSizing:"border-box"}}/>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            {multiScenarios.length>0&&(
+              <div style={{marginTop:16,textAlign:"center"}}>
+                <Btn variant="primary" size="sm" onClick={()=>setView("test")}>Test Strategies →</Btn>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MULTI-SCENARIO MODE ── */}
+        {view==="multi" && (
+          <div>
+            <div style={{fontSize:12,color:DS.inkSub,marginBottom:16,lineHeight:1.6,maxWidth:700}}>
+              With <strong>{uncertainties.length} uncertainties</strong>, the AI will build 4 coherent scenarios
+              where every uncertainty informs the narrative — richer than a 2×2.
+            </div>
+            <div style={{display:"flex",gap:10,marginBottom:20,alignItems:"center",flexWrap:"wrap"}}>
+              <Btn variant="primary" onClick={generateMultiScenarios} disabled={aiBusy||fillingScenarios}>
+                {fillingScenarios?"Generating…":"AI Generate 4 Scenarios"}
+              </Btn>
+              <Btn variant="secondary" size="sm"
+                onClick={()=>{setScenarioMode("2x2");setView("uncertainties");}}>
+                Switch to 2×2 instead
+              </Btn>
+            </div>
+            {multiScenarios.length===0?(
+              <div style={{textAlign:"center",padding:"40px",color:DS.inkTer,
+                border:"1.5px dashed "+DS.canvasBdr,borderRadius:10}}>
+                <div style={{fontSize:28,opacity:.4,marginBottom:8}}>◈</div>
+                <div style={{fontSize:13,fontWeight:700}}>Click AI Generate to build your scenarios</div>
+                <div style={{fontSize:11,marginTop:6}}>The AI will combine all {uncertainties.length} uncertainties into 4 distinct future worlds.</div>
+              </div>
+            ):(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                {multiScenarios.map(s=>(
+                  <div key={s.id} style={{padding:"16px 18px",background:DS.canvas,
+                    border:"1px solid "+DS.canvasBdr,borderRadius:10,
+                    borderTop:"3px solid "+DS.accent}}>
+                    <input value={s.name}
+                      onChange={e=>setMultiScenarios(prev=>prev.map(x=>x.id===s.id?{...x,name:e.target.value}:x))}
+                      style={{width:"100%",fontSize:14,fontWeight:700,color:DS.ink,
+                        background:"transparent",border:"none",outline:"none",
+                        fontFamily:"inherit",marginBottom:8,boxSizing:"border-box"}}/>
+                    {Object.keys(s.uncertaintyResolutions||{}).length>0&&(
+                      <div style={{marginBottom:10,padding:"8px 10px",background:DS.canvasAlt,
+                        borderRadius:6,border:"1px solid "+DS.canvasBdr}}>
+                        <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,
+                          textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>How Uncertainties Resolve</div>
+                        {Object.entries(s.uncertaintyResolutions).map(([k,v])=>(
+                          <div key={k} style={{display:"flex",gap:6,marginBottom:3,fontSize:10}}>
+                            <span style={{color:DS.inkTer,minWidth:120,flexShrink:0}}>{k.slice(0,28)}{k.length>28?"…":""}:</span>
+                            <span style={{color:DS.ink,fontWeight:600}}>{typeof v==="string"?v:JSON.stringify(v)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {[
+                      {key:"narrative",label:"Narrative",rows:3},
+                      {key:"earlyWarningIndicators",label:"Early Warning Indicators",rows:2},
+                      {key:"risks",label:"Strategic Risks",rows:2},
+                      {key:"opportunities",label:"Opportunities",rows:2},
+                    ].map(f=>(
+                      <div key={f.key} style={{marginBottom:8}}>
+                        <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,
+                          textTransform:"uppercase",letterSpacing:.5,marginBottom:2}}>{f.label}</div>
+                        <textarea value={s[f.key]||""}
+                          onChange={e=>setMultiScenarios(prev=>prev.map(x=>x.id===s.id?{...x,[f.key]:e.target.value}:x))}
+                          rows={f.rows}
+                          style={{width:"100%",fontSize:11,padding:"5px 7px",fontFamily:"inherit",
+                            background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,borderRadius:5,
+                            color:DS.ink,outline:"none",resize:"vertical",lineHeight:1.5,boxSizing:"border-box"}}/>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            {multiScenarios.length>0&&(
               <div style={{marginTop:16,textAlign:"center"}}>
                 <Btn variant="primary" size="sm" onClick={()=>setView("test")}>Test Strategies →</Btn>
               </div>
