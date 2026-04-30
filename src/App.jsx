@@ -621,41 +621,29 @@ Evaluate strictly. Return ONLY valid JSON:
       "Return ONLY JSON: " +
       '{"decisionStatement":"rewritten","context":"rewritten","scopeIn":"explicit scope in","scopeOut":"explicit scope out","successCriteria":"measurable criteria","constraints":"real constraints","assumptions":"explicit assumptions"}';
     aiCall(improvePrompt, (r) => {
+      // Normalise response — proxy may return parsed object or {_raw:string}
       let result = r;
-      if (r._raw) {
-        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
-        catch(e) {
-          setApplying(false);
-          onAIMsg({role:"ai", text:"Could not parse improvements. Try again."});
-          return;
-        }
+      if (r && typeof r === "object" && r._raw) {
+        const rawStr = typeof r._raw === "string" ? r._raw : JSON.stringify(r._raw);
+        try { result = JSON.parse(rawStr.replace(/```json|```/g,"").trim()); }
+        catch(e) { setApplying(false); onAIMsg({role:"ai",text:"Could not parse improvements. Try again."}); return; }
+      } else if (typeof r === "string") {
+        try { result = JSON.parse(r.replace(/```json|```/g,"").trim()); }
+        catch(e) { setApplying(false); onAIMsg({role:"ai",text:"Could not parse response. Try again."}); return; }
       }
-      if (result.error) {
+      if (!result || typeof result !== "object" || result.error) {
         setApplying(false);
-        onAIMsg({role:"ai", text:"Error: " + result.error});
-        return;
-      }
-      if (!result || typeof result !== "object") {
-        setApplying(false);
-        onAIMsg({role:"ai", text:"Unexpected response format. Try again."});
+        onAIMsg({role:"ai", text:"Error applying improvements: " + (result?.error||"unexpected response")});
         return;
       }
 
-      // Apply each improved field that was returned
+      // Apply each improved field — guard against non-string values
       const updates = {};
-      const fieldMap = {
-        decisionStatement: "decisionStatement",
-        context: "context",
-        scopeIn: "scopeIn",
-        scopeOut: "scopeOut",
-        successCriteria: "successCriteria",
-        constraints: "constraints",
-        assumptions: "assumptions",
-        owner: "owner",
-      };
-      Object.entries(fieldMap).forEach(([aiKey, dataKey]) => {
-        if (result[aiKey] && result[aiKey].trim()) {
-          updates[dataKey] = result[aiKey];
+      const fields = ["decisionStatement","context","scopeIn","scopeOut","successCriteria","constraints","assumptions","owner"];
+      fields.forEach(key => {
+        const val = result[key];
+        if (val && typeof val === "string" && val.trim()) {
+          updates[key] = val.trim();
         }
       });
 
