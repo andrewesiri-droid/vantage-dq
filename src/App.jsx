@@ -5159,6 +5159,14 @@ Return ONLY valid JSON:
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #vdq-export-content, #vdq-export-content * { visibility: visible; }
+          #vdq-export-content { position: absolute; left: 0; top: 0; width: 100%; }
+          @page { margin: 20mm; }
+        }
+      `}</style>
 
       {/* Header */}
       <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
@@ -5170,6 +5178,16 @@ Return ONLY valid JSON:
         <Badge variant={completionPct===100?"green":completionPct>60?"warn":"default"}>
           {completionPct}% complete
         </Badge>
+        <Btn variant="secondary" size="sm" onClick={()=>{
+            const el = document.getElementById("vdq-export-content");
+            if (!el) return;
+            const orig = document.title;
+            document.title = (problem.projectName||problem.decisionStatement||"VantageDQ") + " — Decision Package";
+            window.print();
+            document.title = orig;
+          }}>
+          🖨 Print / PDF
+        </Btn>
         <Btn variant="primary" icon="spark" onClick={generatePack}
           disabled={aiBusy||generating||completionPct<50}>
           {generating?"Building Package…":"Generate Executive Package"}
@@ -5177,7 +5195,7 @@ Return ONLY valid JSON:
       </div>
 
       <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
-        <div style={{ maxWidth:900, margin:"0 auto" }}>
+        <div id="vdq-export-content" style={{ maxWidth:900, margin:"0 auto" }}>
 
           {/* Project identity banner */}
           <div style={{ marginBottom:24, padding:"18px 22px",
@@ -7784,6 +7802,29 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
   const readinessColor = (score) =>
     score >= 80 ? "#059669" : score >= 50 ? "#d97706" : "#dc2626";
 
+  // ── Drag handlers ─────────────────────────────────────────────────────────
+  const handleDragStart = (e, evId) => {
+    const ev = events.find(x=>x.id===evId);
+    if (!ev) return;
+    setDragging({ id:evId, startX:e.clientX, origStart:ev.startMonth, origEnd:ev.endMonth });
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (!dragging) return;
+    const deltaX = e.clientX - dragging.startX;
+    const deltaMonths = Math.round(deltaX / MONTH_W);
+    if (deltaMonths === 0) return;
+    const newStart = Math.max(1, Math.min(MONTHS, dragging.origStart + deltaMonths));
+    const dur = dragging.origEnd - dragging.origStart;
+    const newEnd = Math.max(newStart, Math.min(MONTHS, newStart + dur));
+    setEvents(prev => prev.map(x => x.id===dragging.id
+      ? {...x, startMonth:newStart, endMonth:newEnd} : x));
+  };
+
+  const handleDragEnd = () => setDragging(null);
+
   // ── AI: Generate timeline ─────────────────────────────────────────────────
   const generateTimeline = () => {
     setGenerating(true);
@@ -7888,6 +7929,8 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
           <div style={{ flex:1 }}>
             <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
               fontWeight:700, letterSpacing:1 }}>Module 10</div>
+            <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
+                fontWeight:700, letterSpacing:1, marginBottom:2 }}>Module 10</div>
             <div style={{ fontFamily:"'Libre Baskerville',serif",
               fontSize:18, fontWeight:700, color:DS.ink }}>Decision Risk Timeline</div>
           </div>
@@ -8079,7 +8122,8 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                           </div>
 
                           {/* Events */}
-                          <div style={{ position:"relative", flex:1, height:LANE_H }}>
+                          <div style={{ position:"relative", flex:1, height:LANE_H }}
+                            onDragOver={handleDragOver}>
                             {laneEvents.map((ev,ei)=>{
                               const et = EVENT_TYPES[ev.type]||EVENT_TYPES.milestone;
                               const isGate = ev.type==="decision_gate";
@@ -8092,11 +8136,15 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
                               if (isGate) {
                                 // Vertical line for gates
                                 return (
-                                  <div key={ev.id} onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}
+                                  <div key={ev.id}
+                                    draggable
+                                    onDragStart={e=>handleDragStart(e,ev.id)}
+                                    onDragEnd={handleDragEnd}
+                                    onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}
                                     style={{ position:"absolute",
                                       left:x + MONTH_W/2 - 1,
                                       top:0, height:"100%",
-                                      cursor:"pointer" }}>
+                                      cursor:"grab" }}>
                                     {/* Vertical line */}
                                     <div style={{ position:"absolute", left:0, top:0,
                                       width:3, height:"100%",
@@ -8129,13 +8177,17 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
 
                               // Horizontal bar for windows/activities
                               return (
-                                <div key={ev.id} onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}
+                                <div key={ev.id}
+                                  draggable
+                                  onDragStart={e=>handleDragStart(e,ev.id)}
+                                  onDragEnd={handleDragEnd}
+                                  onClick={()=>setSelected(s=>s===ev.id?null:ev.id)}
                                   style={{ position:"absolute",
                                     left:x, top:topOffset,
                                     width:w, height:30,
                                     background:isSel?et.color:et.bg,
                                     border:"1.5px solid "+et.color,
-                                    borderRadius:6, cursor:"pointer",
+                                    borderRadius:6, cursor:"grab",
                                     display:"flex", alignItems:"center",
                                     padding:"0 8px", gap:5,
                                     boxShadow:isSel?"0 2px 8px "+et.color+"44":"none",
@@ -8758,6 +8810,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
         <div style={{padding:"10px 20px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div style={{flex:1}}>
             <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Module 05</div>
+            <div <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1,marginBottom:2}}>Module 05</div>
             <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:18,fontWeight:700,color:DS.ink}}>Scenario Planning</div>
           </div>
           {view==="uncertainties" && (
@@ -9418,6 +9471,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
         <div style={{padding:"10px 20px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div style={{flex:1}}>
             <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Module 11</div>
+            <div <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1,marginBottom:2}}>Module 11</div>
             <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:18,fontWeight:700,color:DS.ink}}>Value of Information</div>
           </div>
           <Btn variant="secondary" size="sm" onClick={addItem}>+ Add Uncertainty</Btn>
