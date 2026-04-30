@@ -580,7 +580,7 @@ Evaluate strictly. Return ONLY valid JSON:
   "status": "strong"|"adequate"|"weak",
   "flags": [{"severity":"critical"|"warning"|"info","field":"fieldName","message":"specific issue"}],
   "improvedStatement": "rewritten decision statement if needed, else null",
-  "hiddenAssumptions": ["assumption 1","assumption 2"],
+  "hiddenAssumptions": ["plain string assumption 1","plain string assumption 2"],
   "missingElements": ["missing item 1"],
   "executiveSummary": "2-sentence summary of the decision frame quality"
 }`;
@@ -684,7 +684,7 @@ Evaluate strictly. Return ONLY valid JSON:
           "Assumptions: \"" + (newData.assumptions||"") + "\". " +
           "Success Criteria: \"" + (newData.successCriteria||"") + "\". " +
           "Evaluate strictly. Return ONLY valid JSON: " +
-          '{"overallScore":0,"status":"strong","flags":[{"severity":"critical","field":"f","message":"m"}],"improvedStatement":null,"hiddenAssumptions":[],"missingElements":[],"executiveSummary":"summary"}';
+          '{"overallScore":0,"status":"strong","flags":[{"severity":"critical","field":"f","message":"m"}],"improvedStatement":null,"hiddenAssumptions":["string only"],"missingElements":["string only"],"executiveSummary":"summary"}';
         aiCall(dqPrompt(recheckPrompt), (r2) => {
           upd("aiValidation", r2);
           setChecking(false);
@@ -1102,11 +1102,14 @@ Evaluate strictly. Return ONLY valid JSON:
                   )}
                   {data.aiValidation.hiddenAssumptions?.length > 0 && (
                     <SectionCard title="Hidden Assumptions Detected">
-                      {data.aiValidation.hiddenAssumptions.map((a,i)=>(
+                      {data.aiValidation.hiddenAssumptions.map((a,i)=>{
+                        const aText = typeof a === "string" ? a : (a.assumption || a.text || JSON.stringify(a));
+                        return (
                         <div key={i} style={{ fontSize:12, color:DS.ink, marginBottom:6,
                           padding:"6px 10px", background:DS.warnSoft, borderRadius:5,
-                          border:`1px solid ${DS.warnLine}` }}>⚠ {a}</div>
-                      ))}
+                          border:`1px solid ${DS.warnLine}` }}>⚠ {aText}</div>
+                         );
+                       })}
                     </SectionCard>
                   )}
                 </div>
