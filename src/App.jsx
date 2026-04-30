@@ -9027,6 +9027,12 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
 
       <div style={{ padding:"13px 24px", borderBottom:`1px solid ${DS.border}`,
         display:"flex", alignItems:"center", gap:14, flexShrink:0, background:DS.chromeAlt }}>
+        <button onClick={()=>setPhase("landing")}
+          style={{ background:"none", border:"1px solid "+DS.border, borderRadius:5, cursor:"pointer",
+            color:DS.textSec, fontSize:11, fontWeight:700, fontFamily:"inherit",
+            padding:"4px 10px", display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+          ← Back
+        </button>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <div style={{ width:26, height:26, borderRadius:5, background:DS.accent,
             display:"flex", alignItems:"center", justifyContent:"center" }}>
