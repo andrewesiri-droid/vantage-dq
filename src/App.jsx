@@ -2631,6 +2631,8 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
   const [compareSelected, setCompareSelected] = useState({});
   const [_activeSId, _setActiveSId] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [recommending, setRecommending] = useState(false);
+  const [recommendation, setRecommendation] = useState(null);
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState(null);
 
@@ -2903,6 +2905,11 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
         <Btn variant="primary" icon="spark" size="sm" onClick={aiSuggest}
           disabled={aiBusy || suggesting || nowDecisions.length === 0}>
           {suggesting ? "Suggesting…" : "AI Suggest Strategies"}
+        </Btn>
+        <Btn variant="primary" size="sm"
+          disabled={recommending || aiBusy || strategies.length < 2}
+          onClick={recommendStrategy}>
+          {recommending ? "Analysing…" : "✦ AI Pick Best Strategy"}
         </Btn>
       </div>
 
@@ -3295,6 +3302,71 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
         )}
 
         {/* ── COMPARE ───────────────────────────────────────────────────── */}
+        {/* ── AI RECOMMENDATION PANEL ── */}
+        {recommendation && (
+          <div style={{ margin:"16px 24px", padding:"18px 20px",
+            background:"linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)",
+            border:"2px solid "+DS.accent, borderRadius:10,
+            position:"relative" }}>
+            <button onClick={()=>setRecommendation(null)}
+              style={{ position:"absolute", top:10, right:12,
+                background:"none", border:"none", cursor:"pointer",
+                color:DS.inkTer, fontSize:16 }}>×</button>
+            <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
+              letterSpacing:.6, textTransform:"uppercase", marginBottom:8 }}>
+              ✦ AI Strategy Recommendation
+            </div>
+            <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:12 }}>
+              <div style={{ fontFamily:"'Libre Baskerville',serif",
+                fontSize:20, fontWeight:700, color:DS.ink }}>
+                {recommendation.recommendedStrategy}
+              </div>
+              <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px",
+                borderRadius:4,
+                background:recommendation.confidence==="High"?DS.successSoft:recommendation.confidence==="Medium"?DS.warnSoft:DS.dangerSoft,
+                color:recommendation.confidence==="High"?DS.success:recommendation.confidence==="Medium"?DS.warning:DS.danger }}>
+                {recommendation.confidence} confidence
+              </span>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div>
+                <div style={{ fontSize:9, fontWeight:700, color:DS.inkTer,
+                  textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>Reasoning</div>
+                <div style={{ fontSize:12, color:DS.ink, lineHeight:1.6 }}>
+                  {recommendation.reasoning}
+                </div>
+              </div>
+              <div>
+                {recommendation.concerns && (
+                  <div style={{ marginBottom:8 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:DS.danger,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>Key Concerns</div>
+                    <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
+                      {recommendation.concerns}
+                    </div>
+                  </div>
+                )}
+                {recommendation.alternativeIf && (
+                  <div>
+                    <div style={{ fontSize:9, fontWeight:700, color:DS.inkTer,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>Consider Alternative If</div>
+                    <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
+                      {recommendation.alternativeIf}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {recommendation.rankingNote && (
+              <div style={{ marginTop:10, padding:"8px 12px",
+                background:"rgba(255,255,255,.6)", borderRadius:6,
+                fontSize:11, color:DS.inkTer, lineHeight:1.5 }}>
+                {recommendation.rankingNote}
+              </div>
+            )}
+          </div>
+        )}
+
         {mode === "compare" && (
           <div style={{ padding: "20px 24px" }}>
             {/* Strategy toggles */}
@@ -5975,7 +6047,63 @@ Return ONLY valid JSON:
 
 const IMPACT_LEVELS      = ["Critical","High","Medium","Low"];
 const CONTROL_LEVELS     = ["High Control","Some Control","Low Control","No Control"];
-const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Competitive","Operational","Political","Stakeholder"];
+const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Competitive","Operational","Political","Stakeholder"]
+  // ── AI Recommend Best Strategy ────────────────────────────────────────────
+  const recommendStrategy = () => {
+    const strategiesWithObjectives = strategies.filter(s => s.objective || s.description);
+    if (strategies.length < 2) {
+      onAIMsg({role:"ai", text:"Add at least 2 strategies before asking the AI to recommend."});
+      return;
+    }
+    setRecommending(true);
+    setRecommendation(null);
+
+    const stratSummaries = strategies.map((s,i) => {
+      const choices = nowDecisions.map(d => {
+        const v = s.selections[d.id];
+        const ci = Array.isArray(v) ? v[0] : v;
+        return d.label + "=" + (ci !== undefined ? d.choices[ci] : "not selected");
+      }).join(", ");
+      return (i+1) + ". " + s.name +
+        (s.objective ? " | Objective: " + s.objective : "") +
+        (s.description ? " | Rationale: " + s.description : "") +
+        " | Decisions: " + choices;
+    }).join("\n");
+
+    const critera_str = criteria.map(cr => cr.label || cr.name || cr).join(", ");
+
+    aiCall(
+      "You are a senior Decision Quality expert evaluating strategies. " +
+      "Decision: " + (problem?.decisionStatement || "") + ". " +
+      "Criteria: " + (critera_str || "not defined") + ".\n\n" +
+      "Strategies:\n" + stratSummaries + "\n\n" +
+      "Evaluate each strategy against the decision objectives and DQ principles. " +
+      "Recommend the best strategy or combination. Be direct and specific. " +
+      "Return ONLY JSON: " +
+      '{"recommendedStrategy":"strategy name","confidence":"High|Medium|Low",' +
+      '"reasoning":"2-3 sentences on why this strategy best achieves the stated objectives",' +
+      '"concerns":"key risks or gaps in the recommended strategy",' +
+      '"alternativeIf":"condition under which a different strategy would be better",' +
+      '"rankingNote":"brief comment on how all strategies compare"}',
+    (r) => {
+      let result = r;
+      if (r && r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) {}
+      }
+      if (result && !result.error) {
+        setRecommendation(result);
+        onAIMsg({role:"ai", text:
+          "Recommended: " + result.recommendedStrategy + " (" + result.confidence + " confidence). " +
+          result.reasoning
+        });
+      } else {
+        onAIMsg({role:"ai", text:"Could not generate recommendation. Try again."});
+      }
+      setRecommending(false);
+    });
+  };
+
+;
 
 
 function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg, problem }) {
