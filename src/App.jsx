@@ -2756,64 +2756,86 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onChange2, aiCal
     }
     setSuggesting(true);
 
-    const decList = nowDecisions.map((d, di) =>
-      (di+1) + ". " + d.label + " — options: " + d.choices.map((c,ci) => ci+"="+c).join(", ")
-    ).join(" | ");
+    // Build a clear decision menu so the AI knows exactly what to pick
+    const decMenu = nowDecisions.map((d, di) =>
+      "D" + (di+1) + ": " + d.label + " → options: " +
+      d.choices.map((ch, ci) => ci + "=" + ch).join(" | ")
+    ).join("\n");
 
-    const existingList = strategies.length > 0
-      ? strategies.map(s => s.name + ": " + nowDecisions.map(d => {
-          const v = s.selections[d.id];
-          const idx = Array.isArray(v) ? v[0] : v;
-          return idx !== undefined ? d.choices[idx] : "?";
-        }).join("/")).join(" | ")
-      : "none";
+    const existingNames = strategies.map(s => s.name).join(", ") || "none";
 
     aiCall(
-      "You are a Decision Quality strategist. Build 2 distinct strategies for this decision. " +
-      "Each strategy must choose a different combination of options across the decisions. " +
-      "Decision: " + (problem.decisionStatement || "Not defined") + ". " +
-      "Focus decisions with options (use option index numbers in selections array): " + decList + ". " +
-      "Existing strategies to avoid duplicating: " + existingList + ". " +
-      "Return ONLY a JSON object with this exact structure (use double quotes inside): " +
-      '{"strategies":[{"name":"Strategy name","description":"one sentence","objective":"goal","selections":[0,1,0],"rationale":"why coherent"}],"insight":"observation"}. ' +
-      "The selections array must have exactly " + nowDecisions.length + " numbers, one per decision above (0-based index of chosen option).",
+      "You are a Decision Quality strategist. Generate 3 meaningfully distinct strategies for this decision. " +
+      "Each strategy must: (1) have a clear strategic objective, (2) pick one option for EVERY decision below, (3) have a rationale explaining why those choices are internally coherent. " +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + ". " +
+      "Existing strategies (do not duplicate): " + existingNames + ". " +
+      "DECISIONS — use the exact option index number (0, 1, 2...) in your selections:\n" + decMenu + "\n\n" +
+      "Return ONLY JSON:\n" +
+      '{"strategies":[' +
+      '{"name":"Bold Growth","objective":"Maximise market capture by committing fully to highest-upside options","rationale":"This combination prioritises speed and scale — each option reinforces the others by...",' +
+      '"selections":{"D1":0,"D2":1,"D3":0},' +
+      '"riskProfile":"High risk, high reward"}' +
+      '],"insight":"observation about the strategy space"}\n' +
+      "IMPORTANT: selections must use keys D1, D2, D3... matching the decision numbers above. Use the exact integer index (0, 1, 2) of the chosen option.",
     (r) => {
       let result = r;
-      if (r._raw) {
+      if (r && r._raw) {
         try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
-        catch(e) { onAIMsg({ role:"ai", text:"Could not parse response. Try again." }); setSuggesting(false); return; }
+        catch(e) { onAIMsg({role:"ai",text:"Could not parse strategies. Try again."}); setSuggesting(false); return; }
       }
-      if (result.error) { onAIMsg({ role:"ai", text:"AI error: " + result.error }); setSuggesting(false); return; }
+      if (!result || result.error) {
+        onAIMsg({role:"ai", text:"Error: " + (result?.error||"No response")}); setSuggesting(false); return;
+      }
 
-      // Try multiple possible response keys
-      const strats = result.strategies || result.Strategies || result.strategy || [];
-      if (strats.length) {
-        const used = strategies.map(s => s.colorIdx);
-        const newSs = strats.map((s, i) => {
-          const colorIdx = [0,1,2,3,4,5].find(c => !used.includes(c)) ?? (strategies.length + i) % 6;
-          used.push(colorIdx);
-          const selections = {};
-          const sels = s.selections || s.choices || [];
-          sels.forEach((optIdx, j) => {
+      const strats = result.strategies || [];
+      if (!strats.length) {
+        onAIMsg({role:"ai", text:"No strategies returned. Try again."}); setSuggesting(false); return;
+      }
+
+      const used = strategies.map(s => s.colorIdx);
+      const newSs = strats.map((s, i) => {
+        const colorIdx = [0,1,2,3,4,5].find(ci => !used.includes(ci)) ?? (strategies.length + i) % 6;
+        used.push(colorIdx);
+
+        // Map selections — handle both {D1:0, D2:1} and [0,1,0] formats
+        const selections = {};
+        const rawSel = s.selections || {};
+
+        if (Array.isArray(rawSel)) {
+          // Array format: index maps to decision position
+          rawSel.forEach((optIdx, j) => {
             if (nowDecisions[j] && typeof optIdx === "number") {
               selections[nowDecisions[j].id] = optIdx;
             }
           });
-          return {
-            id: uid("s"), colorIdx,
-            name: s.name || DS.sNames[colorIdx] || ("Strategy " + (strategies.length + i + 1)),
-            description: s.description || s.rationale || "",
-            objective: s.objective || "",
-            rationale: {},
-            selections
-          };
-        });
-        onChange([...strategies, ...newSs]);
-        onAIMsg({ role: "ai", text: result.insight || ("Added " + newSs.length + " strategies.") });
-      } else {
-        onAIMsg({ role:"ai", text:"AI returned no strategies. Check the console for details." });
-        console.log("aiSuggest response:", JSON.stringify(result).slice(0,300));
-      }
+        } else {
+          // Object format: {D1:0, D2:1, ...}
+          Object.entries(rawSel).forEach(([key, optIdx]) => {
+            // Key is "D1", "D2" etc — map to decision by position
+            const decPos = parseInt(key.replace(/\D/g,"")) - 1;
+            const dec = nowDecisions[decPos];
+            if (dec && typeof optIdx === "number") {
+              selections[dec.id] = optIdx;
+            }
+          });
+        }
+
+        return {
+          id: uid("s"), colorIdx,
+          name: s.name || DS.sNames[colorIdx] || ("Strategy " + (strategies.length + i + 1)),
+          objective: s.objective || "",
+          description: s.rationale || s.description || "",
+          riskProfile: s.riskProfile || "",
+          selections,
+          rationale: {},
+        };
+      });
+
+      onChange([...strategies, ...newSs]);
+      onAIMsg({role:"ai", text:
+        "Added " + newSs.length + " strategies with objectives, rationale and option selections. " +
+        (result.insight || "Review and adjust any selections in the table.")
+      });
       setSuggesting(false);
     });
   };
