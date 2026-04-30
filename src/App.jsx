@@ -2536,7 +2536,9 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
     onChange(strategies.map(s => {
       if (s.id!==stratId) return s;
       const sel = {...s.selections};
-      if (sel[decId]===optIdx) delete sel[decId]; else sel[decId]=optIdx;
+      const prev = Array.isArray(sel[decId]) ? sel[decId] : (sel[decId]!==undefined ? [sel[decId]] : []);
+      if (prev.includes(optIdx)) { const next=prev.filter(i=>i!==optIdx); if(next.length) sel[decId]=next; else delete sel[decId]; }
+      else sel[decId]=[...prev, optIdx];
       return {...s, selections:sel};
     }));
   };
@@ -2604,36 +2606,90 @@ Return ONLY JSON:
   const activeSData = strategies.find(s=>s.id===activeS);
 
   const fillExistingStrategies = () => {
-    const incomplete = strategies.filter(s=>!s.objective||!s.description||nowDecisions.some(d=>s.selections[d.id]===undefined));
-    if (!incomplete.length){onAIMsg({role:"ai",text:"All strategies already have objectives, rationale and selections."});return;}
+    const incomplete = strategies.filter(s =>
+      !s.objective || !s.description ||
+      nowDecisions.some(d => {
+        const v = s.selections[d.id];
+        return !v || (Array.isArray(v) && v.length===0);
+      })
+    );
+    if (!incomplete.length) {
+      onAIMsg({role:"ai",text:"All strategies already have objectives, rationale and selections."});
+      return;
+    }
     setSuggesting(true);
-    const decMenu = nowDecisions.map((d,di)=>"D"+(di+1)+" [id:"+d.id+"]: "+d.label+" → "+d.choices.map((ch,ci)=>ci+"="+ch).join(" | ")).join("\n");
-    const stratList = incomplete.map((s,i)=>{
-      const existing = nowDecisions.map(d=>{const v=s.selections[d.id];const ci=typeof v==="number"?v:undefined;return "D"+(nowDecisions.indexOf(d)+1)+"="+(ci!==undefined?d.choices[ci]:"NOT SELECTED");}).join(", ");
-      return (i+1)+". "+s.name+" | Objective: "+(s.objective||"MISSING")+" | Rationale: "+(s.description||"MISSING")+" | Selections: "+existing;
+
+    const decMenu = nowDecisions.map((d,di) =>
+      "D"+(di+1)+" [id:"+d.id+"]: "+d.label+" → "+
+      d.choices.map((ch,ci)=>ci+"="+ch).join(" | ")
+    ).join("\n");
+
+    const stratList = incomplete.map((s,i) => {
+      const existing = nowDecisions.map(d => {
+        const v = s.selections[d.id];
+        const idxs = Array.isArray(v)?v:(v!==undefined?[v]:[]);
+        return "D"+(nowDecisions.indexOf(d)+1)+"="+(idxs.length?idxs.map(i=>d.choices[i]).join("+"):"NOT SELECTED");
+      }).join(", ");
+      return (i+1)+". Strategy: "+s.name+
+        " | Objective: "+(s.objective||"MISSING")+
+        " | Rationale: "+(s.description||"MISSING")+
+        " | Current selections: "+existing;
     }).join("\n");
+
     aiCall(
-      "Complete missing fields for these strategies. Decision: "+(problem?.decisionStatement||"Not defined")+"\nDECISIONS:\n"+decMenu+"\n\nSTRATEGIES TO COMPLETE:\n"+stratList+"\n\nFill only what is MISSING. Match the strategy name and intent. Return ONLY JSON:\n"+
-      '{"strategies":[{"name":"exact name","objective":"clear objective","rationale":"why choices cohere","selections":{"D1":0,"D2":1}}],"insight":"observation"}',
-    (r)=>{
-      let result=r;
-      if(r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setSuggesting(false);return;}}
-      if(!result||result.error){setSuggesting(false);return;}
-      const aiStrats=result.strategies||[];
-      const updated=strategies.map(s=>{
-        const match=aiStrats.find(a=>a.name?.toLowerCase().trim()===s.name?.toLowerCase().trim());
-        if(!match) return s;
-        const newSel={...s.selections};
-        const rawSel=match.selections||{};
-        if(Array.isArray(rawSel)){rawSel.forEach((optIdx,j)=>{if(nowDecisions[j]&&typeof optIdx==="number"&&newSel[nowDecisions[j].id]===undefined)newSel[nowDecisions[j].id]=optIdx;});}
-        else{Object.entries(rawSel).forEach(([key,optIdx])=>{const decPos=parseInt(key.replace(/\D/g,""))-1;const dec=nowDecisions[decPos];if(dec&&typeof optIdx==="number"&&newSel[dec.id]===undefined)newSel[dec.id]=optIdx;});}
-        return {...s,objective:s.objective||match.objective||s.objective,description:s.description||match.rationale||s.description,selections:newSel};
+      "You are a Decision Quality strategist. Complete missing fields for these strategies. " +
+      "For each strategy: write a clear objective (what it aims to achieve), a rationale (why the option choices cohere), " +
+      "and select the BEST options for any unselected decisions — you may select MORE THAN ONE option per decision if it makes strategic sense. " +
+      "Match the strategy intent. Only fill what is MISSING. " +
+      "Decision: "+(problem?.decisionStatement||"Not defined")+"\n" +
+      "DECISIONS:\n"+decMenu+"\n\n" +
+      "STRATEGIES TO COMPLETE:\n"+stratList+"\n\n" +
+      "For selections, use an ARRAY of option indices per decision key. " +
+      "Return ONLY JSON:\n" +
+      '{"strategies":[{"name":"exact strategy name","objective":"clear objective","rationale":"why choices cohere","selections":{"D1":[0],"D2":[1,2]}}],"insight":"observation"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setSuggesting(false);return;}}
+      if (!result||result.error){setSuggesting(false);return;}
+
+      const aiStrats = result.strategies||[];
+      const updated = strategies.map(s => {
+        const match = aiStrats.find(a =>
+          a.name?.toLowerCase().trim()===s.name?.toLowerCase().trim()
+        );
+        if (!match) return s;
+
+        const newSel = {...s.selections};
+        const rawSel = match.selections||{};
+        Object.entries(rawSel).forEach(([key, val]) => {
+          const decPos = parseInt(key.replace(/\D/g,""))-1;
+          const dec = nowDecisions[decPos];
+          if (!dec) return;
+          const existing = s.selections[dec.id];
+          const hasExisting = existing!==undefined && (!Array.isArray(existing)||existing.length>0);
+          if (hasExisting) return; // don't overwrite existing selections
+          // Normalise to array
+          const idxArr = Array.isArray(val)?val:[val].filter(v=>typeof v==="number");
+          const validIdxs = idxArr.filter(i=>i>=0&&i<dec.choices.length);
+          if (validIdxs.length) newSel[dec.id] = validIdxs;
+        });
+
+        return {
+          ...s,
+          objective: s.objective || match.objective || s.objective,
+          description: s.description || match.rationale || s.description,
+          selections: newSel,
+        };
       });
+
       onChange(updated);
-      onAIMsg({role:"ai",text:result.insight||("Filled "+aiStrats.length+" strategies with objectives, rationale and missing selections.")});
+      onAIMsg({role:"ai", text:
+        result.insight||("Filled "+aiStrats.length+" strategies with objectives, rationale and option selections.")
+      });
       setSuggesting(false);
     });
   };
+
 
   const recommendStrategy = () => {
     if(strategies.length<2){onAIMsg({role:"ai",text:"Add at least 2 strategies before asking AI to recommend."});return;}
@@ -2744,155 +2800,248 @@ Return ONLY JSON:
 
         {/* BUILDER MODE */}
         {mode==="builder" && (
-          <div style={{ padding:"20px 28px" }}>
+          <div style={{ padding:"0", overflow:"hidden" }}>
             {nowDecisions.length===0 ? (
-              <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`,
-                borderRadius:10, color:DS.inkTer }}>
+              <div style={{ padding:"60px 40px", margin:"24px 28px", textAlign:"center",
+                border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10, color:DS.inkTer }}>
                 <div style={{ fontSize:14, marginBottom:8 }}>No decisions in the Focus tier yet.</div>
                 <div style={{ fontSize:12 }}>Assign decisions to the Focus tier in the Decision Hierarchy module first.</div>
               </div>
             ) : (
-              <div>
+              <div style={{ overflowX:"auto" }}>
                 {/* Validation banner */}
                 {validation && validation.coherenceFlags?.length > 0 && (
-                  <div style={{ marginBottom:16, padding:"12px 16px", background:DS.warnSoft,
+                  <div style={{ margin:"16px 28px 0", padding:"12px 16px", background:DS.warnSoft,
                     border:`1px solid ${DS.warnLine}`, borderRadius:8 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:DS.warning, marginBottom:6, letterSpacing:.5, textTransform:"uppercase" }}>
-                      ⚠ Coherence Flags
-                    </div>
+                    <div style={{ fontSize:11, fontWeight:700, color:DS.warning, marginBottom:4 }}>⚠ Coherence Flags</div>
                     {validation.coherenceFlags.map((f,i)=>(
-                      <div key={i} style={{ fontSize:12, color:DS.ink, marginBottom:3 }}>
+                      <div key={i} style={{ fontSize:12, color:DS.ink, marginBottom:2 }}>
                         <strong>{f.strategy}:</strong> {f.issue}
                       </div>
                     ))}
-                    {validation.insight && <div style={{ fontSize:12, color:DS.inkSub, marginTop:6, fontStyle:"italic" }}>{validation.insight}</div>}
                   </div>
                 )}
 
-                {/* The table */}
-                <div style={{ overflowX:"auto" }}>
-                  <div style={{ minWidth: nowDecisions.length*220 + 20 }}>
-                    {/* Column headers */}
-                    <div style={{ display:"grid", gridTemplateColumns:`repeat(${nowDecisions.length}, 1fr)`, gap:10, marginBottom:10 }}>
-                      {nowDecisions.map((d,di)=>(
-                        <div key={d.id} style={{ padding:"11px 14px", background:DS.chrome,
-                          borderRadius:7, border:`1px solid ${DS.border}` }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                            <span style={{ width:20,height:20,borderRadius:4,background:DS.chromeMid,
-                              display:"flex",alignItems:"center",justifyContent:"center",
-                              fontSize:10,color:DS.textTer,fontWeight:700,flexShrink:0 }}>{di+1}</span>
-                            <span style={{ fontSize:12,fontWeight:700,color:DS.textPri,flex:1,lineHeight:1.3 }}>{d.label}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                {/* Recommendation panel */}
+                {recommendation && (
+                  <div style={{ margin:"16px 28px 0", padding:"16px 18px",
+                    background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",
+                    border:"2px solid "+DS.accent, borderRadius:10, position:"relative" }}>
+                    <button onClick={()=>setRecommendation(null)}
+                      style={{ position:"absolute",top:10,right:12,background:"none",border:"none",
+                        cursor:"pointer",color:DS.inkTer,fontSize:16 }}>×</button>
+                    <div style={{ fontSize:9,fontWeight:700,color:DS.accent,letterSpacing:.6,
+                      textTransform:"uppercase",marginBottom:6 }}>✦ AI Recommendation</div>
+                    <div style={{ fontSize:15,fontWeight:700,color:DS.ink,marginBottom:6,
+                      fontFamily:"'Libre Baskerville',serif" }}>{recommendation.recommendedStrategy}</div>
+                    <div style={{ fontSize:12,color:DS.inkSub,lineHeight:1.6,marginBottom:8 }}>{recommendation.reasoning}</div>
+                    {recommendation.concerns && (
+                      <div style={{ fontSize:11,color:DS.danger,padding:"5px 10px",
+                        background:DS.dangerSoft,borderRadius:5 }}>⚠ {recommendation.concerns}</div>
+                    )}
+                  </div>
+                )}
 
-                    {/* Choice rows */}
-                    {Array.from({ length: Math.max(...nowDecisions.map(d=>d.choices.length), 0) }).map((_,ri)=>(
-                      <div key={ri} style={{ display:"grid", gridTemplateColumns:`repeat(${nowDecisions.length}, 1fr)`,
-                        gap:10, marginBottom:8 }}>
-                        {nowDecisions.map(d=>{
-                          const choice = d.choices[ri];
-                          if(!choice) return <div key={d.id+ri}/>;
+                {/* TABLE: strategies as rows, decisions as columns */}
+                <div style={{ minWidth: 240 + nowDecisions.length*180, padding:"16px 28px" }}>
+                  <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:"0 6px" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding:"8px 14px", background:DS.chrome, color:DS.textSec,
+                          fontSize:10, fontWeight:700, textAlign:"left", letterSpacing:.5,
+                          textTransform:"uppercase", borderRadius:"6px 0 0 6px",
+                          position:"sticky", left:0, zIndex:2, minWidth:220 }}>
+                          Strategy
+                        </th>
+                        {nowDecisions.map((d,di)=>(
+                          <th key={d.id} style={{ padding:"8px 12px", background:DS.chrome,
+                            color:DS.textSec, fontSize:10, fontWeight:700, textAlign:"left",
+                            letterSpacing:.4, minWidth:180 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                              <span style={{ width:18,height:18,borderRadius:4,background:DS.chromeMid,
+                                display:"flex",alignItems:"center",justifyContent:"center",
+                                fontSize:9,color:DS.textTer,fontWeight:700,flexShrink:0 }}>{di+1}</span>
+                              <span style={{ color:DS.textPri, lineHeight:1.3 }}>{d.label}</span>
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {strategies.map((s,si)=>{
+                        const col = DS.s[s.colorIdx]||DS.s[0];
+                        const expanded = activeS===s.id;
+                        const hasObjective = !!s.objective;
+                        const hasRationale = !!s.description;
+                        return (
+                          <tr key={s.id} style={{ verticalAlign:"top" }}>
+                            {/* Strategy name cell - sticky left */}
+                            <td style={{ padding:"0 0 0 0",
+                              position:"sticky", left:0, zIndex:1,
+                              background:DS.canvasAlt }}>
+                              <div style={{ padding:"10px 14px", background:col.soft,
+                                border:"1px solid "+col.line, borderRadius:8,
+                                borderLeft:"4px solid "+col.fill, minHeight:56 }}>
 
-                          // Which strategies have selected this cell?
-                          const hits = strategies.filter(s=>s.selections[d.id]===ri);
-                          const isSelected = hits.length>0;
-                          const primaryS = hits[0];
-                          const primaryCol = primaryS ? DS.s[primaryS.colorIdx] : null;
+                                {/* Name row */}
+                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                                  <input value={s.name}
+                                    onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,name:e.target.value}:x))}
+                                    style={{ flex:1, fontSize:13, fontWeight:700, color:col.fill,
+                                      background:"transparent", border:"none", outline:"none",
+                                      fontFamily:"inherit" }}/>
+                                  {/* Expand/collapse toggle */}
+                                  <button onClick={()=>setActiveS(activeS===s.id?null:s.id)}
+                                    title={expanded?"Collapse objective & rationale":"Expand objective & rationale"}
+                                    style={{ background:"none", border:"1px solid "+col.line,
+                                      borderRadius:4, cursor:"pointer", color:col.fill,
+                                      fontSize:10, padding:"1px 6px", flexShrink:0,
+                                      fontFamily:"inherit" }}>
+                                    {expanded?"▲":"▼"}
+                                  </button>
+                                  {/* Missing indicator */}
+                                  {(!hasObjective||!hasRationale)&&(
+                                    <span style={{ fontSize:8,color:DS.warning,fontWeight:700,
+                                      padding:"1px 5px",background:DS.warnSoft,borderRadius:3,
+                                      border:"1px solid "+DS.warnLine }}>
+                                      {!hasObjective&&!hasRationale?"missing":"partial"}
+                                    </span>
+                                  )}
+                                  <button onClick={()=>onChange(strategies.filter(x=>x.id!==s.id))}
+                                    style={{ background:"none",border:"none",cursor:"pointer",
+                                      color:DS.inkTer,fontSize:14,flexShrink:0 }}>×</button>
+                                </div>
 
-                          // Is this cell in an active strategy?
-                          const activeMatch = activeS && hits.find(s=>s.id===activeS);
-                          const isFiltered = activeS && !activeMatch;
-
-                          return (
-                            <div key={d.id+ri} style={{ opacity:isFiltered?.3:1, transition:"opacity .15s" }}>
-                              <div onClick={()=>{ if(activeS) selectCell(activeS,d.id,ri); }}
-                                onContextMenu={e=>{ e.preventDefault(); setSelectedCell({stratId:activeS,decId:d.id}); }}
-                                style={{ padding:"10px 13px", borderRadius:7,
-                                  border:`1.5px solid ${isSelected&&!isFiltered ? primaryCol.fill : DS.canvasBdr}`,
-                                  background: isSelected&&!isFiltered ? primaryCol.soft : DS.canvas,
-                                  cursor: activeS?"pointer":"default",
-                                  display:"flex", alignItems:"center", gap:8,
-                                  boxShadow: isSelected&&!isFiltered ? `0 0 0 3px ${primaryCol.line}40` : "0 1px 2px rgba(0,0,0,.04)",
-                                  transition:"all .12s", minHeight:46 }}>
-                                {isSelected&&!isFiltered && (
-                                  <div style={{ width:8,height:8,borderRadius:"50%",
-                                    background:primaryCol.fill,flexShrink:0 }}/>
+                                {/* Collapsed preview */}
+                                {!expanded && hasObjective && (
+                                  <div style={{ fontSize:10,color:DS.inkTer,lineHeight:1.4,
+                                    overflow:"hidden",textOverflow:"ellipsis",
+                                    display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical" }}>
+                                    {s.objective}
+                                  </div>
                                 )}
-                                <span style={{ fontSize:12, color:isSelected&&!isFiltered?DS.ink:DS.inkSub,
-                                  flex:1, lineHeight:1.4 }}>{choice}</span>
-                                {/* Multi-strategy dots */}
-                                {hits.length>1 && (
-                                  <div style={{ display:"flex",gap:3 }}>
-                                    {hits.slice(1).map(s=>(
-                                      <div key={s.id} style={{ width:5,height:5,borderRadius:"50%",
-                                        background:DS.s[s.colorIdx].fill }}/>
-                                    ))}
+
+                                {/* Expanded: objective + rationale */}
+                                {expanded && (
+                                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:8 }}>
+                                    <div>
+                                      <div style={{ fontSize:8,fontWeight:700,color:col.fill,
+                                        textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>
+                                        Objective
+                                      </div>
+                                      <textarea value={s.objective||""}
+                                        onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,objective:e.target.value}:x))}
+                                        placeholder="What is this strategy trying to achieve?"
+                                        rows={2}
+                                        style={{ width:"100%",fontSize:11,padding:"5px 7px",
+                                          fontFamily:"inherit",background:"rgba(255,255,255,.7)",
+                                          border:"1px solid "+col.line,borderRadius:5,
+                                          color:DS.ink,outline:"none",resize:"none",
+                                          lineHeight:1.5,boxSizing:"border-box" }}/>
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize:8,fontWeight:700,color:col.fill,
+                                        textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>
+                                        Rationale
+                                      </div>
+                                      <textarea value={s.description||""}
+                                        onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,description:e.target.value}:x))}
+                                        placeholder="Why are these choices internally coherent?"
+                                        rows={2}
+                                        style={{ width:"100%",fontSize:11,padding:"5px 7px",
+                                          fontFamily:"inherit",background:"rgba(255,255,255,.7)",
+                                          border:"1px solid "+col.line,borderRadius:5,
+                                          color:DS.ink,outline:"none",resize:"none",
+                                          lineHeight:1.5,boxSizing:"border-box" }}/>
+                                    </div>
                                   </div>
                                 )}
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                            </td>
 
-                {/* Strategy summary cards */}
-                <div style={{ marginTop:24 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:DS.inkTer, letterSpacing:.8,
-                    textTransform:"uppercase", marginBottom:12 }}>Strategy Summaries</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:12 }}>
-                    {strategies.map(s=>{
-                      const col = DS.s[s.colorIdx];
-                      const comp = completeness(s);
-                      const isActive = activeS===s.id;
-                      return (
-                        <div key={s.id} onClick={()=>setActiveS(isActive?null:s.id)}
-                          style={{ padding:"14px 16px", borderRadius:8, cursor:"pointer",
-                            border:`1.5px solid ${isActive?col.fill:DS.canvasBdr}`,
-                            background:isActive?col.soft:DS.canvas,
-                            boxShadow:isActive?`0 0 0 3px ${col.line}40`:"0 1px 3px rgba(0,0,0,.05)",
-                            transition:"all .15s" }}>
-                          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
-                            <div style={{ width:9,height:9,borderRadius:"50%",background:col.fill,flexShrink:0 }}/>
-                            <span style={{ fontWeight:700,fontSize:13,color:col.fill }}>{s.name}</span>
-                            <span style={{ marginLeft:"auto",fontSize:10,color:DS.inkTer }}>{comp}%</span>
-                          </div>
-                          {s.description && (
-                            <div style={{ fontSize:11,color:DS.inkSub,marginBottom:8,lineHeight:1.5,fontStyle:"italic" }}>
-                              {s.description}
-                            </div>
-                          )}
-                          <div style={{ display:"flex",flexWrap:"wrap",gap:4,marginBottom:10 }}>
+                            {/* Decision cells - multi-select option pills */}
                             {nowDecisions.map(d=>{
-                              const idx=s.selections[d.id];
+                              const rawSel = s.selections[d.id];
+                              const selected = Array.isArray(rawSel) ? rawSel :
+                                (rawSel!==undefined ? [rawSel] : []);
                               return (
-                                <span key={d.id} style={{ fontSize:10,padding:"2px 7px",borderRadius:3,
-                                  background:idx!==undefined?col.soft:DS.canvasAlt,
-                                  color:idx!==undefined?col.fill:DS.inkTer,
-                                  border:`1px solid ${idx!==undefined?col.line:DS.canvasBdr}`,
-                                  fontWeight:idx!==undefined?600:400 }}>
-                                  {idx!==undefined?d.choices[idx]:`${d.label}: ?`}
-                                </span>
+                                <td key={d.id} style={{ padding:"0 6px 0 0",
+                                  verticalAlign:"top" }}>
+                                  <div style={{ padding:"8px 10px",
+                                    background:selected.length>0?col.soft:DS.canvas,
+                                    border:"1px solid "+(selected.length>0?col.line:DS.canvasBdr),
+                                    borderRadius:8, minHeight:56 }}>
+                                    {/* Selected pills */}
+                                    {selected.length>0 && (
+                                      <div style={{ display:"flex",flexWrap:"wrap",gap:4,marginBottom:6 }}>
+                                        {selected.map(idx=>(
+                                          <span key={idx} style={{ display:"inline-flex",
+                                            alignItems:"center",gap:4,
+                                            padding:"2px 8px",borderRadius:10,
+                                            fontSize:10,fontWeight:700,
+                                            background:col.fill,color:"#fff" }}>
+                                            {d.choices[idx]}
+                                            <button
+                                              onClick={()=>toggleSelection(s.id,d.id,idx)}
+                                              style={{ background:"none",border:"none",
+                                                cursor:"pointer",color:"rgba(255,255,255,.7)",
+                                                fontSize:11,lineHeight:1,padding:0 }}>×</button>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Option menu - show remaining unselected */}
+                                    <div style={{ display:"flex",flexWrap:"wrap",gap:3 }}>
+                                      {d.choices.map((choice,idx)=>{
+                                        const isSel = selected.includes(idx);
+                                        if (isSel) return null; // already shown as pill
+                                        return (
+                                          <button key={idx}
+                                            onClick={()=>toggleSelection(s.id,d.id,idx)}
+                                            style={{ padding:"2px 8px",fontSize:10,
+                                              fontFamily:"inherit",cursor:"pointer",
+                                              border:"1px solid "+DS.canvasBdr,
+                                              borderRadius:10,
+                                              background:"transparent",
+                                              color:DS.inkSub,
+                                              transition:"all .1s" }}
+                                            onMouseEnter={e=>{e.currentTarget.style.borderColor=col.fill;e.currentTarget.style.color=col.fill;}}
+                                            onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.canvasBdr;e.currentTarget.style.color=DS.inkSub;}}>
+                                            + {choice}
+                                          </button>
+                                        );
+                                      })}
+                                      {selected.length===d.choices.length && (
+                                        <span style={{ fontSize:9,color:DS.inkTer,fontStyle:"italic" }}>All selected</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
                               );
                             })}
-                          </div>
-                          <div style={{ height:4,background:DS.canvasAlt,borderRadius:2,overflow:"hidden" }}>
-                            <div style={{ width:`${comp}%`,height:"100%",background:col.fill,
-                              borderRadius:2,transition:"width .3s" }}/>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {/* Add strategy button */}
+                  <button onClick={addStrategy}
+                    style={{ marginTop:10, padding:"8px 16px", fontSize:11, fontWeight:700,
+                      fontFamily:"inherit", cursor:"pointer",
+                      border:`1.5px dashed ${DS.canvasMid}`, borderRadius:7,
+                      background:"transparent", color:DS.inkTer, width:"100%",
+                      transition:"all .12s" }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=DS.accent;e.currentTarget.style.color=DS.accent;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.canvasMid;e.currentTarget.style.color=DS.inkTer;}}>
+                    + Add Strategy
+                  </button>
                 </div>
               </div>
             )}
           </div>
         )}
+
 
         {/* WORKSHOP MODE */}
         {mode==="workshop" && (
