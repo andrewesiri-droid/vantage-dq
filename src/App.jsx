@@ -1,5 +1,43 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
+// ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
+const _SB_URL = import.meta.env.VITE_SUPABASE_URL || "";
+const _SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const _sbHeaders = () => ({
+  "apikey": _SB_KEY,
+  "Authorization": "Bearer " + _SB_KEY,
+  "Content-Type": "application/json",
+  "Prefer": "return=representation",
+});
+const sbGet = async (id) => {
+  if (!_SB_URL || !_SB_KEY) return null;
+  try {
+    const r = await fetch(_SB_URL + "/rest/v1/decisions?id=eq." + id + "&select=*", { headers: _sbHeaders() });
+    const d = await r.json(); return d?.[0] || null;
+  } catch(e) { return null; }
+};
+const sbCreate = async (payload) => {
+  if (!_SB_URL || !_SB_KEY) return null;
+  try {
+    const r = await fetch(_SB_URL + "/rest/v1/decisions", { method:"POST", headers:_sbHeaders(), body:JSON.stringify(payload) });
+    const d = await r.json(); return d?.[0] || null;
+  } catch(e) { return null; }
+};
+const sbUpdate = async (id, payload) => {
+  if (!_SB_URL || !_SB_KEY) return null;
+  try {
+    const r = await fetch(_SB_URL + "/rest/v1/decisions?id=eq." + id, { method:"PATCH", headers:_sbHeaders(), body:JSON.stringify(payload) });
+    const d = await r.json(); return d?.[0] || null;
+  } catch(e) { return null; }
+};
+const sbList = async () => {
+  if (!_SB_URL || !_SB_KEY) return [];
+  try {
+    const r = await fetch(_SB_URL + "/rest/v1/decisions?select=id,project_name,updated_at,created_at&order=updated_at.desc&limit=20", { headers: _sbHeaders() });
+    return await r.json();
+  } catch(e) { return []; }
+};
+
 // ─── API KEY CONFIGURATION ────────────────────────────────────────────────────
 // Option 1: Set via .env file — create .env in project root with:
 //   VITE_ANTHROPIC_API_KEY=sk-ant-...
@@ -12358,6 +12396,11 @@ export default function App() {
   const [showQuickStart, setShowQuickStart] = useState(true);
   const [workshopOpen, setWorkshopOpen]   = useState(false);
   const [gameTheoryOpen, setGameTheoryOpen] = useState(false);
+  const [decisionId, setDecisionId]         = useState(null);
+  const [syncStatus, setSyncStatus]         = useState("local"); // local | saving | saved | error
+  const [showDecisions, setShowDecisions]   = useState(false);
+  const [decisionList, setDecisionList]     = useState([]);
+  const syncTimerRef = useRef(null);
   const [versionOpen, setVersionOpen]     = useState(false);
   const [dqiOpen, setDqiOpen]             = useState(false);
   const [projectSetupOpen, setProjectSetupOpen] = useState(false);
@@ -12373,6 +12416,61 @@ export default function App() {
   useEffect(() => {
     saveSession({ problem, issues, decisions, criteria, strategies, assessmentScores, dqScores });
   }, [problem, issues, decisions, criteria, strategies, assessmentScores, dqScores]);
+
+  // ── Cloud sync ────────────────────────────────────────────────────────────
+  // Load from URL if ?d=ID is present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlId = params.get("d");
+    if (urlId) {
+      setSyncStatus("saving");
+      sbGet(urlId).then(row => {
+        if (row?.data) {
+          const d = row.data;
+          if (d.problem)          setProblem(d.problem);
+          if (d.issues)           setIssues(d.issues);
+          if (d.decisions)        setDecisions(d.decisions);
+          if (d.criteria)         setCriteria(d.criteria);
+          if (d.strategies)       setStrategies(d.strategies);
+          if (d.assessmentScores) setAssessmentScores(d.assessmentScores);
+          if (d.dqScores)         setDqScores(d.dqScores);
+          setDecisionId(urlId);
+          setShowQuickStart(false);
+          setSyncStatus("saved");
+        } else {
+          setSyncStatus("error");
+        }
+      });
+    }
+  }, []);
+
+  // Auto-save to cloud whenever key state changes (debounced 2s)
+  useEffect(() => {
+    if (!_SB_URL || !_SB_KEY) return;
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(async () => {
+      setSyncStatus("saving");
+      const payload = {
+        project_name: problem.projectName || problem.decisionStatement?.slice(0,60) || "Untitled",
+        data: { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores },
+        updated_at: new Date().toISOString(),
+      };
+      let row;
+      if (decisionId) {
+        row = await sbUpdate(decisionId, payload);
+      } else {
+        row = await sbCreate(payload);
+        if (row?.id) {
+          setDecisionId(row.id);
+          const newUrl = window.location.pathname + "?d=" + row.id;
+          window.history.replaceState({}, "", newUrl);
+        }
+      }
+      setSyncStatus(row ? "saved" : "error");
+    }, 2000);
+    return () => clearTimeout(syncTimerRef.current);
+  }, [problem, issues, decisions, criteria, strategies, assessmentScores, dqScores]);
+
 
   // Onboarding complete
   const finishOnboarding = () => {
@@ -12581,6 +12679,43 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Sync status + Share */}
+        {!navCollapsed && _SB_URL && (
+          <div style={{ padding:"6px 14px", borderBottom:`1px solid ${DS.border}`,
+            display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:5, flex:1 }}>
+              <div style={{ width:6,height:6,borderRadius:"50%",flexShrink:0,
+                background:syncStatus==="saved"?"#22c55e":syncStatus==="saving"?"#f59e0b":syncStatus==="error"?"#dc2626":"#6b7280" }}/>
+              <span style={{ fontSize:9, color:DS.textTer }}>
+                {syncStatus==="saved"?"Synced to cloud":syncStatus==="saving"?"Saving…":syncStatus==="error"?"Sync error":"Local only"}
+              </span>
+            </div>
+            {decisionId && (
+              <button onClick={()=>{
+                  const url = window.location.origin + window.location.pathname + "?d=" + decisionId;
+                  navigator.clipboard.writeText(url).then(()=>onAIMsg({role:"ai",text:"Share link copied! Anyone with this link can open this decision."}));
+                }}
+                style={{ fontSize:9, fontWeight:700, fontFamily:"inherit",
+                  padding:"2px 7px", border:`1px solid ${DS.border}`,
+                  borderRadius:4, background:DS.chromeMid,
+                  color:DS.textSec, cursor:"pointer", flexShrink:0 }}>
+                🔗 Share
+              </button>
+            )}
+            <button onClick={async ()=>{
+                const list = await sbList();
+                setDecisionList(list||[]);
+                setShowDecisions(d=>!d);
+              }}
+              style={{ fontSize:9, fontWeight:700, fontFamily:"inherit",
+                padding:"2px 7px", border:`1px solid ${DS.border}`,
+                borderRadius:4, background:DS.chromeMid,
+                color:DS.textSec, cursor:"pointer", flexShrink:0 }}>
+              📂 Open
+            </button>
+          </div>
+        )}
 
         {/* Project card */}
         {!navCollapsed && (
@@ -12889,6 +13024,74 @@ export default function App() {
           }}
           onClose={()=>setVersionOpen(false)}/>
       )}
+      {/* ── Decision Picker ── */}
+      {showDecisions && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)",
+          zIndex:600, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={()=>setShowDecisions(false)}>
+          <div style={{ background:DS.canvas, borderRadius:12, width:560,
+            maxHeight:"70vh", overflow:"hidden", display:"flex", flexDirection:"column",
+            boxShadow:"0 24px 60px rgba(0,0,0,.3)" }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ padding:"16px 20px", borderBottom:`1px solid ${DS.canvasBdr}`,
+              display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                fontWeight:700, color:DS.ink, flex:1 }}>Open Decision</div>
+              <button onClick={()=>setShowDecisions(false)}
+                style={{ background:"none",border:"none",cursor:"pointer",
+                  color:DS.inkTer,fontSize:18 }}>×</button>
+            </div>
+            <div style={{ overflow:"auto", padding:"8px 0" }}>
+              {decisionList.length===0?(
+                <div style={{ padding:"32px", textAlign:"center", color:DS.inkTer, fontSize:13 }}>
+                  No saved decisions yet. Start working and your decision will auto-save.
+                </div>
+              ):(
+                decisionList.map(row=>(
+                  <div key={row.id}
+                    onClick={()=>{
+                      window.location.href = window.location.pathname + "?d=" + row.id;
+                    }}
+                    style={{ padding:"12px 20px", cursor:"pointer", borderBottom:`1px solid ${DS.canvasBdr}`,
+                      display:"flex", alignItems:"center", gap:12,
+                      background:"transparent", transition:"background .1s" }}
+                    onMouseEnter={e=>e.currentTarget.style.background=DS.canvasAlt}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:2 }}>
+                        {row.project_name || "Untitled Decision"}
+                      </div>
+                      <div style={{ fontSize:10, color:DS.inkTer }}>
+                        Last updated: {new Date(row.updated_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+                      </div>
+                    </div>
+                    <div style={{ fontSize:10, color:DS.inkTer, fontFamily:"monospace" }}>
+                      {row.id.slice(0,8)}…
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{ padding:"12px 20px", borderTop:`1px solid ${DS.canvasBdr}`,
+              display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <button
+                onClick={()=>{
+                  window.location.href = window.location.pathname;
+                }}
+                style={{ fontSize:11, fontWeight:700, fontFamily:"inherit",
+                  padding:"6px 14px", border:`1px solid ${DS.canvasBdr}`,
+                  borderRadius:6, background:"transparent",
+                  color:DS.inkSub, cursor:"pointer" }}>
+                + New Decision
+              </button>
+              <div style={{ fontSize:10, color:DS.inkTer }}>
+                {decisionList.length} saved decision{decisionList.length!==1?"s":""}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {dqiOpen && (
         <DQiDashboard currentProject={problem} dqScores={dqScores}
           strategies={strategies} issues={issues}
