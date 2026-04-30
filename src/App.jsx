@@ -6239,7 +6239,7 @@ const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Compe
 ;
 
 
-function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg, problem }) {
+function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg, problem, onNodesChange, onEdgesChange }) {
 
   // ── Node taxonomy per spec ────────────────────────────────────────────────
   const NODE_TYPES = {
@@ -6297,6 +6297,14 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
 
   // ── Seeding from issues ───────────────────────────────────────────────────
+  // Sync nodes/edges to parent for Scenario Planning and VoI
+  useEffect(() => {
+    if (onNodesChange) onNodesChange(nodes);
+  }, [nodes]);
+  useEffect(() => {
+    if (onEdgesChange) onEdgesChange(edges);
+  }, [edges]);
+
   useEffect(() => {
     if (nodes.length > 0) return;
     const uIssues = issues.filter(i =>
@@ -8228,6 +8236,685 @@ function VersionPanel({ currentData, onRestore, onClose }) {
 /* ─────────────────────────────────────────────────────────────────────────────
    PHASE 2 — CROSS-MODULE AI INTELLIGENCE PANEL
 ───────────────────────────────────────────────────────────────────────────── */
+
+function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges, aiCall, aiBusy, onAIMsg }) {
+
+  const RATINGS = [
+    { id:"thrives", label:"Thrives",   icon:"✓", color:"#059669", bg:"#ecfdf5", border:"#a7f3d0" },
+    { id:"survives",label:"Survives",  icon:"~", color:"#d97706", bg:"#fffbeb", border:"#fde68a" },
+    { id:"struggles",label:"Struggles",icon:"✗", color:"#dc2626", bg:"#fef2f2", border:"#fecaca" },
+  ];
+
+  const [scenarios, setScenarios]   = useState([]);
+  const [matrix, setMatrix]         = useState({});   // {stratId_scenId: {rating, note}}
+  const [generating, setGenerating] = useState(false);
+  const [filling, setFilling]       = useState(false);
+  const [view, setView]             = useState("matrix"); // matrix | robustness
+
+  const updateCell = (stratId, scenId, patch) =>
+    setMatrix(prev => ({
+      ...prev,
+      [stratId+"_"+scenId]: { ...(prev[stratId+"_"+scenId]||{}), ...patch }
+    }));
+
+  const addScenario = () => setScenarios(prev => [...prev, {
+    id: uid("sc"), name: "Scenario "+(prev.length+1),
+    description: "", conditions: "", probability: "Medium"
+  }]);
+
+  const updateScenario = (id, patch) =>
+    setScenarios(prev => prev.map(s => s.id===id ? {...s,...patch} : s));
+
+  const removeScenario = (id) => setScenarios(prev => prev.filter(s => s.id!==id));
+
+  // Generate scenarios from uncertainty nodes + issues
+  const generateScenarios = () => {
+    setGenerating(true);
+    const uncNodes = (nodes||[]).filter(n => n.type==="uncertainty")
+      .map(n => n.label + (n.impact ? " ("+n.impact+" impact)" : "")).join(", ");
+    const critIssues = issues.filter(i => i.severity==="Critical"||i.severity==="High")
+      .slice(0,5).map(i => i.text.slice(0,60)).join("; ");
+    const existingNames = scenarios.map(s => s.name).join(", ");
+
+    aiCall(
+      "You are a scenario planning expert. Generate 3 distinct, plausible future scenarios for this decision. " +
+      "Each scenario combines how the key uncertainties resolve into a coherent 'future world'. " +
+      "Scenarios must be meaningfully different — not just optimistic/pessimistic versions of the same thing. " +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
+      "Key uncertainties: " + (uncNodes||"none identified yet") + ". " +
+      "Critical issues: " + (critIssues||"none") + ". " +
+      "Existing scenarios (do not duplicate): " + (existingNames||"none") + ". " +
+      "Return ONLY JSON: " +
+      '{"scenarios":[{"name":"Scenario name (evocative, 3-5 words)","description":"2-3 sentences describing this future world","conditions":"which uncertainties resolve favourably vs unfavourably","probability":"High|Medium|Low"}],"insight":"observation about the scenario space"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw) { try { result=JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setGenerating(false); return; } }
+      if (!result||result.error) { setGenerating(false); return; }
+      const newScens = (result.scenarios||[]).map(s => ({
+        id: uid("sc"), name: s.name||"Scenario",
+        description: s.description||"", conditions: s.conditions||"",
+        probability: s.probability||"Medium"
+      }));
+      setScenarios(prev => [...prev, ...newScens]);
+      onAIMsg({role:"ai", text: result.insight || ("Generated "+newScens.length+" scenarios.")});
+      setGenerating(false);
+    });
+  };
+
+  // Fill the strategy×scenario matrix
+  const fillMatrix = () => {
+    if (!scenarios.length || !strategies.length) return;
+    setFilling(true);
+
+    const stratList = strategies.map((s,i) =>
+      (i+1)+". "+s.name+(s.objective?" — objective: "+s.objective:"")+(s.description?" — rationale: "+s.description.slice(0,80):"")
+    ).join("\n");
+
+    const scenList = scenarios.map((s,i) =>
+      (i+1)+". "+s.name+": "+s.description+" Conditions: "+s.conditions
+    ).join("\n");
+
+    aiCall(
+      "You are a Decision Quality expert evaluating how strategies perform across scenarios. " +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + ".\n\n" +
+      "STRATEGIES:\n" + stratList + "\n\n" +
+      "SCENARIOS:\n" + scenList + "\n\n" +
+      "For each strategy×scenario combination, assess whether the strategy Thrives, Survives, or Struggles in that future, and give a one-line reason. " +
+      "Base your assessment on the strategy objective and how the scenario conditions interact with it. " +
+      "Return ONLY JSON:\n" +
+      '{"matrix":[{"strategyName":"name","scenarioName":"name","rating":"thrives|survives|struggles","note":"one sentence reason"}],"insight":"which strategy is most robust overall"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw) { try { result=JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setFilling(false); return; } }
+      if (!result||result.error) { setFilling(false); return; }
+
+      const newMatrix = {...matrix};
+      (result.matrix||[]).forEach(cell => {
+        const strat = strategies.find(s => s.name.toLowerCase()===cell.strategyName?.toLowerCase());
+        const scen  = scenarios.find(s => s.name.toLowerCase()===cell.scenarioName?.toLowerCase());
+        if (strat&&scen) {
+          newMatrix[strat.id+"_"+scen.id] = { rating: cell.rating||"survives", note: cell.note||"" };
+        }
+      });
+      setMatrix(newMatrix);
+      onAIMsg({role:"ai", text: result.insight || "Matrix filled. Review the ratings and adjust as needed."});
+      setFilling(false);
+    });
+  };
+
+  // Robustness: count thrives/survives/struggles per strategy
+  const robustness = strategies.map(s => {
+    const counts = { thrives:0, survives:0, struggles:0, total:scenarios.length };
+    scenarios.forEach(sc => {
+      const cell = matrix[s.id+"_"+sc.id];
+      if (cell?.rating) counts[cell.rating]++;
+    });
+    const score = counts.thrives*2 + counts.survives*1 + counts.struggles*0;
+    const maxScore = counts.total*2;
+    return { ...s, counts, score, pct: maxScore > 0 ? Math.round(score/maxScore*100) : 0 };
+  }).sort((a,b) => b.score - a.score);
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
+
+      {/* Header */}
+      <div style={{ background:DS.canvas, borderBottom:"1px solid "+DS.canvasBdr, flexShrink:0 }}>
+        <div style={{ padding:"10px 20px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase", fontWeight:700, letterSpacing:1 }}>Module 05</div>
+            <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:18, fontWeight:700, color:DS.ink }}>Scenario Planning</div>
+          </div>
+          <Btn variant="secondary" size="sm" onClick={addScenario}>+ Add Scenario</Btn>
+          <Btn variant="secondary" size="sm" onClick={generateScenarios} disabled={aiBusy||generating}>
+            {generating?"Generating…":"AI Generate Scenarios"}
+          </Btn>
+          {scenarios.length>0 && strategies.length>0 && (
+            <Btn variant="primary" size="sm" onClick={fillMatrix} disabled={aiBusy||filling}>
+              {filling?"Filling…":"AI Fill Matrix"}
+            </Btn>
+          )}
+        </div>
+        <div style={{ padding:"0 20px 8px", display:"flex", gap:8 }}>
+          {[{id:"matrix",label:"Strategy Matrix"},{id:"robustness",label:"Robustness Summary"}].map(v=>(
+            <button key={v.id} onClick={()=>setView(v.id)}
+              style={{ padding:"5px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
+                cursor:"pointer", border:"none", borderRadius:5,
+                background:view===v.id?DS.accent:"transparent",
+                color:view===v.id?"#fff":DS.inkSub }}>
+              {v.label}
+            </button>
+          ))}
+          <div style={{ marginLeft:"auto", display:"flex", gap:12, alignItems:"center" }}>
+            {RATINGS.map(r=>(
+              <span key={r.id} style={{ fontSize:10, color:r.color, fontWeight:700 }}>
+                {r.icon} {r.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{ flex:1, overflow:"auto" }}>
+
+        {/* Empty state */}
+        {scenarios.length===0 && (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
+            justifyContent:"center", height:"100%", color:DS.inkTer, gap:12, padding:40 }}>
+            <div style={{ fontSize:32, opacity:.4 }}>◈</div>
+            <div style={{ fontSize:14, fontWeight:700 }}>No scenarios yet</div>
+            <div style={{ fontSize:12, textAlign:"center", maxWidth:400, lineHeight:1.6 }}>
+              Click <strong>AI Generate Scenarios</strong> to build scenarios from your uncertainty nodes and issues,
+              or <strong>+ Add Scenario</strong> to define your own.
+            </div>
+            {strategies.length===0 && (
+              <div style={{ fontSize:11, color:DS.warning, padding:"8px 14px",
+                background:DS.warnSoft, border:"1px solid "+DS.warnLine, borderRadius:6 }}>
+                ⚠ Build strategies in Module 04 first — you need strategies to fill the matrix.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* MATRIX VIEW */}
+        {view==="matrix" && scenarios.length>0 && (
+          <div style={{ padding:20 }}>
+            {/* Scenario cards */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",
+              gap:12, marginBottom:24 }}>
+              {scenarios.map(sc=>(
+                <div key={sc.id} style={{ padding:"14px 16px", background:DS.canvas,
+                  border:"1px solid "+DS.canvasBdr, borderRadius:10,
+                  borderTop:"3px solid "+DS.accent }}>
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:8, marginBottom:6 }}>
+                    <input value={sc.name}
+                      onChange={e=>updateScenario(sc.id,{name:e.target.value})}
+                      style={{ flex:1, fontSize:13, fontWeight:700, color:DS.ink,
+                        background:"transparent", border:"none", outline:"none",
+                        fontFamily:"inherit" }}/>
+                    <select value={sc.probability}
+                      onChange={e=>updateScenario(sc.id,{probability:e.target.value})}
+                      style={{ fontSize:9, padding:"2px 4px", border:"1px solid "+DS.canvasBdr,
+                        borderRadius:3, color:DS.inkTer, fontFamily:"inherit",
+                        background:DS.canvasAlt }}>
+                      {["High","Medium","Low"].map(p=><option key={p}>{p}</option>)}
+                    </select>
+                    <button onClick={()=>removeScenario(sc.id)}
+                      style={{ background:"none", border:"none", cursor:"pointer",
+                        color:DS.inkTer, fontSize:14, padding:"0 2px" }}>×</button>
+                  </div>
+                  <textarea value={sc.description}
+                    onChange={e=>updateScenario(sc.id,{description:e.target.value})}
+                    placeholder="Describe this future world…"
+                    rows={2}
+                    style={{ width:"100%", fontSize:11, padding:"5px 7px",
+                      fontFamily:"inherit", background:DS.canvasAlt,
+                      border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                      color:DS.ink, outline:"none", resize:"none",
+                      lineHeight:1.5, boxSizing:"border-box", marginBottom:6 }}/>
+                  <textarea value={sc.conditions}
+                    onChange={e=>updateScenario(sc.id,{conditions:e.target.value})}
+                    placeholder="Which uncertainties resolve favourably vs unfavourably?"
+                    rows={2}
+                    style={{ width:"100%", fontSize:10, padding:"5px 7px",
+                      fontFamily:"inherit", background:DS.canvasAlt,
+                      border:"1px solid "+DS.canvasBdr, borderRadius:5,
+                      color:DS.inkSub, outline:"none", resize:"none",
+                      lineHeight:1.5, boxSizing:"border-box" }}/>
+                </div>
+              ))}
+            </div>
+
+            {/* Strategy × Scenario matrix */}
+            {strategies.length>0 && (
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", minWidth:400+scenarios.length*180 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding:"10px 14px", background:DS.ink, color:"#fff",
+                        textAlign:"left", fontSize:10, fontWeight:700, width:200,
+                        position:"sticky", left:0, zIndex:3 }}>Strategy</th>
+                      {scenarios.map(sc=>(
+                        <th key={sc.id} style={{ padding:"10px 14px", background:DS.ink,
+                          color:"#fff", textAlign:"center", fontSize:10, fontWeight:700,
+                          minWidth:180 }}>
+                          <div>{sc.name}</div>
+                          <div style={{ fontSize:8, color:"#94a3b8", fontWeight:400, marginTop:2 }}>
+                            {sc.probability} probability
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {strategies.map((s,si)=>{
+                      const col = DS.s?.[s.colorIdx] || {fill:"#6b7280",soft:"#f9fafb"};
+                      return (
+                        <tr key={s.id} style={{ borderTop:"1px solid "+DS.canvasBdr }}>
+                          <td style={{ padding:"12px 14px", background:col.soft||DS.canvasAlt,
+                            borderRight:"2px solid "+(col.fill||DS.canvasBdr),
+                            position:"sticky", left:0, zIndex:1 }}>
+                            <div style={{ fontSize:12, fontWeight:700, color:col.fill||DS.ink }}>
+                              {s.name}
+                            </div>
+                            {s.objective && (
+                              <div style={{ fontSize:10, color:DS.inkTer, marginTop:2, lineHeight:1.4 }}>
+                                {s.objective.slice(0,60)}{s.objective.length>60?"…":""}
+                              </div>
+                            )}
+                          </td>
+                          {scenarios.map(sc=>{
+                            const cell = matrix[s.id+"_"+sc.id] || {};
+                            const rating = RATINGS.find(r=>r.id===cell.rating);
+                            return (
+                              <td key={sc.id} style={{ padding:0, verticalAlign:"top",
+                                background:rating?.bg||DS.canvas,
+                                border:"1px solid "+DS.canvasBdr }}>
+                                <div style={{ padding:"10px 12px" }}>
+                                  {/* Rating selector */}
+                                  <div style={{ display:"flex", gap:4, marginBottom:6, justifyContent:"center" }}>
+                                    {RATINGS.map(r=>(
+                                      <button key={r.id}
+                                        onClick={()=>updateCell(s.id,sc.id,{rating:r.id})}
+                                        style={{ padding:"3px 8px", fontSize:10, fontWeight:700,
+                                          fontFamily:"inherit", cursor:"pointer",
+                                          border:"1.5px solid "+(cell.rating===r.id?r.color:DS.canvasBdr),
+                                          borderRadius:4,
+                                          background:cell.rating===r.id?r.bg:"transparent",
+                                          color:cell.rating===r.id?r.color:DS.inkTer }}>
+                                        {r.icon} {r.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {/* Note */}
+                                  <textarea
+                                    value={cell.note||""}
+                                    onChange={e=>updateCell(s.id,sc.id,{note:e.target.value})}
+                                    placeholder="One-line reason…"
+                                    rows={2}
+                                    style={{ width:"100%", fontSize:10, padding:"4px 6px",
+                                      fontFamily:"inherit", background:"rgba(255,255,255,.7)",
+                                      border:"1px solid "+DS.canvasBdr, borderRadius:4,
+                                      color:DS.ink, outline:"none", resize:"none",
+                                      lineHeight:1.4, boxSizing:"border-box" }}/>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ROBUSTNESS VIEW */}
+        {view==="robustness" && scenarios.length>0 && (
+          <div style={{ padding:20 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:4 }}>
+              Strategy Robustness Ranking
+            </div>
+            <div style={{ fontSize:11, color:DS.inkTer, marginBottom:16 }}>
+              Ranked by overall performance across all scenarios.
+              Score = Thrives×2 + Survives×1 + Struggles×0.
+            </div>
+
+            {robustness.length===0 ? (
+              <div style={{ color:DS.inkTer, fontSize:13 }}>
+                Fill the matrix first using AI Fill Matrix or by selecting ratings manually.
+              </div>
+            ) : robustness.map((s,i)=>{
+              const col = DS.s?.[s.colorIdx] || {fill:"#6b7280",soft:"#f9fafb"};
+              const isTop = i===0;
+              return (
+                <div key={s.id} style={{ padding:"16px 18px", marginBottom:10,
+                  background:isTop?col.soft:DS.canvas,
+                  border:"1px solid "+(isTop?col.fill:DS.canvasBdr),
+                  borderRadius:10, borderLeft:"4px solid "+col.fill }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
+                    <div style={{ fontFamily:"'Libre Baskerville',serif",
+                      fontSize:24, fontWeight:700, color:col.fill, width:32, textAlign:"center" }}>
+                      {i+1}
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:14, fontWeight:700, color:DS.ink }}>{s.name}</div>
+                      {s.objective && <div style={{ fontSize:11, color:DS.inkTer, marginTop:2 }}>{s.objective}</div>}
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:22, fontWeight:700, color:col.fill,
+                        fontFamily:"'Libre Baskerville',serif" }}>{s.pct}%</div>
+                      <div style={{ fontSize:9, color:DS.inkTer }}>robustness</div>
+                    </div>
+                    {isTop && (
+                      <span style={{ padding:"3px 10px", background:col.fill, color:"#fff",
+                        borderRadius:5, fontSize:9, fontWeight:700 }}>MOST ROBUST</span>
+                    )}
+                  </div>
+                  {/* Count pills */}
+                  <div style={{ display:"flex", gap:8 }}>
+                    {RATINGS.map(r=>(
+                      <span key={r.id} style={{ padding:"2px 9px", fontSize:10,
+                        background:r.bg, border:"1px solid "+r.border,
+                        borderRadius:4, color:r.color, fontWeight:700 }}>
+                        {r.icon} {s.counts[r.id]} {r.label}
+                      </span>
+                    ))}
+                    <span style={{ padding:"2px 9px", fontSize:10,
+                      background:DS.canvasAlt, border:"1px solid "+DS.canvasBdr,
+                      borderRadius:4, color:DS.inkTer }}>
+                      {s.counts.total - s.counts.thrives - s.counts.survives - s.counts.struggles} unrated
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Regret minimiser note */}
+            {robustness.length>1 && (
+              <div style={{ marginTop:16, padding:"12px 16px", background:DS.accentSoft,
+                border:"1px solid "+DS.accentLine, borderRadius:8, fontSize:12 }}>
+                <strong>Regret minimiser:</strong> {robustness[robustness.length-1].counts.struggles === 0
+                  ? robustness[robustness.length-1].name + " never struggles — consider it as a safe fallback."
+                  : robustness[0].name + " is the most robust choice across scenarios."}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCall, aiBusy, onAIMsg }) {
+
+  const SENSITIVITY  = ["High","Medium","Low"];
+  const RESOLVABILITY = ["Easy","Moderate","Hard","Not possible"];
+  const ACTIONS = {
+    Easy:          { color:"#059669", label:"Quick win" },
+    Moderate:      { color:"#d97706", label:"Worth pursuing" },
+    Hard:          { color:"#dc2626", label:"Costly" },
+    "Not possible":{ color:"#6b7280", label:"Accept uncertainty" },
+  };
+
+  const [items, setItems]       = useState([]); // uncertainty items from diagram
+  const [analysing, setAnalysing] = useState(false);
+  const [prioritised, setPrioritised] = useState(false);
+
+  // Seed from influence diagram uncertainty nodes
+  useEffect(() => {
+    if (items.length > 0) return;
+    const uncNodes = (nodes||[]).filter(n => n.type==="uncertainty");
+    const uncIssues = issues.filter(i =>
+      i.category==="uncertainty-external"||i.category==="uncertainty-internal"
+    );
+    const all = [
+      ...uncNodes.map(n => ({
+        id: n.id, source:"diagram",
+        label: n.label,
+        description: n.description||"",
+        sensitivity: n.impact==="High"||n.impact==="Critical"?"High":"Medium",
+        resolvability: n.control==="High"?"Easy":n.control==="Medium"?"Moderate":"Hard",
+        action:"", timeframe:"", voiRank:0, note:"",
+      })),
+      ...uncIssues
+        .filter(i => !(nodes||[]).some(n => n.label.toLowerCase()===i.text.slice(0,30).toLowerCase()))
+        .slice(0,5)
+        .map(i => ({
+          id: i.id, source:"issues",
+          label: i.text.length>60 ? i.text.slice(0,58)+"…" : i.text,
+          description: i.text,
+          sensitivity: i.severity==="Critical"?"High":i.severity==="High"?"High":"Medium",
+          resolvability: "Moderate",
+          action:"", timeframe:"", voiRank:0, note:"",
+        }))
+    ];
+    if (all.length > 0) setItems(all);
+  }, [nodes?.length, issues?.length]);
+
+  const updateItem = (id, patch) =>
+    setItems(prev => prev.map(x => x.id===id ? {...x,...patch} : x));
+
+  const addItem = () => setItems(prev => [...prev, {
+    id: uid("vi"), source:"manual",
+    label:"New uncertainty", description:"",
+    sensitivity:"Medium", resolvability:"Moderate",
+    action:"", timeframe:"", voiRank:0, note:"",
+  }]);
+
+  const removeItem = (id) => setItems(prev => prev.filter(x => x.id!==id));
+
+  // AI analyse VoI
+  const analyseVoI = () => {
+    if (!items.length) return;
+    setAnalysing(true);
+
+    const uncList = items.map((x,i) =>
+      (i+1)+". "+x.label +
+      " | Sensitivity: "+x.sensitivity +
+      " | Resolvability: "+x.resolvability +
+      (x.description ? " | Context: "+x.description.slice(0,80) : "")
+    ).join("\n");
+
+    const stratList = strategies.map(s =>
+      s.name + (s.objective?" — "+s.objective:"")
+    ).join("; ");
+
+    aiCall(
+      "You are a Decision Quality expert assessing Value of Information. " +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + ".\n" +
+      "Strategies being evaluated: " + (stratList||"none yet") + ".\n\n" +
+      "UNCERTAINTIES TO ASSESS:\n" + uncList + "\n\n" +
+      "For each uncertainty, assess: " +
+      "(1) If this resolved favourably vs unfavourably, would it change which strategy to pick? " +
+      "(2) What specific action would resolve it? " +
+      "(3) How long would that take? " +
+      "(4) Priority rank (1=highest VoI). " +
+      "Return ONLY JSON:\n" +
+      '{"assessments":[{"label":"exact label","voiRank":1,"action":"specific action to take e.g. Commission market research report","timeframe":"e.g. 4-6 weeks","note":"why this has high/low VoI — would it change the decision?"}],' +
+      '"resolveBeforeCommit":["uncertainty label 1","uncertainty label 2"],' +
+      '"acceptAndMonitor":["uncertainty label"],' +
+      '"insight":"key observation about the information landscape"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw) { try { result=JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setAnalysing(false); return; } }
+      if (!result||result.error) { setAnalysing(false); return; }
+
+      const assessments = result.assessments||[];
+      setItems(prev => prev.map(x => {
+        const match = assessments.find(a =>
+          a.label?.toLowerCase().includes(x.label.toLowerCase().slice(0,20)) ||
+          x.label.toLowerCase().includes((a.label||"").toLowerCase().slice(0,20))
+        );
+        if (!match) return x;
+        return { ...x, voiRank:match.voiRank||0, action:match.action||"", timeframe:match.timeframe||"", note:match.note||"" };
+      }));
+      setPrioritised(true);
+      onAIMsg({role:"ai", text:
+        result.insight ||
+        "VoI analysis complete. " +
+        (result.resolveBeforeCommit?.length ? "Resolve before committing: " + result.resolveBeforeCommit.join(", ") + ". " : "") +
+        (result.acceptAndMonitor?.length ? "Accept and monitor: " + result.acceptAndMonitor.join(", ") : "")
+      });
+      setAnalysing(false);
+    });
+  };
+
+  const sorted = [...items].sort((a,b) =>
+    prioritised ? (a.voiRank||99) - (b.voiRank||99) : 0
+  );
+
+  const highVoI = sorted.filter(x => x.sensitivity==="High" && x.resolvability!=="Not possible");
+  const resolveBeforeCommit = sorted.filter(x => x.voiRank > 0 && x.voiRank <= Math.ceil(items.length/2));
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
+
+      {/* Header */}
+      <div style={{ background:DS.canvas, borderBottom:"1px solid "+DS.canvasBdr, flexShrink:0 }}>
+        <div style={{ padding:"10px 20px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase", fontWeight:700, letterSpacing:1 }}>Module 11</div>
+            <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:18, fontWeight:700, color:DS.ink }}>Value of Information</div>
+          </div>
+          <Btn variant="secondary" size="sm" onClick={addItem}>+ Add Uncertainty</Btn>
+          <Btn variant="primary" size="sm" onClick={analyseVoI} disabled={aiBusy||analysing||!items.length}>
+            {analysing?"Analysing…":"AI Analyse VoI"}
+          </Btn>
+        </div>
+        <div style={{ padding:"0 20px 8px", fontSize:11, color:DS.inkTer }}>
+          {items.length} uncertainties loaded
+          {(nodes||[]).filter(n=>n.type==="uncertainty").length > 0
+            ? " from influence diagram"
+            : " — build your influence diagram first for best results"}
+        </div>
+      </div>
+
+      <div style={{ flex:1, overflowY:"auto", padding:20 }}>
+
+        {items.length===0 ? (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
+            justifyContent:"center", minHeight:300, color:DS.inkTer, gap:12 }}>
+            <div style={{ fontSize:32, opacity:.4 }}>◎</div>
+            <div style={{ fontSize:14, fontWeight:700 }}>No uncertainties loaded</div>
+            <div style={{ fontSize:12, textAlign:"center", lineHeight:1.6, maxWidth:400 }}>
+              Build the <strong>Influence Diagram</strong> (Module 09) with uncertainty nodes — they will auto-populate here.
+              Or click <strong>+ Add Uncertainty</strong> to add them manually.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Resolve Before Commit highlight */}
+            {resolveBeforeCommit.length > 0 && (
+              <div style={{ padding:"14px 16px", background:DS.accentSoft,
+                border:"2px solid "+DS.accent, borderRadius:10, marginBottom:20 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:DS.accent,
+                  marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>
+                  ⬆ Resolve Before Committing
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {resolveBeforeCommit.map((x,i) => (
+                    <div key={x.id} style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:DS.accent,
+                        minWidth:16 }}>{i+1}.</span>
+                      <div>
+                        <span style={{ fontSize:12, fontWeight:700, color:DS.ink }}>{x.label}</span>
+                        {x.action && <span style={{ fontSize:11, color:DS.inkSub }}> — {x.action}</span>}
+                        {x.timeframe && <span style={{ fontSize:10, color:DS.inkTer }}> ({x.timeframe})</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Uncertainty table */}
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr>
+                  {["#","Uncertainty","Decision Sensitivity","Resolvability","Action to Resolve","Timeframe","VoI Note",""].map(h=>(
+                    <th key={h} style={{ padding:"8px 10px", background:DS.ink,
+                      color:"#fff", fontSize:9, fontWeight:700,
+                      textAlign:"left", letterSpacing:.5, whiteSpace:"nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((x, i) => {
+                  const senColor = x.sensitivity==="High"?"#dc2626":x.sensitivity==="Medium"?"#d97706":"#059669";
+                  const resInfo = ACTIONS[x.resolvability] || ACTIONS.Moderate;
+                  const isTopVoI = prioritised && x.voiRank===1;
+                  return (
+                    <tr key={x.id} style={{
+                      background:isTopVoI?DS.accentSoft:i%2===0?DS.canvas:DS.canvasAlt,
+                      borderTop:"1px solid "+DS.canvasBdr }}>
+                      <td style={{ padding:"8px 10px", fontSize:11, color:DS.inkTer,
+                        fontWeight:isTopVoI?700:400 }}>
+                        {prioritised && x.voiRank > 0 ? x.voiRank : i+1}
+                      </td>
+                      <td style={{ padding:"8px 10px", minWidth:180 }}>
+                        <input value={x.label}
+                          onChange={e=>updateItem(x.id,{label:e.target.value})}
+                          style={{ width:"100%", fontSize:12, fontWeight:700,
+                            color:DS.ink, background:"transparent",
+                            border:"none", outline:"none", fontFamily:"inherit" }}/>
+                        {x.source && (
+                          <div style={{ fontSize:9, color:DS.inkTer, marginTop:1 }}>
+                            From: {x.source}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding:"8px 10px" }}>
+                        <select value={x.sensitivity}
+                          onChange={e=>updateItem(x.id,{sensitivity:e.target.value})}
+                          style={{ fontSize:11, padding:"3px 6px",
+                            border:"1px solid "+DS.canvasBdr, borderRadius:4,
+                            background:DS.canvas, color:senColor,
+                            fontFamily:"inherit", fontWeight:700 }}>
+                          {SENSITIVITY.map(s=><option key={s}>{s}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding:"8px 10px" }}>
+                        <select value={x.resolvability}
+                          onChange={e=>updateItem(x.id,{resolvability:e.target.value})}
+                          style={{ fontSize:11, padding:"3px 6px",
+                            border:"1px solid "+DS.canvasBdr, borderRadius:4,
+                            background:DS.canvas, color:resInfo.color,
+                            fontFamily:"inherit" }}>
+                          {RESOLVABILITY.map(r=><option key={r}>{r}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding:"8px 10px", minWidth:160 }}>
+                        <input value={x.action||""}
+                          onChange={e=>updateItem(x.id,{action:e.target.value})}
+                          placeholder="e.g. Commission market research"
+                          style={{ width:"100%", fontSize:11, padding:"3px 6px",
+                            border:"1px solid "+DS.canvasBdr, borderRadius:4,
+                            background:DS.canvas, color:DS.ink,
+                            fontFamily:"inherit", outline:"none" }}/>
+                      </td>
+                      <td style={{ padding:"8px 10px", minWidth:100 }}>
+                        <input value={x.timeframe||""}
+                          onChange={e=>updateItem(x.id,{timeframe:e.target.value})}
+                          placeholder="e.g. 4-6 weeks"
+                          style={{ width:"100%", fontSize:11, padding:"3px 6px",
+                            border:"1px solid "+DS.canvasBdr, borderRadius:4,
+                            background:DS.canvas, color:DS.ink,
+                            fontFamily:"inherit", outline:"none" }}/>
+                      </td>
+                      <td style={{ padding:"8px 10px", minWidth:200 }}>
+                        <div style={{ fontSize:10, color:DS.inkSub, lineHeight:1.4 }}>
+                          {x.note||<span style={{ color:DS.inkTer, fontStyle:"italic" }}>Run AI Analyse VoI</span>}
+                        </div>
+                      </td>
+                      <td style={{ padding:"8px 10px" }}>
+                        <button onClick={()=>removeItem(x.id)}
+                          style={{ background:"none", border:"none",
+                            cursor:"pointer", color:DS.inkTer, fontSize:14 }}>×</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Legend */}
+            <div style={{ marginTop:16, display:"flex", gap:16, flexWrap:"wrap" }}>
+              <div style={{ fontSize:10, color:DS.inkTer }}>
+                <strong>Decision Sensitivity:</strong> High = would change which strategy we pick | Medium = might influence the decision | Low = wouldn't change anything
+              </div>
+              <div style={{ fontSize:10, color:DS.inkTer }}>
+                <strong>Resolvability:</strong> How feasible it is to actually obtain this information before the decision deadline
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 function CrossModuleAI({ problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, aiCall, aiBusy, onAIMsg }) {
   const [insights, setInsights] = useState(null);
   const [running, setRunning]   = useState(false);
@@ -9354,13 +10041,15 @@ const PHASE1 = [
   { id:"issues",     num:"02", label:"Issue Raising",          sub:"Surface what matters",      icon:"◈" },
   { id:"hierarchy",  num:"03", label:"Decision Hierarchy",     sub:"Structure & prioritise",    icon:"◧" },
   { id:"strategy",   num:"04", label:"Strategy Table",         sub:"Build alternatives",        icon:"⊞" },
-  { id:"assessment", num:"05", label:"Qualitative Assessment", sub:"Score & compare",           icon:"◫" },
-  { id:"scorecard",  num:"06", label:"DQ Scorecard",           sub:"Chain analysis",            icon:"◑" },
-  { id:"export",     num:"07", label:"Export & Report",        sub:"Executive package",         icon:"◉" },
+  { id:"scenarios",  num:"05", label:"Scenario Planning",      sub:"Test across futures",       icon:"◈" },
+  { id:"assessment", num:"06", label:"Qualitative Assessment", sub:"Score & compare",           icon:"◫" },
+  { id:"scorecard",  num:"07", label:"DQ Scorecard",           sub:"Chain analysis",            icon:"◑" },
+  { id:"export",     num:"08", label:"Export & Report",        sub:"Executive package",         icon:"◉" },
 ];
 const PHASE2 = [
-  { id:"influence",  num:"08", label:"Influence Map",          sub:"Uncertainty analysis",      icon:"⊕" },
-  { id:"timeline",   num:"09", label:"Decision Risk Timeline", sub:"Time, gates & risk",       icon:"⊳" },
+  { id:"influence",  num:"09", label:"Influence Map",          sub:"Uncertainty analysis",      icon:"⊕" },
+  { id:"timeline",   num:"10", label:"Decision Risk Timeline", sub:"Time, gates & risk",       icon:"⊳" },
+  { id:"voi",        num:"11", label:"Value of Information",   sub:"What to resolve first",    icon:"◎" },
 ];
 const MODULES = [...PHASE1, ...PHASE2];
 
@@ -10626,6 +11315,8 @@ const HARDCODED_API_KEY = null;
 export default function App() {
   const [module, setModule]               = useState("problem");
   const [customTabs, setCustomTabs]       = useState([]);
+  const [influenceNodes, setInfluenceNodes] = useState([]);
+  const [influenceEdges, setInfluenceEdges] = useState([]);
   const [showTabPicker, setShowTabPicker] = useState(false);
   const [showCrossModule, setShowCrossModule] = useState(false);
   const [problem, setProblem]             = useState(defaultProblem);
@@ -10768,11 +11459,13 @@ export default function App() {
     issues:  { issues, onChange:setIssues, decisions, onDecisions:setDecisions, criteria, onCriteria:setCriteria, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
     hierarchy:{ decisions, criteria, onDecisions:setDecisions, onCriteria:setCriteria, issues, aiCall, aiBusy, onAIMsg:pushAIMsg },
     strategy: { decisions, strategies, onChange:setStrategies, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
+    scenarios: { strategies, decisions, issues, problem, nodes:influenceNodes, edges:influenceEdges, aiCall, aiBusy, onAIMsg:pushAIMsg },
     assessment:{ strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     scorecard: { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     export:    { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, aiCall, aiBusy, onAIMsg:pushAIMsg },
     timeline: { decisions, strategies, issues, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    influence: { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    influence: { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg, problem, onNodesChange:setInfluenceNodes, onEdgesChange:setInfluenceEdges },
+    voi:      { nodes:influenceNodes, edges:influenceEdges, issues, strategies, decisions, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
   };
 
   return (
@@ -11152,10 +11845,12 @@ export default function App() {
             {module==="issues"     && <ModuleIssueRaising         {...moduleProps.issues}/>}
             {module==="hierarchy"  && <ModuleDecisionHierarchy    {...moduleProps.hierarchy}/>}
             {module==="strategy"   && <ModuleStrategyTable        {...moduleProps.strategy}/>}
+            {module==="scenarios"   && <ModuleScenarios      {...moduleProps.scenarios}/>}
             {module==="assessment" && <ModuleQualitativeAssessment {...moduleProps.assessment}/>}
             {module==="scorecard"  && <ModuleDQScorecard          {...moduleProps.scorecard}/>}
             {module==="export"     && <ModuleExport               {...moduleProps.export}/>}
             {module==="timeline" && <ModuleTimeline decisions={decisions} strategies={strategies} issues={issues} problem={problem} aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>}
+            {module==="voi"        && <ModuleVoI             {...moduleProps.voi}/>}
             {module==="influence"  && <ModuleInfluenceMap         {...moduleProps.influence}/>}
           </div>
 
