@@ -8218,16 +8218,23 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
           ))}
         </div>
 
-        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-          <button onClick={onSkip}
+        <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+          <button onClick={()=>onSkip("clean")}
+            style={{ background:"none", border:"1px dashed "+DS.border, cursor:"pointer",
+              color:DS.textTer, fontSize:12, fontFamily:"inherit",
+              display:"flex", alignItems:"center", gap:6,
+              padding:"7px 14px", borderRadius:6 }}>
+            <Svg path={ICONS.plus} size={13} color={DS.textTer}/>
+            Start Clean
+          </button>
+          <div style={{ height:1, flex:1, background:DS.border, minWidth:20 }}/>
+          <button onClick={()=>onSkip("example")}
             style={{ background:"none", border:"none", cursor:"pointer", color:DS.textTer,
               fontSize:12, fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
-              padding:"8px 0" }}>
+              padding:"7px 0" }}>
             <Svg path={ICONS.chevR} size={13} color={DS.textTer}/>
-            Skip — start with the example project
+            Load APAC example
           </button>
-          <div style={{ height:1, flex:1, background:DS.border }}/>
-          <div style={{ fontSize:10, color:DS.textTer }}>Pre-loaded with an APAC market entry case</div>
         </div>
       </div>
     </div>
@@ -9459,7 +9466,24 @@ export default function App() {
 
       {/* Quick Start */}
       {showQuickStart && (
-        <QuickStartScreen onComplete={handleQuickStartComplete} onSkip={()=>setShowQuickStart(false)}/>
+        <QuickStartScreen onComplete={handleQuickStartComplete} onSkip={(mode)=>{
+          setShowQuickStart(false);
+          if (mode === "clean") {
+            setProblem({ id: uid("prob"), decisionStatement:"", context:"", owner:"", deadline:"",
+              successCriteria:"", scopeIn:"", scopeOut:"", projectName:"", projectCode:"",
+              client:"", sector:"", facilitator:"", sessionDate:"", decisionType:"",
+              confidentiality:"Internal", stakeholders:[], constraints:[], assumptions:[] });
+            setIssues([]);
+            setDecisions([]);
+            setCriteria([]);
+            setStrategies([]);
+            setAssessmentScores({});
+            setDqScores({});
+            setAIMessages([]);
+            setModule("problem");
+            try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+          }
+        }}/>
       )}
 
       {/* Onboarding */}
