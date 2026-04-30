@@ -603,36 +603,43 @@ Evaluate strictly. Return ONLY valid JSON:
 
   const applyImprovements = () => {
     const v = data.aiValidation;
-    if (!v) return;
+    if (!v) { onAIMsg({role:"ai", text:"Run Frame Check first before applying improvements."}); return; }
     setApplying(true);
+    onAIMsg({role:"ai", text:"Rewriting flagged fields — this takes 10-15 seconds…"});
 
     // Build a prompt that asks the AI to rewrite ALL flagged fields
     const flaggedFields = (v.flags||[]).map(f => f.field + ": " + f.message).join("\n");
     const missingElements = (v.missingElements||[]).join(", ");
 
-    aiCall(dqPrompt(
-      "You are a senior Decision Quality expert rewriting a decision frame to address validation flags. " +
-      "Current decision frame:\n" +
-      "Decision Statement: \"" + (data.decisionStatement||"") + "\"\n" +
-      "Context: \"" + (data.context||"") + "\"\n" +
-      "Scope In: \"" + (data.scopeIn||"") + "\"\n" +
-      "Scope Out: \"" + (data.scopeOut||"") + "\"\n" +
-      "Success Criteria: \"" + (data.successCriteria||"") + "\"\n" +
-      "Owner: \"" + (data.owner||"") + "\"\n" +
-      "Deadline: \"" + (data.deadline||"") + "\"\n" +
-      "Constraints: \"" + (data.constraints||"") + "\"\n" +
-      "Assumptions: \"" + (data.assumptions||"") + "\"\n" +
-      "\nValidation flags to fix:\n" + flaggedFields + "\n" +
-      "Missing elements to add: " + missingElements + "\n" +
-      "Improved statement already suggested: \"" + (v.improvedStatement||"") + "\"\n" +
-      "Hidden assumptions identified: " + (v.hiddenAssumptions||[]).join(", ") + "\n\n" +
-      "Rewrite ALL fields to address every flag. Be specific and concrete. " +
-      "Return ONLY JSON with improved values for each field (omit unchanged fields):\n" +
-      '{"decisionStatement":"improved statement","context":"improved context","scopeIn":"what is in scope","scopeOut":"what is excluded","successCriteria":"measurable success criteria","constraints":"real constraints","assumptions":"key assumptions now explicit","owner":"if missing"}'
-    ), (r) => {
+    const improvePrompt =
+      "Rewrite this decision frame to fix all validation issues. " +
+      "Decision: " + (data.decisionStatement||"") + ". " +
+      "Context: " + (data.context||"none") + ". " +
+      "Flags to fix: " + flaggedFields + ". " +
+      "Missing: " + missingElements + ". " +
+      "Suggested statement: " + (v.improvedStatement||"") + ". " +
+      "Return ONLY JSON: " +
+      '{"decisionStatement":"rewritten","context":"rewritten","scopeIn":"explicit scope in","scopeOut":"explicit scope out","successCriteria":"measurable criteria","constraints":"real constraints","assumptions":"explicit assumptions"}';
+    aiCall(improvePrompt, (r) => {
       let result = r;
-      if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setApplying(false); return; } }
-      if (result.error) { setApplying(false); return; }
+      if (r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
+        catch(e) {
+          setApplying(false);
+          onAIMsg({role:"ai", text:"Could not parse improvements. Try again."});
+          return;
+        }
+      }
+      if (result.error) {
+        setApplying(false);
+        onAIMsg({role:"ai", text:"Error: " + result.error});
+        return;
+      }
+      if (!result || typeof result !== "object") {
+        setApplying(false);
+        onAIMsg({role:"ai", text:"Unexpected response format. Try again."});
+        return;
+      }
 
       // Apply each improved field that was returned
       const updates = {};
