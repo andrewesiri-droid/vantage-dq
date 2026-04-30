@@ -9268,6 +9268,8 @@ export default function App() {
   const [brief, setBriefState]            = useState(null);
   const [narrative, setNarrativeState]    = useState(null);
   const [aiMessages, setAIMessages]       = useState([]);
+  const [influenceNodes, setInfluenceNodes] = useState([]);
+  const [influenceEdges, setInfluenceEdges] = useState([]);
 
   // UI state
   const [showAI, setShowAI]               = useState(true);
