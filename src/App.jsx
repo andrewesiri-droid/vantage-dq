@@ -505,6 +505,7 @@ function ProjectSetupModal({ data, onChange, onClose }) {
 function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onAIMsg, onAISend }) {
   const [tab, setTab] = useState("frame");
   const [checking, setChecking] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   const upd = (key, val) => onChange({ ...data, [key]: val });
   const updStakeholder = (id, key, val) =>
@@ -552,6 +553,39 @@ Evaluate strictly. Return ONLY valid JSON:
     { id:"outcomes",     label:"Outcomes" },
     { id:"validation",   label:"AI Validation" },
   ];
+
+  const applyImprovements = () => {
+    const v = data.aiValidation;
+    if (!v) { onAIMsg({role:"ai",text:"Run Frame Check first."}); return; }
+    setApplying(true);
+    onAIMsg({role:"ai",text:"Rewriting flagged fields — 10-15 seconds…"});
+    const flaggedFields = (v.flags||[]).map(f=>f.field+": "+f.message).join("\n");
+    const missingElements = (v.missingElements||[]).join(", ");
+    const improvePrompt =
+      "You are fixing specific DQ validation failures in a decision frame. Address ONLY the flagged issues. Keep responses concise and specific. " +
+      "Current values:\ndecisionStatement: "+(data.decisionStatement||"empty")+"\ncontext: "+(data.context||"empty")+"\nscopeIn: "+(data.scopeIn||"empty")+"\nscopeOut: "+(data.scopeOut||"empty")+"\nsuccessCriteria: "+(data.successCriteria||"empty")+"\nconstraints: "+(data.constraints||"empty")+"\nassumptions: "+(data.assumptions||"empty")+"\n\n" +
+      "FLAGS TO FIX:\n"+flaggedFields+"\n"+(missingElements?"MISSING: "+missingElements+"\n":"")+(v.improvedStatement?"USE THIS STATEMENT: "+v.improvedStatement+"\n":"")+"\n" +
+      "Return ONLY JSON with only the fields that need changing. Keep each field under 3 sentences. " +
+      '{"decisionStatement":"only if flagged","context":"only if flagged","scopeIn":"only if flagged","scopeOut":"only if flagged","successCriteria":"only if flagged","constraints":"only if flagged","assumptions":"only if flagged"}';
+    aiCall(improvePrompt, (r)=>{
+      let result=r;
+      if(r&&typeof r==="object"&&r._raw){const raw=typeof r._raw==="string"?r._raw:JSON.stringify(r._raw);try{result=JSON.parse(raw.replace(/```json|```/g,"").trim());}catch(e){setApplying(false);onAIMsg({role:"ai",text:"Could not parse improvements. Try again."});return;}}
+      else if(typeof r==="string"){try{result=JSON.parse(r.replace(/```json|```/g,"").trim());}catch(e){setApplying(false);return;}}
+      if(!result||typeof result!=="object"||result.error){setApplying(false);onAIMsg({role:"ai",text:"Error: "+(result?.error||"unexpected response")});return;}
+      const updates={};
+      ["decisionStatement","context","scopeIn","scopeOut","successCriteria","constraints","assumptions","owner"].forEach(key=>{const val=result[key];if(val&&typeof val==="string"&&val.trim())updates[key]=val.trim();});
+      const newData={...data,...updates};
+      onChange(newData);
+      setApplying(false);
+      onAIMsg({role:"ai",text:"Fixed "+Object.keys(updates).length+" field(s): "+Object.keys(updates).join(", ")+". Running Frame Check now…"});
+      setTimeout(()=>{
+        setChecking(true);
+        const recheckPrompt="Decision Quality frame validation. Decision: \""+newData.decisionStatement+"\". Context: \""+newData.context+"\". Scope In: \""+newData.scopeIn+"\". Scope Out: \""+newData.scopeOut+"\". Owner: \""+newData.owner+"\". Constraints: \""+newData.constraints+"\". Assumptions: \""+newData.assumptions+"\". Success Criteria: \""+newData.successCriteria+"\". Evaluate strictly. Return ONLY JSON: "+
+          '{"overallScore":0,"status":"strong","flags":[{"severity":"critical","field":"f","message":"m"}],"improvedStatement":null,"hiddenAssumptions":["string only"],"missingElements":["string only"],"executiveSummary":"summary"}';
+        aiCall(dqPrompt(recheckPrompt),(r2)=>{upd("aiValidation",r2);setChecking(false);const score=r2.overallScore;onAIMsg({role:"ai",text:"Frame Check complete. New score: "+(score||"?")+" /100. "+(r2.executiveSummary||"")});});
+      },500);
+    });
+  };
 
   const scoreColor = (s) => s>=75 ? DS.success : s>=50 ? DS.warning : DS.danger;
   const statusVar = (s) => s==="strong"?"green":s==="adequate"?"warn":"danger";
@@ -894,6 +928,19 @@ Evaluate strictly. Return ONLY valid JSON:
                         {data.aiValidation.executiveSummary}
                       </div>
                     )}
+                  {data.aiValidation.overallScore < 90 && (
+                    <div style={{ marginTop:14,padding:"12px 16px",background:DS.accentSoft,
+                      border:"1px solid "+DS.accentLine,borderRadius:8,
+                      display:"flex",alignItems:"center",gap:12 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12,fontWeight:700,color:DS.accent,marginBottom:3 }}>Apply AI improvements to all flagged fields</div>
+                        <div style={{ fontSize:11,color:DS.inkTer,lineHeight:1.5 }}>Rewrites flagged fields to address every validation issue, then re-runs Frame Check automatically.</div>
+                      </div>
+                      <Btn variant="primary" onClick={applyImprovements} disabled={applying||aiBusy} style={{ flexShrink:0 }}>
+                        {applying?"Applying…":"✓ Apply All Improvements"}
+                      </Btn>
+                    </div>
+                  )}
                   </div>
                 </div>
 
@@ -2493,35 +2540,36 @@ function ModuleStrategyTable({ decisions, strategies, onChange, aiCall, aiBusy, 
   };
 
   const aiSuggest = () => {
+    if (nowDecisions.length===0){onAIMsg({role:"ai",text:"Add at least one Focus decision first."});return;}
     setSuggesting(true);
-    const tableDesc = nowDecisions.map(d=>`"${d.label}": [${d.choices.join(" / ")}]`).join(" | ");
-    const existing = strategies.map(s=>{
-      const path = nowDecisions.map(d=>{ const i=s.selections[d.id]; return i!==undefined?d.choices[i]:"?"; }).join("→");
-      return `${s.name}: ${path}`;
-    }).join(" | ");
-    aiCall(`You are a DQ strategist. Build 2 genuinely distinct new strategies for this decision.
-Decision: "${problem.decisionStatement}"
-Table columns: ${tableDesc}
-Existing strategies: ${existing||"none"}
-
-Each new strategy must select exactly one option per column (0-indexed). Must be internally coherent and genuinely different from existing ones.
-
-Return ONLY JSON:
-{"strategies":[{"name":"Strategy name","description":"one sentence narrative","selections":[0,1,2,0],"rationale":"why this combination is coherent"}],"coherenceFlags":[{"strategy":"name","issue":"description"}],"insight":"key observation about strategy space"}`,
-    (r) => {
-      if (r.strategies) {
-        const used = strategies.map(s=>s.colorIdx);
-        const newSs = r.strategies.map((s,i)=>{
-          const colorIdx = [0,1,2,3,4,5].find(c=>!used.includes(c)) ?? (strategies.length+i)%6;
-          used.push(colorIdx);
-          const selections = {};
-          s.selections.forEach((idx,j)=>{ if(nowDecisions[j]) selections[nowDecisions[j].id]=idx; });
-          return { id:uid("s"), colorIdx, name:s.name||DS.sNames[colorIdx], description:s.description||"", selections, rationale:{} };
-        });
-        onChange([...strategies, ...newSs]);
-        if (r.coherenceFlags?.length) setValidation({ coherenceFlags: r.coherenceFlags, insight: r.insight });
-        onAIMsg({ role:"ai", text: r.insight || `Added ${newSs.length} new strategies. Review coherence flags if any.` });
-      }
+    const decMenu = nowDecisions.map((d,di)=>"D"+(di+1)+": "+d.label+" → "+d.choices.map((ch,ci)=>ci+"="+ch).join(" | ")).join("\n");
+    const existingNames = strategies.map(s=>s.name).join(", ")||"none";
+    aiCall(
+      "You are a Decision Quality strategist. Generate 3 meaningfully distinct strategies for this decision. "+
+      "Each strategy must: (1) have a clear strategic objective, (2) pick one option for EVERY decision below, (3) have a rationale explaining why those choices are internally coherent. "+
+      "Decision: "+(problem?.decisionStatement||"Not defined")+". Existing (do not duplicate): "+existingNames+". "+
+      "DECISIONS — use exact option index (0,1,2...) in selections:\n"+decMenu+"\n\n"+
+      "Return ONLY JSON:\n"+
+      '{"strategies":[{"name":"Bold Growth","objective":"Maximise market capture","rationale":"Why these choices cohere","selections":{"D1":0,"D2":1},"riskProfile":"High risk"}],"insight":"observation"}\n'+
+      "IMPORTANT: selections keys are D1, D2, D3... matching decision numbers. Use integer index.",
+    (r)=>{
+      let result=r;
+      if(r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setSuggesting(false);return;}}
+      if(!result||result.error){setSuggesting(false);return;}
+      const strats=result.strategies||[];
+      if(!strats.length){setSuggesting(false);return;}
+      const used=strategies.map(s=>s.colorIdx);
+      const newSs=strats.map((s,i)=>{
+        const colorIdx=[0,1,2,3,4,5].find(ci=>!used.includes(ci))??(strategies.length+i)%6;
+        used.push(colorIdx);
+        const selections={};
+        const rawSel=s.selections||{};
+        if(Array.isArray(rawSel)){rawSel.forEach((optIdx,j)=>{if(nowDecisions[j]&&typeof optIdx==="number")selections[nowDecisions[j].id]=optIdx;});}
+        else{Object.entries(rawSel).forEach(([key,optIdx])=>{const decPos=parseInt(key.replace(/\D/g,""))-1;const dec=nowDecisions[decPos];if(dec&&typeof optIdx==="number")selections[dec.id]=optIdx;});}
+        return{id:uid("s"),colorIdx,name:s.name||DS.sNames[colorIdx]||("Strategy "+(strategies.length+i+1)),objective:s.objective||"",description:s.rationale||"",riskProfile:s.riskProfile||"",selections,rationale:{}};
+      });
+      onChange([...strategies,...newSs]);
+      onAIMsg({role:"ai",text:result.insight||("Added "+newSs.length+" strategies with objectives, rationale and option selections.")});
       setSuggesting(false);
     });
   };
@@ -2548,6 +2596,60 @@ Return ONLY JSON:
   };
 
   const activeSData = strategies.find(s=>s.id===activeS);
+
+  const fillExistingStrategies = () => {
+    const incomplete = strategies.filter(s=>!s.objective||!s.description||nowDecisions.some(d=>s.selections[d.id]===undefined));
+    if (!incomplete.length){onAIMsg({role:"ai",text:"All strategies already have objectives, rationale and selections."});return;}
+    setSuggesting(true);
+    const decMenu = nowDecisions.map((d,di)=>"D"+(di+1)+" [id:"+d.id+"]: "+d.label+" → "+d.choices.map((ch,ci)=>ci+"="+ch).join(" | ")).join("\n");
+    const stratList = incomplete.map((s,i)=>{
+      const existing = nowDecisions.map(d=>{const v=s.selections[d.id];const ci=typeof v==="number"?v:undefined;return "D"+(nowDecisions.indexOf(d)+1)+"="+(ci!==undefined?d.choices[ci]:"NOT SELECTED");}).join(", ");
+      return (i+1)+". "+s.name+" | Objective: "+(s.objective||"MISSING")+" | Rationale: "+(s.description||"MISSING")+" | Selections: "+existing;
+    }).join("\n");
+    aiCall(
+      "Complete missing fields for these strategies. Decision: "+(problem?.decisionStatement||"Not defined")+"\nDECISIONS:\n"+decMenu+"\n\nSTRATEGIES TO COMPLETE:\n"+stratList+"\n\nFill only what is MISSING. Match the strategy name and intent. Return ONLY JSON:\n"+
+      '{"strategies":[{"name":"exact name","objective":"clear objective","rationale":"why choices cohere","selections":{"D1":0,"D2":1}}],"insight":"observation"}',
+    (r)=>{
+      let result=r;
+      if(r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setSuggesting(false);return;}}
+      if(!result||result.error){setSuggesting(false);return;}
+      const aiStrats=result.strategies||[];
+      const updated=strategies.map(s=>{
+        const match=aiStrats.find(a=>a.name?.toLowerCase().trim()===s.name?.toLowerCase().trim());
+        if(!match) return s;
+        const newSel={...s.selections};
+        const rawSel=match.selections||{};
+        if(Array.isArray(rawSel)){rawSel.forEach((optIdx,j)=>{if(nowDecisions[j]&&typeof optIdx==="number"&&newSel[nowDecisions[j].id]===undefined)newSel[nowDecisions[j].id]=optIdx;});}
+        else{Object.entries(rawSel).forEach(([key,optIdx])=>{const decPos=parseInt(key.replace(/\D/g,""))-1;const dec=nowDecisions[decPos];if(dec&&typeof optIdx==="number"&&newSel[dec.id]===undefined)newSel[dec.id]=optIdx;});}
+        return {...s,objective:s.objective||match.objective||s.objective,description:s.description||match.rationale||s.description,selections:newSel};
+      });
+      onChange(updated);
+      onAIMsg({role:"ai",text:result.insight||("Filled "+aiStrats.length+" strategies with objectives, rationale and missing selections.")});
+      setSuggesting(false);
+    });
+  };
+
+  const recommendStrategy = () => {
+    if(strategies.length<2){onAIMsg({role:"ai",text:"Add at least 2 strategies before asking AI to recommend."});return;}
+    setRecommending(true);setRecommendation(null);
+    const stratSummaries=strategies.map((s,i)=>{
+      const choices=nowDecisions.map(d=>{const v=s.selections[d.id];const ci=Array.isArray(v)?v[0]:v;return d.label+"="+(ci!==undefined?d.choices[ci]:"not selected");}).join(", ");
+      return (i+1)+". "+s.name+(s.objective?" | Objective: "+s.objective:"")+(s.description?" | Rationale: "+s.description:""+" | Decisions: "+choices);
+    }).join("\n");
+    aiCall(
+      "You are a senior DQ expert evaluating strategies. Decision: "+(problem?.decisionStatement||"")+"\n\nStrategies:\n"+stratSummaries+"\n\nEvaluate each strategy against the decision objectives and DQ principles. Return ONLY JSON:\n"+
+      '{"recommendedStrategy":"strategy name","confidence":"High|Medium|Low","reasoning":"2-3 sentences why","concerns":"key risks","alternativeIf":"condition for different choice","rankingNote":"brief comparison of all strategies"}',
+    (r)=>{
+      let result=r;
+      if(r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){}}
+      if(result&&!result.error){
+        setRecommendation(result);
+        onAIMsg({role:"ai",text:"Recommended: "+result.recommendedStrategy+" ("+result.confidence+" confidence). "+result.reasoning});
+      }else{onAIMsg({role:"ai",text:"Could not generate recommendation. Try again."});}
+      setRecommending(false);
+    });
+  };
+
   const completeness = (s) => {
     const filled = nowDecisions.filter(d=>s.selections[d.id]!==undefined).length;
     return nowDecisions.length > 0 ? Math.round((filled/nowDecisions.length)*100) : 0;
@@ -2589,6 +2691,14 @@ Return ONLY JSON:
         </Btn>
         <Btn variant="primary" icon="spark" size="sm" onClick={aiSuggest} disabled={aiBusy||suggesting||nowDecisions.length===0}>
           {suggesting?"Suggesting…":"AI Suggest Strategies"}
+        </Btn>
+        {strategies.length>0&&(
+          <Btn variant="secondary" size="sm" disabled={suggesting||aiBusy} onClick={fillExistingStrategies}>
+            {suggesting?"Filling…":"AI Fill Existing"}
+          </Btn>
+        )}
+        <Btn variant="primary" size="sm" disabled={recommending||aiBusy||strategies.length<2} onClick={recommendStrategy}>
+          {recommending?"Analysing…":"✦ AI Pick Best Strategy"}
         </Btn>
       </div>
 
@@ -5048,425 +5158,1069 @@ const IMPACT_LEVELS      = ["Critical","High","Medium","Low"];
 const CONTROL_LEVELS     = ["High Control","Some Control","Low Control","No Control"];
 const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Competitive","Operational","Political","Stakeholder"];
 
-function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg }) {
-  const [view, setView]           = useState("matrix");   // matrix | diagram | drivers
-  const [items, setItems]         = useState([]);
-  const [generating, setGenerating] = useState(false);
-  const [analyzing, setAnalyzing]   = useState(false);
-  const [drivers, setDrivers]       = useState(null);
-  const [selected, setSelected]     = useState(null);
-  const [links, setLinks]           = useState([]);
-  const [linkMode, setLinkMode]     = useState(false);
-  const [linkSource, setLinkSource] = useState(null);
+function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg, problem, onNodesChange, onEdgesChange }) {
 
-  // Seed from uncertainty issues on first load
-  useEffect(() => {
-    if (items.length > 0) return;
-    const uncertainIssues = issues.filter(i =>
-      i.category === "uncertainty-external" || i.category === "uncertainty-internal"
-    );
-    if (uncertainIssues.length > 0) {
-      setItems(uncertainIssues.map(i => ({
-        id: i.id,
-        label: i.text.length > 60 ? i.text.slice(0, 60) + "…" : i.text,
-        type: i.category === "uncertainty-external" ? "Market" : "Operational",
-        impact: i.severity === "Critical" ? "Critical" : i.severity || "Medium",
-        control: i.category === "uncertainty-external" ? "No Control" : "Some Control",
-        description: i.text,
-        source: "issue",
-        x: 300 + Math.random() * 300,
-        y: 100 + Math.random() * 300,
-      })));
-    }
-  }, [issues]);
-
-  const add = (item) => setItems(p => [...p, { id: uid("u"), x:300, y:200, ...item }]);
-  const upd = (id, key, val) => setItems(p => p.map(u => u.id===id ? {...u,[key]:val} : u));
-  const remove = (id) => {
-    setItems(p => p.filter(u => u.id!==id));
-    setLinks(l => l.filter(lk => lk.from!==id && lk.to!==id));
-    if (selected===id) setSelected(null);
+  // ── Node taxonomy per spec ────────────────────────────────────────────────
+  const NODE_TYPES = {
+    decision: {
+      label:"Decision", color:"#2563eb", bg:"#eff4ff", border:"#93c5fd",
+      icon:"▣", shape:"rect",
+      desc:"A controllable choice — what can be decided",
+      rule:"Must have outgoing influence. Cannot be probabilistic.",
+    },
+    uncertainty: {
+      label:"Uncertainty", color:"#d97706", bg:"#fffbeb", border:"#fcd34d",
+      icon:"◎", shape:"oval",
+      desc:"An unknown variable — what cannot be controlled",
+      rule:"May influence other uncertainties and value nodes.",
+    },
+    value: {
+      label:"Value / Outcome", color:"#059669", bg:"#ecfdf5", border:"#6ee7b7",
+      icon:"◆", shape:"diamond",
+      desc:"An objective or result — NPV, market share, strategic value",
+      rule:"Terminal node. Should not influence upstream nodes.",
+    },
+    deterministic: {
+      label:"Deterministic", color:"#7c3aed", bg:"#f5f3ff", border:"#c4b5fd",
+      icon:"⬡", shape:"hex",
+      desc:"A calculated relationship — revenue, cash flow, emissions",
+      rule:"Calculated from inputs. Can influence value nodes.",
+    },
   };
 
-  const generateUncertainties = () => {
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [view, setView]             = useState("diagram");
+  const [nodes, setNodes]           = useState([]);
+  const [edges, setEdges]           = useState([]);
+  const [selected, setSelected]     = useState(null);
+  const [linkMode, setLinkMode]     = useState(false);
+  const [linkSource, setLinkSource] = useState(null);
+  const linkSourceRef = useRef(null);
+  const [addType, setAddType]       = useState("uncertainty");
+  const [newLabel, setNewLabel]     = useState("");
+  const [showAdd, setShowAdd]       = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [validation, setValidation] = useState(null);
+  const [modelResult, setModelResult]       = useState(null);
+  const [showModelResult, setShowModelResult] = useState(false);
+  const [showModelModal, setShowModelModal]   = useState(false);
+  const [buildingModel, setBuildingModel]     = useState(false);
+  const [modelParams, setModelParams]         = useState({
+    investment:"50", baseRevenue:"20", growthRate:"25",
+    costMargin:"60", discount:"12", horizon:"5",
+    currency:"$", revenueUnit:"M",
+  });
+  const [zoom, setZoom]             = useState(1);
+  const [metaNode, setMetaNode]     = useState(null); // node being edited in metadata panel
+
+  const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
+
+  // ── Seeding from issues ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (nodes.length > 0) return;
+    const uIssues = issues.filter(i =>
+      i.category === "uncertainty-external" || i.category === "uncertainty-internal"
+    );
+    if (uIssues.length > 0) {
+      const seeded = uIssues.slice(0, 8).map((iss, idx) => ({
+        id: uid("n"), type: "uncertainty",
+        label: iss.text.length > 55 ? iss.text.slice(0, 55) + "…" : iss.text,
+        description: iss.text, owner: "", assumptions: "",
+        impact: iss.severity === "Critical" || iss.severity === "High" ? "High" : "Medium",
+        control: iss.category === "uncertainty-external" ? "Low" : "Medium",
+        tags: [],
+        x: 180 + (idx % 4) * 230,
+        y: 120 + Math.floor(idx / 4) * 200,
+      }));
+      setNodes(seeded);
+    }
+  }, [issues.length]);
+
+  // ── Drag handlers ─────────────────────────────────────────────────────────
+  const onMouseDown = (e, id) => {
+    if (linkMode || e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const n = nodes.find(n => n.id === id);
+    if (!n) return;
+    dragRef.current = { dragging: true, id, startX: e.clientX, startY: e.clientY, origX: n.x, origY: n.y };
+  };
+
+  const onMouseMove = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    setNodes(prev => prev.map(n => n.id === d.id
+      ? { ...n, x: Math.max(16, d.origX + (e.clientX - d.startX)), y: Math.max(16, d.origY + (e.clientY - d.startY)) }
+      : n
+    ));
+  };
+
+  const onMouseUp = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    const dx = Math.abs(e.clientX - d.startX), dy = Math.abs(e.clientY - d.startY);
+    if (dx < 5 && dy < 5) {
+      if (linkMode) handleLink(d.id);
+      else { setSelected(s => s === d.id ? null : d.id); setMetaNode(d.id); }
+    }
+    dragRef.current = { ...dragRef.current, dragging: false };
+  };
+
+  // ── Link / edge logic ─────────────────────────────────────────────────────
+  const handleLink = (targetId) => {
+    if (!linkSource) { setLinkSource(targetId); return; }
+    if (linkSource === targetId) { setLinkSource(null); return; }
+
+    const src = nodes.find(n => n.id === linkSource);
+    const tgt = nodes.find(n => n.id === targetId);
+
+    // Rule: value nodes cannot influence upstream
+    if (src?.type === "value") {
+      onAIMsg({ role: "ai", text: "⚠ Invalid link: Value/Outcome nodes are terminal — they cannot influence other nodes. Reverse the arrow direction." });
+      setLinkSource(null); return;
+    }
+
+    // Rule: no duplicate edges
+    if (edges.find(e => e.from === linkSource && e.to === targetId)) {
+      setLinkSource(null); return;
+    }
+
+    // Rule: circular dependency check (DFS)
+    const wouldCycle = (from, to) => {
+      const visited = new Set();
+      const dfs = (id) => {
+        if (id === from) return true;
+        if (visited.has(id)) return false;
+        visited.add(id);
+        return edges.filter(e => e.from === id).some(e => dfs(e.to));
+      };
+      return dfs(to);
+    };
+    if (wouldCycle(linkSource, targetId)) {
+      onAIMsg({ role: "ai", text: "⚠ Circular dependency detected. Influence diagrams must be acyclic — this link would create a loop." });
+      setLinkSource(null); return;
+    }
+
+    setEdges(prev => [...prev, { id: uid("e"), from: linkSource, to: targetId, label: "influences" }]);
+    setLinkSource(null);
+  };
+
+  // ── Node CRUD ─────────────────────────────────────────────────────────────
+  const addNode = () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    const n = {
+      id: uid("n"), type: addType, label,
+      description: "", owner: "", assumptions: "", tags: [],
+      impact: "High", control: "Low",
+      x: 200 + Math.random() * 500, y: 150 + Math.random() * 300,
+    };
+    setNodes(prev => [...prev, n]);
+    setNewLabel(""); setShowAdd(false);
+    setSelected(n.id); setMetaNode(n.id);
+  };
+
+  const updateNode = (id, patch) => setNodes(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
+
+  const removeNode = (id) => {
+    setNodes(prev => prev.filter(n => n.id !== id));
+    setEdges(prev => prev.filter(e => e.from !== id && e.to !== id));
+    if (selected === id) setSelected(null);
+    if (metaNode === id) setMetaNode(null);
+  };
+
+  // ── Auto-layout ───────────────────────────────────────────────────────────
+  const autoLayout = () => {
+    // Topological sort then arrange in columns by type
+    const cols = { decision: [], uncertainty: [], deterministic: [], value: [] };
+    nodes.forEach(n => cols[n.type]?.push(n));
+    const colOrder = ["decision", "uncertainty", "deterministic", "value"];
+    const newNodes = [...nodes];
+    colOrder.forEach((type, ci) => {
+      cols[type].forEach((n, ri) => {
+        const target = newNodes.find(x => x.id === n.id);
+        if (target) { target.x = 80 + ci * 240; target.y = 80 + ri * 160; }
+      });
+    });
+    setNodes([...newNodes]);
+  };
+
+  // ── Validation engine ─────────────────────────────────────────────────────
+  const runValidation = () => {
+    const issues_found = [];
+
+    // Orphan nodes
+    nodes.forEach(n => {
+      const connected = edges.some(e => e.from === n.id || e.to === n.id);
+      if (!connected) issues_found.push({ type: "orphan", node: n.label, msg: "Not connected to anything — either link it or remove it." });
+    });
+
+    // Value nodes with no incoming
+    nodes.filter(n => n.type === "value").forEach(n => {
+      if (!edges.some(e => e.to === n.id))
+        issues_found.push({ type: "disconnected-value", node: n.label, msg: "Value node has no incoming influence — what drives this outcome?" });
+    });
+
+    // Decision nodes with no outgoing
+    nodes.filter(n => n.type === "decision").forEach(n => {
+      if (!edges.some(e => e.from === n.id))
+        issues_found.push({ type: "disconnected-decision", node: n.label, msg: "Decision node has no outgoing influence — what does this decision affect?" });
+    });
+
+    // Duplicate labels
+    const labels = nodes.map(n => n.label.toLowerCase().trim());
+    nodes.forEach((n, i) => {
+      if (labels.indexOf(n.label.toLowerCase().trim()) !== i)
+        issues_found.push({ type: "duplicate", node: n.label, msg: "Duplicate node label — consolidate these into one node." });
+    });
+
+    // No value nodes at all
+    if (nodes.length > 3 && !nodes.some(n => n.type === "value"))
+      issues_found.push({ type: "no-value", node: "Diagram", msg: "No Value/Outcome nodes — what is this diagram optimising for?" });
+
+    setValidation(issues_found);
+    return issues_found;
+  };
+
+  // ── AI Generate ───────────────────────────────────────────────────────────
+  const generateNodes = () => {
     setGenerating(true);
-    const focusDecs = decisions.filter(d=>d.tier==="focus").map(d=>d.label).join(", ");
-    const existingLabels = items.map(i=>i.label).join("; ");
-    aiCall(`You are a DQ uncertainty analyst. Identify key uncertainties for this decision.
+    const focusDecs = decisions.filter(d => d.tier === "focus").map(d => d.label).join(", ");
+    const strats = strategies.map(s => s.name).join(", ");
+    const existing = nodes.map(n => n.type + ": " + n.label).join("; ");
+    const today = new Date().toISOString().slice(0, 10);
 
-Focus decisions: ${focusDecs}
-Existing uncertainties already captured: ${existingLabels||"none"}
-
-Generate 6-8 specific, distinct uncertainties NOT already listed. For each identify:
-- Whether the team has control over it (high/some/low/no)  
-- Its potential impact if it resolves badly
-- Which type it is
-
-Return ONLY JSON:
-{"uncertainties":[{
-  "label":"concise uncertainty name (max 50 chars)",
-  "description":"one sentence explanation",
-  "type":"${UNCERTAINTY_TYPES.join('|')}",
-  "impact":"Critical|High|Medium|Low",
-  "control":"High Control|Some Control|Low Control|No Control"
-}]}`,
+    aiCall(
+      "You are a decision analysis expert building an influence diagram per the Decision Quality methodology. " +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + ". " +
+      "Focus decisions: " + (focusDecs || "none") + ". " +
+      "Strategies being evaluated: " + (strats || "none") + ". " +
+      "Existing nodes (do not duplicate): " + (existing || "none") + ". " +
+      "Generate a realistic influence diagram. Include all four node types: " +
+      "decision nodes (controllable choices), uncertainty nodes (unknown variables), " +
+      "deterministic nodes (calculated relationships like revenue/cost), and value nodes (outcomes like NPV/market share). " +
+      "Suggest influence edges. Value nodes must be terminal — they cannot influence other nodes. " +
+      "Decision nodes must have outgoing edges. No circular dependencies. " +
+      'Return ONLY JSON: {"nodes":[{"type":"uncertainty","label":"Oil Price","description":"Global crude benchmark","impact":"High","control":"Low","owner":""}],' +
+      '"edges":[{"from":"Oil Price","to":"Revenue","label":"drives"}],' +
+      '"insight":"Key observation about the decision structure","missingNodes":["what else should be added"]}',
     (r) => {
-      if (r.uncertainties) {
-        const newItems = r.uncertainties.map((u, i) => ({
-          id: uid("u"), ...u,
-          source: "ai",
-          x: 80 + (i % 4) * 220,
-          y: 80 + Math.floor(i / 4) * 180,
+      let result = r;
+      if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); } catch(e) { setGenerating(false); return; } }
+      if (result.error) { onAIMsg({ role: "ai", text: "AI error: " + result.error }); setGenerating(false); return; }
+
+      if (result.nodes?.length) {
+        const newNodes = result.nodes.map((n, i) => ({
+          id: uid("n"), type: n.type || "uncertainty",
+          label: n.label, description: n.description || "",
+          owner: n.owner || "", assumptions: "", tags: [],
+          impact: n.impact || "Medium", control: n.control || "Low",
+          x: 150 + (i % 4) * 240, y: 120 + Math.floor(i / 4) * 180,
         }));
-        setItems(p => [...p, ...newItems]);
-        onAIMsg({ role:"ai", text:`Added ${newItems.length} uncertainties. Use the Impact × Controllability matrix to prioritise.` });
+        setNodes(prev => [...prev, ...newNodes]);
+
+        if (result.edges?.length) {
+          const allNodes = [...nodes, ...newNodes];
+          const newEdges = result.edges.map(e => {
+            const s = allNodes.find(n => n.label.toLowerCase() === (e.from || "").toLowerCase());
+            const t = allNodes.find(n => n.label.toLowerCase() === (e.to || "").toLowerCase());
+            return s && t ? { id: uid("e"), from: s.id, to: t.id, label: e.label || "influences" } : null;
+          }).filter(Boolean);
+          setEdges(prev => [...prev, ...newEdges]);
+        }
+
+        const msg = result.insight || ("Added " + result.nodes.length + " nodes.");
+        const missing = result.missingNodes?.length ? " Consider adding: " + result.missingNodes.join(", ") + "." : "";
+        onAIMsg({ role: "ai", text: msg + missing });
       }
       setGenerating(false);
     });
   };
 
-  const analyzeDrivers = () => {
-    setAnalyzing(true);
-    const ctx = items.map(u => `"${u.label}" [impact:${u.impact}, control:${u.control}, type:${u.type}]`).join("\n");
-    const strats = strategies.map(s => DS.sNames[s.colorIdx]||s.name).join(", ");
-    aiCall(`You are a DQ uncertainty expert. Analyse these uncertainties for this decision.
+  // ── Canvas dimensions ─────────────────────────────────────────────────────
+  const CANVAS_W = Math.max(1100, nodes.reduce((m, n) => Math.max(m, (n.x || 0) + 260), 1100)) * zoom;
+  const CANVAS_H = Math.max(700,  nodes.reduce((m, n) => Math.max(m, (n.y || 0) + 180), 700)) * zoom;
 
-Uncertainties:\n${ctx}
-Strategies being evaluated: ${strats}
+  const selNode = nodes.find(n => n.id === selected);
+  const metaNodeData = nodes.find(n => n.id === metaNode);
 
-Identify:
-1. The 2-3 KEY DRIVERS — uncertainties that most affect strategy value and are partially resolvable
-2. Uncertainties worth quantitative modelling
-3. Which uncertainties create "deal-breaker" scenarios for specific strategies
-4. The recommended sequencing (which to resolve first)
+  // ── Node shape SVG renderer ───────────────────────────────────────────────
+  const NodeShape = ({ node }) => {
+    const nt = NODE_TYPES[node.type] || NODE_TYPES.uncertainty;
+    const isSel = selected === node.id;
+    const isSrc = linkSource === node.id;
+    const W = 190, H = 60;
+    const cx = W / 2, cy = H / 2;
 
-Return ONLY JSON:
-{
-  "keyDrivers":[{"id":"matching label","reason":"why this is the key driver","resolutionPath":"how to resolve or reduce this uncertainty"}],
-  "modellingCandidates":["uncertainty label"],
-  "dealBreakers":[{"uncertainty":"label","strategy":"strategy name","scenario":"what bad resolution looks like"}],
-  "resolutionSequence":["step 1","step 2","step 3"],
-  "overallInsight":"2-sentence synthesis of the uncertainty landscape"
-}`,
-    (r) => {
-      if (!r.error) {
-        setDrivers(r);
-        onAIMsg({ role:"ai", text: r.overallInsight || "Uncertainty analysis complete. Review key drivers and deal-breakers." });
-      }
-      setAnalyzing(false);
+    const shapeStyle = {
+      position: "absolute", left: node.x * zoom, top: node.y * zoom,
+      width: W, minHeight: H,
+      cursor: linkMode ? "crosshair" : "grab",
+      userSelect: "none", zIndex: isSel || isSrc ? 10 : 1,
+    };
+
+    const boxStyle = {
+      padding: "10px 14px",
+      background: isSrc ? nt.color : nt.bg,
+      border: "2px solid " + (isSel ? nt.color : isSrc ? nt.color : nt.border),
+      borderRadius:
+        node.type === "uncertainty" ? 50 :
+        node.type === "value" ? 4 :
+        node.type === "hex" ? 8 : 8,
+      transform: node.type === "value" ? "rotate(-1deg)" : "none",
+      boxShadow: isSel
+        ? "0 0 0 3px " + nt.border + "80, 0 4px 16px rgba(0,0,0,.12)"
+        : "0 2px 8px rgba(0,0,0,.07)",
+      transition: "box-shadow .12s",
+    };
+
+  
+  // Sync nodes/edges to parent for Scenario Planning and VoI
+  useEffect(() => { if (onNodesChange) onNodesChange(nodes); }, [nodes]);
+  useEffect(() => { if (onEdgesChange) onEdgesChange(edges); }, [edges]);
+
+  const showModelInApp = (modelData) => { setModelResult(modelData); setShowModelResult(true); };
+
+  const downloadExcel = async (modelData) => {
+    const p = modelData.params || modelParams;
+    const yrs = parseInt(p.horizon)||5;
+    const yrLabels = Array.from({length:yrs},(_,i)=>"Y"+(i+1));
+    const fmtN = (n) => n===undefined||n===null?"":parseFloat(n).toFixed(2);
+    let csv = "FINANCIAL MODEL: "+(modelData.modelTitle||"").toUpperCase()+"\n";
+    csv += "PARAMETERS\n";
+    ["investment","baseRevenue","growthRate","costMargin","discount","horizon"].forEach(k=>{csv+=k+","+p[k]+"\n";});
+    csv += "\nINCOME STATEMENT\n";
+    csv += "Scenario,Line Item,"+yrLabels.join(",")+"\n";
+    ["low","base","high"].forEach(sc=>{
+      csv += sc.toUpperCase()+",Revenue,"+(modelData.revenue[sc]||[]).map(fmtN).join(",")+"\n";
+      csv += ",Costs,"+(modelData.costs[sc]||[]).map(fmtN).join(",")+"\n";
+      csv += ",EBITDA,"+(modelData.ebitda[sc]||[]).map(fmtN).join(",")+"\n";
+    });
+    csv += "\nVALUATION\n,Low,Base,High\n";
+    csv += "NPV,"+fmtN(modelData.npv?.low)+","+fmtN(modelData.npv?.base)+","+fmtN(modelData.npv?.high)+"\n";
+    csv += "IRR,"+fmtN(modelData.irr?.low)+"%,"+fmtN(modelData.irr?.base)+"%,"+fmtN(modelData.irr?.high)+"%\n";
+    const blob = new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url; a.download=(modelData.modelTitle||"FinancialModel").replace(/\s+/g,"_")+"_VantageDQ.csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    onAIMsg({role:"ai",text:"CSV downloaded. Open in Excel to edit."});
+  };
+
+  // ── Deterministic financial model engine ────────────────────────────────
+  const buildFinancialModel = () => {
+    setBuildingModel(true);
+    const uncNodes = nodes.filter(n=>n.type==="uncertainty").map(n=>n.label+" (impact:"+n.impact+")").join(", ");
+    const decNodes = nodes.filter(n=>n.type==="decision").map(n=>n.label).join(", ");
+    const p = modelParams;
+    const inv=parseFloat(p.investment)||0, baseRev=parseFloat(p.baseRevenue)||0;
+    const growth=parseFloat(p.growthRate)||0, costPct=parseFloat(p.costMargin)||0;
+    const wacc=parseFloat(p.discount)||10, yrs=parseInt(p.horizon)||5;
+    aiCall(
+      "Decision: "+(problem?.decisionStatement||"Not defined")+". Uncertainties: "+uncNodes+". Decisions: "+decNodes+". "+
+      "Define uncertainty multipliers for Low/Base/High scenarios only — no numbers, just multipliers and narrative. "+
+      "Return ONLY JSON: "+
+      '{"modelTitle":"short title","revenueMultipliers":{"low":0.6,"base":1.0,"high":1.4},"costMultipliers":{"low":1.1,"base":1.0,"high":0.85},"growthMultipliers":{"low":0.6,"base":1.0,"high":1.3},"assumptions":[{"name":"assumption","driver":"uncertainty node","low":"desc","base":"desc","high":"desc"}],"scenarioLow":"downside","scenarioBase":"base case","scenarioHigh":"upside","keyRisks":["risk1"],"notes":"modelling notes"}',
+    (r)=>{
+      let structure=r;
+      if(r&&r._raw){try{structure=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setBuildingModel(false);return;}}
+      if(!structure||structure.error){setBuildingModel(false);return;}
+      const rM={low:parseFloat(structure.revenueMultipliers?.low)||0.6,base:1.0,high:parseFloat(structure.revenueMultipliers?.high)||1.4};
+      const cM={low:parseFloat(structure.costMultipliers?.low)||1.1,base:1.0,high:parseFloat(structure.costMultipliers?.high)||0.85};
+      const gM={low:parseFloat(structure.growthMultipliers?.low)||0.6,base:1.0,high:parseFloat(structure.growthMultipliers?.high)||1.3};
+      const calcRev=(sc)=>{const g=(growth*gM[sc])/100;return Array.from({length:yrs},(_,i)=>parseFloat((baseRev*rM[sc]*Math.pow(1+g,i)).toFixed(2)));};
+      const calcCosts=(sc,rev)=>rev.map(r=>parseFloat((r*costPct*cM[sc]/100).toFixed(2)));
+      const calcEbitda=(rev,cost)=>rev.map((r,i)=>parseFloat((r-cost[i]).toFixed(2)));
+      const calcNPV=(ebitda,w,inv)=>{const pv=ebitda.reduce((s,cf,i)=>s+cf/Math.pow(1+w/100,i+1),0);return parseFloat((pv-inv).toFixed(2));};
+      const calcIRR=(ebitda,inv)=>{if(!inv)return 0;const cfs=[-inv,...ebitda];let r=0.1;for(let i=0;i<100;i++){const n=cfs.reduce((s,cf,i)=>s+cf/Math.pow(1+r,i),0);const d=cfs.reduce((s,cf,i)=>s-i*cf/Math.pow(1+r,i+1),0);if(Math.abs(d)<1e-10)break;const nr=r-n/d;if(Math.abs(nr-r)<1e-8){r=nr;break;}r=nr;}return parseFloat((r*100).toFixed(1));};
+      const calcPayback=(ebitda,inv)=>{let cum=-inv;for(let i=0;i<ebitda.length;i++){cum+=ebitda[i];if(cum>=0)return parseFloat((i+1-(cum-ebitda[i])/ebitda[i]).toFixed(1));}return null;};
+      const revenue={},costs={},ebitda={},npv={},irr={},payback={};
+      ["low","base","high"].forEach(sc=>{revenue[sc]=calcRev(sc);costs[sc]=calcCosts(sc,revenue[sc]);ebitda[sc]=calcEbitda(revenue[sc],costs[sc]);npv[sc]=calcNPV(ebitda[sc],wacc,inv);irr[sc]=calcIRR(ebitda[sc],inv);payback[sc]=calcPayback(ebitda[sc],inv);});
+      const modelData={modelTitle:structure.modelTitle||"Financial Model",assumptions:structure.assumptions||[],revenue,costs,ebitda,npv,irr,payback,scenarioLow:structure.scenarioLow||"",scenarioBase:structure.scenarioBase||"",scenarioHigh:structure.scenarioHigh||"",keyRisks:structure.keyRisks||[],notes:structure.notes||"",params:p,rMult:rM,cMult:cM,gMult:gM,yrs};
+      showModelInApp(modelData);
+      setBuildingModel(false);
+      setShowModelModal(false);
+      onAIMsg({role:"ai",text:"Model built. Base NPV: "+p.currency+npv.base+"M | IRR: "+irr.base+"% | Payback: "+(payback.base||">"+(p.horizon||5))+" yrs. Numbers are deterministic."});
     });
   };
 
-  const handleLink = (id) => {
-    if (!linkMode) return;
-    if (!linkSource) { setLinkSource(id); return; }
-    if (linkSource === id) { setLinkSource(null); return; }
-    const exists = links.find(l => (l.from===linkSource&&l.to===id)||(l.from===id&&l.to===linkSource));
-    if (!exists) setLinks(l => [...l, { id:uid("lk"), from:linkSource, to:id, label:"influences" }]);
-    setLinkSource(null);
-  };
-
-  const quadrant = (item) => {
-    const highImpact = item.impact==="Critical"||item.impact==="High";
-    const highControl = item.control==="High Control"||item.control==="Some Control";
-    if (highImpact && highControl)  return { key:"resolve",  label:"Resolve First",  color:DS.danger,   bg:DS.dangerSoft,  desc:"High impact + controllable — prioritise resolving these" };
-    if (highImpact && !highControl) return { key:"monitor",  label:"Monitor Closely", color:DS.warning,  bg:DS.warnSoft,   desc:"High impact but uncontrollable — build contingencies" };
-    if (!highImpact && highControl) return { key:"manage",   label:"Manage",         color:DS.accent,   bg:DS.accentSoft, desc:"Controllable but lower impact — manage efficiently" };
-    return                                 { key:"watch",    label:"Watch",          color:DS.success,  bg:DS.successSoft, desc:"Low impact + uncontrollable — monitor periodically" };
-  };
-
-  const impactColor = { Critical:DS.danger, High:DS.warning, Medium:DS.accent, Low:DS.success };
-  const controlColor = { "High Control":DS.success, "Some Control":DS.accent, "Low Control":DS.warning, "No Control":DS.danger };
-
-  const TABS = [
-    { id:"matrix",  label:"Impact × Control Matrix" },
-    { id:"diagram", label:"Influence Diagram" },
-    { id:"drivers", label:"Key Driver Analysis", highlight:!!drivers },
-  ];
-
-  const quadrants = [
-    { key:"resolve",  label:"Resolve First",   sublabel:"High impact · Controllable",   color:DS.danger,  bg:"#fff0f0", items: items.filter(i=>quadrant(i).key==="resolve") },
-    { key:"monitor",  label:"Monitor Closely", sublabel:"High impact · Uncontrollable",  color:DS.warning, bg:"#fffbeb", items: items.filter(i=>quadrant(i).key==="monitor") },
-    { key:"manage",   label:"Manage",          sublabel:"Lower impact · Controllable",   color:DS.accent,  bg:"#eff4ff", items: items.filter(i=>quadrant(i).key==="manage") },
-    { key:"watch",    label:"Watch",           sublabel:"Lower impact · Uncontrollable", color:DS.success, bg:"#f0fdf4", items: items.filter(i=>quadrant(i).key==="watch") },
-  ];
-
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
-      <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
-        display:"flex", alignItems:"center", gap:12, flexShrink:0, flexWrap:"wrap" }}>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:11, color:DS.inkTer, letterSpacing:1, textTransform:"uppercase", fontWeight:700, marginBottom:3 }}>Phase 2 · Module 08</div>
-          <div style={{ fontFamily:"'Libre Baskerville', Georgia, serif", fontSize:22, fontWeight:700, color:DS.ink, letterSpacing:-.3 }}>Influence Map</div>
-        </div>
-        <Badge variant="default">{items.length} uncertainties</Badge>
-        <Badge variant="danger">{items.filter(i=>quadrant(i).key==="resolve").length} resolve first</Badge>
-        <Badge variant="warn">{items.filter(i=>quadrant(i).key==="monitor").length} monitor</Badge>
-        <Btn variant="secondary" icon="spark" size="sm" onClick={analyzeDrivers} disabled={aiBusy||analyzing||items.length<3}>
-          {analyzing?"Analysing…":"AI Key Drivers"}
-        </Btn>
-        <Btn variant="primary" icon="spark" size="sm" onClick={generateUncertainties} disabled={aiBusy||generating}>
-          {generating?"Generating…":"AI Generate"}
-        </Btn>
-      </div>
-
-      <div style={{ display:"flex", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`, flexShrink:0, paddingLeft:28 }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={()=>setView(t.id)}
-            style={{ padding:"10px 18px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-              cursor:"pointer", border:"none", background:"transparent",
-              borderBottom:`2px solid ${view===t.id?DS.accent:"transparent"}`,
-              color:view===t.id?DS.accent:DS.inkTer, letterSpacing:.4,
-              display:"flex", alignItems:"center", gap:6 }}>
-            {t.label}
-            {t.highlight && <span style={{ width:6,height:6,borderRadius:"50%",background:DS.success,display:"inline-block" }}/>}
-          </button>
-        ))}
-      </div>
-
-      {/* ── MATRIX VIEW ── */}
-      {view==="matrix" && (
-        <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
-          {items.length === 0 ? (
-            <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10, color:DS.inkTer, fontSize:13, margin:"20px 0" }}>
-              No uncertainties yet. Use AI Generate or uncertainties will be seeded from your Issue Raising module automatically.
+      <div style={shapeStyle}
+        onMouseDown={e => onMouseDown(e, node.id)}
+        onClick={e => { if (linkMode) { e.stopPropagation(); handleLink(node.id); } }}>
+        <div style={boxStyle}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
+            <span style={{ fontSize: 12, color: isSrc ? "#fff" : nt.color, flexShrink: 0, marginTop: 1 }}>
+              {nt.icon}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700,
+                color: isSrc ? "#fff" : nt.color,
+                lineHeight: 1.3, wordBreak: "break-word" }}>
+                {node.label}
+              </div>
+              <div style={{ fontSize: 9, color: isSrc ? "rgba(255,255,255,.65)" : "#9ca3af",
+                textTransform: "uppercase", letterSpacing: .5, marginTop: 3 }}>
+                {nt.label}
+                {node.type === "uncertainty" ? " · " + (node.impact || "?") + " impact" : ""}
+              </div>
             </div>
+          </div>
+        </div>
+
+        {/* Action row when selected */}
+        {isSel && !linkMode && (
+          <div style={{ position: "absolute", top: -30, right: 0,
+            display: "flex", gap: 4 }}>
+            <button onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); setMetaNode(node.id); }}
+              style={{ padding: "2px 8px", fontSize: 9, fontWeight: 700,
+                background: nt.color, border: "none", borderRadius: 4,
+                color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
+              ✎ Edit
+            </button>
+            <button onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); removeNode(node.id); }}
+              style={{ padding: "2px 8px", fontSize: 9, fontWeight: 700,
+                background: "#dc2626", border: "none", borderRadius: 4,
+                color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── RENDER ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+
+      {/* ── HEADER ── */}
+      <div style={{ background: DS.canvas, borderBottom: "1px solid " + DS.canvasBdr, flexShrink: 0 }}>
+        <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, color: DS.inkTer, textTransform: "uppercase",
+              fontWeight: 700, letterSpacing: 1 }}>Module 08</div>
+            <div style={{ fontFamily: "'Libre Baskerville',serif",
+              fontSize: 18, fontWeight: 700, color: DS.ink }}>Influence Diagram</div>
+          </div>
+          <Btn variant="secondary" size="sm" onClick={() => setShowAdd(p => !p)}>+ Add Node</Btn>
+          <Btn variant="secondary" size="sm" onClick={autoLayout}>Auto Layout</Btn>
+          <Btn variant="secondary" size="sm"
+            onClick={() => { setLinkMode(l => !l); setLinkSource(null); }}
+            style={{
+              background: linkMode ? DS.accentSoft : "transparent",
+              border: "1px solid " + (linkMode ? DS.accent : DS.canvasBdr),
+              color: linkMode ? DS.accent : DS.inkSub,
+            }}>
+            {linkMode ? (linkSource ? "→ Click target node" : "→ Click source node") : "Draw Links"}
+          </Btn>
+          <Btn variant="secondary" size="sm" onClick={runValidation}>Validate</Btn>
+          <Btn variant="primary" icon="spark" size="sm"
+            onClick={generateNodes} disabled={aiBusy || generating}>
+            {generating ? "Generating…" : "AI Generate"}
+          </Btn>
+        </div>
+
+        {/* View tabs + zoom */}
+        <div style={{ padding: "0 20px 8px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", border: "1px solid " + DS.canvasBdr,
+            borderRadius: 6, overflow: "hidden" }}>
+            {[
+              { id: "diagram",  label: "Diagram" },
+              { id: "matrix",   label: "Impact Matrix" },
+              { id: "metadata", label: "Node Registry" },
+              { id: "validate", label: "Validate" },
+            ].map(v => (
+              <button key={v.id} onClick={() => setView(v.id)}
+                style={{ padding: "5px 12px", fontSize: 11, fontWeight: 700,
+                  fontFamily: "inherit", cursor: "pointer", border: "none",
+                  background: view === v.id ? DS.accent : "transparent",
+                  color: view === v.id ? "#fff" : DS.inkSub }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+
+          {view === "diagram" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: "auto" }}>
+              <button onClick={() => setZoom(z => Math.max(0.4, z - 0.15))}
+                style={{ width: 22, height: 22, borderRadius: 4,
+                  border: "1px solid " + DS.canvasBdr, background: "transparent",
+                  cursor: "pointer", fontFamily: "inherit", fontSize: 14,
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+              <span style={{ fontSize: 10, color: DS.inkTer, width: 38, textAlign: "center" }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button onClick={() => setZoom(z => Math.min(2, z + 0.15))}
+                style={{ width: 22, height: 22, borderRadius: 4,
+                  border: "1px solid " + DS.canvasBdr, background: "transparent",
+                  cursor: "pointer", fontFamily: "inherit", fontSize: 14,
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+              <button onClick={() => setZoom(1)}
+                style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4,
+                  border: "1px solid " + DS.canvasBdr, background: "transparent",
+                  cursor: "pointer", fontFamily: "inherit", color: DS.inkTer }}>Reset</button>
+            </div>
+          )}
+
+          {/* Node type legend */}
+          <div style={{ display: "flex", gap: 10, marginLeft: view === "diagram" ? 0 : "auto" }}>
+            {Object.entries(NODE_TYPES).map(([type, nt]) => (
+              <div key={type} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 10, color: nt.color }}>{nt.icon}</span>
+                <span style={{ fontSize: 9, color: DS.inkTer }}>{nt.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Add node panel */}
+      {showAdd && (
+        <div style={{ padding: "10px 20px", background: DS.accentSoft,
+          borderBottom: "1px solid " + DS.accentLine,
+          display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flexShrink: 0 }}>
+          {Object.entries(NODE_TYPES).map(([key, nt]) => (
+            <button key={key} onClick={() => setAddType(key)}
+              style={{ padding: "4px 11px", fontSize: 10, fontWeight: 700,
+                fontFamily: "inherit", cursor: "pointer",
+                border: "1.5px solid " + (addType === key ? nt.color : DS.canvasBdr),
+                borderRadius: 5,
+                background: addType === key ? nt.bg : "transparent",
+                color: addType === key ? nt.color : DS.inkSub }}>
+              {nt.icon} {nt.label}
+            </button>
+          ))}
+          <input autoFocus value={newLabel}
+            onChange={e => setNewLabel(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addNode(); if (e.key === "Escape") setShowAdd(false); }}
+            placeholder={"Label for this " + (NODE_TYPES[addType]?.label || "node").toLowerCase() + "..."}
+            style={{ flex: 1, minWidth: 200, padding: "6px 10px", fontSize: 12,
+              fontFamily: "inherit", background: DS.canvas,
+              border: "1px solid " + DS.accentLine, borderRadius: 5,
+              color: DS.ink, outline: "none" }}/>
+          <Btn variant="primary" size="sm" onClick={addNode}>Add</Btn>
+          <Btn variant="secondary" size="sm" onClick={() => setShowAdd(false)}>Cancel</Btn>
+        </div>
+      )}
+
+      {/* Validation banner */}
+      {validation && (
+        <div style={{ padding: "8px 20px", flexShrink: 0,
+          background: validation.length === 0 ? DS.successSoft : "#fff5f5",
+          borderBottom: "1px solid " + (validation.length === 0 ? DS.successLine : "#fecaca"),
+          display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {validation.length === 0 ? (
+            <span style={{ fontSize: 11, color: DS.success, fontWeight: 700 }}>
+              ✓ Diagram is structurally valid — no orphans, circular dependencies, or missing value nodes.
+            </span>
           ) : (
-            <div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:24 }}>
-                {quadrants.map(q => (
-                  <div key={q.key} style={{ border:`1.5px solid ${q.color}30`, borderRadius:9, overflow:"hidden" }}>
-                    <div style={{ padding:"11px 16px", background:q.bg, borderBottom:`2px solid ${q.color}` }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:q.color }}>{q.label}</div>
-                      <div style={{ fontSize:10, color:DS.inkTer, marginTop:2 }}>{q.sublabel}</div>
-                      <div style={{ fontSize:10, color:q.color, marginTop:4 }}>{q.items.length} uncertainties</div>
+            <>
+              <span style={{ fontSize: 11, fontWeight: 700, color: DS.danger, flexShrink: 0 }}>
+                ⚠ {validation.length} issue{validation.length !== 1 ? "s" : ""}:
+              </span>
+              {validation.map((v, i) => (
+                <span key={i} style={{ fontSize: 10, color: "#7f1d1d",
+                  background: "#fee2e2", padding: "2px 8px", borderRadius: 4 }}>
+                  <strong>{v.node}:</strong> {v.msg}
+                </span>
+              ))}
+            </>
+          )}
+          <button onClick={() => setValidation(null)}
+            style={{ marginLeft: "auto", background: "none", border: "none",
+              cursor: "pointer", color: DS.inkTer, fontSize: 14, flexShrink: 0 }}>×</button>
+        </div>
+      )}
+
+      {/* ── MAIN CONTENT AREA ── */}
+      <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+
+        {/* ── DIAGRAM VIEW ── */}
+        {view === "diagram" && (
+          <div style={{ flex: 1, overflow: "auto", position: "relative",
+            background: "#f7f8fa",
+            backgroundImage: "radial-gradient(circle, #d1d5db 1px, transparent 1px)",
+            backgroundSize: "28px 28px" }}
+            onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
+
+            {nodes.length === 0 && (
+              <div style={{ position: "absolute", top: "50%", left: "50%",
+                transform: "translate(-50%,-50%)",
+                textAlign: "center", color: DS.inkTer, pointerEvents: "none" }}>
+                <div style={{ fontSize: 40, marginBottom: 12, opacity: .3 }}>◎</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>No nodes yet</div>
+                <div style={{ fontSize: 12 }}>
+                  Click <strong>+ Add Node</strong> to start, or use <strong>AI Generate</strong> to build a first draft from your decision context.
+                </div>
+              </div>
+            )}
+
+            <div style={{ position: "relative", width: CANVAS_W, height: CANVAS_H, minWidth: "100%", minHeight: "100%" }}>
+
+              {/* SVG layer for edges */}
+              <svg style={{ position: "absolute", top: 0, left: 0,
+                width: CANVAS_W, height: CANVAS_H, pointerEvents: "none" }}>
+                <defs>
+                  {Object.entries(NODE_TYPES).map(([type, nt]) => (
+                    <marker key={type}
+                      id={"arr-" + type} markerWidth="10" markerHeight="7"
+                      refX="9" refY="3.5" orient="auto">
+                      <polygon points="0 0, 10 3.5, 0 7" fill={nt.color} opacity=".8"/>
+                    </marker>
+                  ))}
+                </defs>
+                {edges.map(e => {
+                  const f = nodes.find(n => n.id === e.from);
+                  const t = nodes.find(n => n.id === e.to);
+                  if (!f || !t) return null;
+                  const nt = NODE_TYPES[f.type] || NODE_TYPES.uncertainty;
+                  const fx = (f.x + 95) * zoom, fy = (f.y + 35) * zoom;
+                  const tx = (t.x + 95) * zoom, ty = (t.y + 35) * zoom;
+                  const mx = (fx + tx) / 2, my = (fy + ty) / 2 - 40;
+                  return (
+                    <g key={e.id}>
+                      <path
+                        d={"M" + fx + "," + fy + " Q" + mx + "," + my + " " + tx + "," + ty}
+                        fill="none" stroke={nt.color} strokeWidth={1.8}
+                        strokeDasharray="6,3" opacity={.7}
+                        markerEnd={"url(#arr-" + f.type + ")"}/>
+                      {e.label && (
+                        <text x={mx} y={my + 14} textAnchor="middle"
+                          fontSize={9} fill={nt.color} opacity={.8}
+                          fontFamily="'IBM Plex Sans',sans-serif">
+                          {e.label}
+                        </text>
+                      )}
+                      {/* Invisible hit area to click-remove */}
+                      <circle cx={mx} cy={my + 7} r={10}
+                        fill="transparent"
+                        style={{ pointerEvents: "all", cursor: "pointer" }}
+                        onClick={() => setEdges(prev => prev.filter(x => x.id !== e.id))}/>
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Node elements */}
+              {nodes.map(node => <NodeShape key={node.id} node={node}/>)}
+            </div>
+          </div>
+        )}
+
+        {/* ── IMPACT MATRIX VIEW ── */}
+        {view === "matrix" && (
+          <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: DS.ink, marginBottom: 3 }}>
+                Uncertainty Impact × Control Matrix
+              </div>
+              <div style={{ fontSize: 11, color: DS.inkTer }}>
+                Uncertainty nodes plotted by how much they matter vs how much control the team has.
+                Click any node to jump to the diagram.
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr",
+              gridTemplateRows: "1fr 1fr", gap: 4,
+              height: "calc(100% - 80px)", minHeight: 400 }}>
+              {[
+                { impact: "High", control: "High", label: "Manage Actively",
+                  sub: "High leverage — key levers you control", color: "#059669", bg: "#ecfdf5" },
+                { impact: "High", control: "Low", label: "Monitor Closely",
+                  sub: "Major impact, low control — external forces", color: "#d97706", bg: "#fffbeb" },
+                { impact: "Low", control: "High", label: "Exploit",
+                  sub: "Easy wins — you control these", color: "#2563eb", bg: "#eff4ff" },
+                { impact: "Low", control: "Low", label: "Accept / Track",
+                  sub: "Background noise — monitor but don't over-invest", color: "#6b7280", bg: "#f9fafb" },
+              ].map(q => {
+                const qNodes = nodes.filter(n =>
+                  n.type === "uncertainty" && n.impact === q.impact && n.control === q.control
+                );
+                return (
+                  <div key={q.label} style={{ background: q.bg,
+                    border: "1px solid " + q.color + "40", borderRadius: 10,
+                    padding: "14px 16px", overflow: "auto" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: q.color, marginBottom: 2 }}>
+                      {q.label}
                     </div>
-                    <div style={{ background:DS.canvas, padding:"10px", minHeight:100, display:"flex", flexDirection:"column", gap:7 }}>
-                      {q.items.length === 0 ? (
-                        <div style={{ fontSize:11, color:DS.inkDis, textAlign:"center", padding:"14px 0", fontStyle:"italic" }}>None</div>
-                      ) : q.items.map(item => (
-                        <div key={item.id} onClick={()=>setSelected(selected===item.id?null:item.id)}
-                          style={{ padding:"9px 12px", borderRadius:7,
-                            border:`1px solid ${selected===item.id?q.color:DS.canvasBdr}`,
-                            background:selected===item.id?q.bg:DS.canvas, cursor:"pointer",
-                            transition:"all .12s" }}>
-                          <div style={{ fontSize:12, fontWeight:600, color:DS.ink, marginBottom:5, lineHeight:1.4 }}>{item.label}</div>
-                          <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                            <Badge variant="default" size="xs">{item.type}</Badge>
-                            <span style={{ fontSize:10, fontWeight:700, color:impactColor[item.impact]||DS.inkSub,
-                              padding:"1px 6px", borderRadius:3, background:impactColor[item.impact]+"18" }}>
-                              {item.impact} impact
-                            </span>
-                            <span style={{ fontSize:10, fontWeight:700, color:controlColor[item.control]||DS.inkSub,
-                              padding:"1px 6px", borderRadius:3, background:controlColor[item.control]+"18" }}>
-                              {item.control}
-                            </span>
-                          </div>
+                    <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 10 }}>{q.sub}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {qNodes.map(n => (
+                        <div key={n.id}
+                          onClick={() => { setView("diagram"); setSelected(n.id); }}
+                          style={{ padding: "7px 10px", background: "white",
+                            border: "1px solid " + q.color + "40", borderRadius: 6,
+                            cursor: "pointer", fontSize: 11, fontWeight: 600, color: q.color }}>
+                          {n.label}
+                          {n.description && (
+                            <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 400, marginTop: 2 }}>
+                              {n.description.slice(0, 60)}{n.description.length > 60 ? "…" : ""}
+                            </div>
+                          )}
                         </div>
                       ))}
+                      {qNodes.length === 0 && (
+                        <div style={{ fontSize: 11, color: "#9ca3af", fontStyle: "italic" }}>
+                          No uncertainties here yet
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, padding: "0 4px" }}>
+              <span style={{ fontSize: 10, color: DS.inkTer }}>← Low Control</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer }}>CONTROLLABILITY →</span>
+              <span style={{ fontSize: 10, color: DS.inkTer }}>High Control →</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── NODE REGISTRY VIEW ── */}
+        {view === "metadata" && (
+          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+            {/* Node list */}
+            <div style={{ width: 280, borderRight: "1px solid " + DS.canvasBdr,
+              overflowY: "auto", flexShrink: 0 }}>
+              {Object.entries(NODE_TYPES).map(([type, nt]) => {
+                const typeNodes = nodes.filter(n => n.type === type);
+                if (!typeNodes.length) return null;
+                return (
+                  <div key={type}>
+                    <div style={{ padding: "8px 14px 4px",
+                      fontSize: 9, fontWeight: 700, color: nt.color,
+                      letterSpacing: .6, textTransform: "uppercase",
+                      background: nt.bg, borderBottom: "1px solid " + nt.border }}>
+                      {nt.icon} {nt.label} ({typeNodes.length})
+                    </div>
+                    {typeNodes.map(n => (
+                      <button key={n.id}
+                        onClick={() => setMetaNode(n.id)}
+                        style={{ width: "100%", padding: "10px 14px", textAlign: "left",
+                          border: "none", borderBottom: "1px solid " + DS.canvasBdr,
+                          background: metaNode === n.id ? nt.bg : "transparent",
+                          cursor: "pointer", fontFamily: "inherit",
+                          borderLeft: "3px solid " + (metaNode === n.id ? nt.color : "transparent") }}>
+                        <div style={{ fontSize: 12, fontWeight: 600,
+                          color: nt.color, marginBottom: 2 }}>{n.label}</div>
+                        {n.description && (
+                          <div style={{ fontSize: 10, color: DS.inkTer }}>
+                            {n.description.slice(0, 45)}{n.description.length > 45 ? "…" : ""}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+              {nodes.length === 0 && (
+                <div style={{ padding: "32px 16px", textAlign: "center",
+                  color: DS.inkTer, fontSize: 12 }}>
+                  No nodes yet. Add them in the Diagram view.
+                </div>
+              )}
+            </div>
+
+            {/* Metadata editor */}
+            <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+              {metaNodeData ? (() => {
+                const nt = NODE_TYPES[metaNodeData.type] || NODE_TYPES.uncertainty;
+                return (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 6,
+                        background: nt.bg, border: "2px solid " + nt.color,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 14, color: nt.color }}>{nt.icon}</div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: nt.color }}>{metaNodeData.label}</div>
+                        <div style={{ fontSize: 10, color: DS.inkTer }}>{nt.label} · {nt.rule}</div>
+                      </div>
+                      <button onClick={() => removeNode(metaNodeData.id)}
+                        style={{ marginLeft: "auto", background: "none",
+                          border: "1px solid " + DS.dangerLine, borderRadius: 5,
+                          cursor: "pointer", color: DS.danger, fontSize: 11,
+                          padding: "3px 10px", fontFamily: "inherit", fontWeight: 700 }}>
+                        Remove
+                      </button>
+                    </div>
+
+                    {[
+                      { key: "label", label: "Label", type: "text", placeholder: "Node name" },
+                      { key: "description", label: "Description", type: "textarea", placeholder: "What does this node represent? What drives it?" },
+                      { key: "owner", label: "Owner", type: "text", placeholder: "Who owns this variable?" },
+                      { key: "assumptions", label: "Key Assumptions", type: "textarea", placeholder: "What are we assuming about this node?" },
+                    ].map(field => (
+                      <div key={field.key} style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                          letterSpacing: .5, textTransform: "uppercase", marginBottom: 5 }}>
+                          {field.label}
+                        </div>
+                        {field.type === "textarea" ? (
+                          <textarea value={metaNodeData[field.key] || ""}
+                            onChange={e => updateNode(metaNodeData.id, { [field.key]: e.target.value })}
+                            placeholder={field.placeholder} rows={3}
+                            style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                              fontFamily: "inherit", background: DS.canvasAlt,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                              color: DS.ink, outline: "none", resize: "vertical",
+                              lineHeight: 1.5, boxSizing: "border-box" }}
+                            onFocus={e => e.target.style.borderColor = nt.color}
+                            onBlur={e => e.target.style.borderColor = DS.canvasBdr}/>
+                        ) : (
+                          <input value={metaNodeData[field.key] || ""}
+                            onChange={e => updateNode(metaNodeData.id, { [field.key]: e.target.value })}
+                            placeholder={field.placeholder}
+                            style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                              fontFamily: "inherit", background: DS.canvasAlt,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                              color: DS.ink, outline: "none", boxSizing: "border-box" }}
+                            onFocus={e => e.target.style.borderColor = nt.color}
+                            onBlur={e => e.target.style.borderColor = DS.canvasBdr}/>
+                        )}
+                      </div>
+                    ))}
+
+                    {metaNodeData.type === "uncertainty" && (
+                      <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                            letterSpacing: .5, textTransform: "uppercase", marginBottom: 5 }}>
+                            Impact Level
+                          </div>
+                          <select value={metaNodeData.impact || "High"}
+                            onChange={e => updateNode(metaNodeData.id, { impact: e.target.value })}
+                            style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                              fontFamily: "inherit", background: DS.canvasAlt,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                              color: DS.ink, outline: "none" }}>
+                            {["Critical", "High", "Medium", "Low"].map(v => <option key={v}>{v}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                            letterSpacing: .5, textTransform: "uppercase", marginBottom: 5 }}>
+                            Controllability
+                          </div>
+                          <select value={metaNodeData.control || "Low"}
+                            onChange={e => updateNode(metaNodeData.id, { control: e.target.value })}
+                            style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                              fontFamily: "inherit", background: DS.canvasAlt,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                              color: DS.ink, outline: "none" }}>
+                            {["High", "Medium", "Low", "No Control"].map(v => <option key={v}>{v}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Connections summary */}
+                    {edges.filter(e => e.from === metaNodeData.id || e.to === metaNodeData.id).length > 0 && (
+                      <div style={{ padding: "12px 14px", background: DS.canvasAlt,
+                        border: "1px solid " + DS.canvasBdr, borderRadius: 8, marginTop: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                          textTransform: "uppercase", letterSpacing: .5, marginBottom: 8 }}>
+                          Connections
+                        </div>
+                        {edges.filter(e => e.from === metaNodeData.id).length > 0 && (
+                          <div style={{ marginBottom: 6 }}>
+                            <span style={{ fontSize: 10, color: DS.inkTer }}>Influences → </span>
+                            {edges.filter(e => e.from === metaNodeData.id).map(e => {
+                              const t = nodes.find(n => n.id === e.to);
+                              const tn = NODE_TYPES[t?.type] || NODE_TYPES.uncertainty;
+                              return t ? (
+                                <span key={e.id} style={{ fontSize: 10, fontWeight: 600,
+                                  color: tn.color, marginRight: 6 }}>
+                                  {tn.icon} {t.label}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+                        {edges.filter(e => e.to === metaNodeData.id).length > 0 && (
+                          <div>
+                            <span style={{ fontSize: 10, color: DS.inkTer }}>← Influenced by </span>
+                            {edges.filter(e => e.to === metaNodeData.id).map(e => {
+                              const s = nodes.find(n => n.id === e.from);
+                              const sn = NODE_TYPES[s?.type] || NODE_TYPES.uncertainty;
+                              return s ? (
+                                <span key={e.id} style={{ fontSize: 10, fontWeight: 600,
+                                  color: sn.color, marginRight: 6 }}>
+                                  {sn.icon} {s.label}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+                  height: "100%", color: DS.inkTer, fontSize: 13 }}>
+                  Select a node from the list to edit its metadata
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── VALIDATE VIEW ── */}
+        {view === "validate" && (
+          <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+            {/* Stats grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 20 }}>
+              {[...Object.entries(NODE_TYPES).map(([type, nt]) => ({
+                icon: nt.icon, color: nt.color, label: nt.label,
+                val: nodes.filter(n => n.type === type).length,
+              })), {
+                icon: "→", color: DS.accent, label: "Edges",
+                val: edges.length,
+              }].map((item, i) => (
+                <div key={i} style={{ padding: "14px 16px", borderRadius: 8,
+                  background: item.color + "12", border: "1px solid " + item.color + "30",
+                  display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>{item.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: item.color,
+                      fontFamily: "'Libre Baskerville',serif" }}>{item.val}</div>
+                    <div style={{ fontSize: 10, color: "#6b7280" }}>{item.label}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Btn variant="primary" onClick={runValidation} style={{ marginBottom: 16 }}>
+              Run Structural Validation
+            </Btn>
+
+            {validation && (
+              <div style={{ marginBottom: 20 }}>
+                {validation.length === 0 ? (
+                  <div style={{ padding: "16px 18px", background: DS.successSoft,
+                    border: "1px solid " + DS.successLine, borderRadius: 8,
+                    color: DS.success, fontWeight: 700, fontSize: 13 }}>
+                    ✓ Diagram passes all structural checks. No orphans, disconnected nodes, or duplicate labels.
+                  </div>
+                ) : validation.map((v, i) => (
+                  <div key={i} style={{ padding: "11px 14px", marginBottom: 8,
+                    background: DS.dangerSoft, border: "1px solid " + DS.dangerLine,
+                    borderRadius: 8, display: "flex", gap: 10 }}>
+                    <span style={{ color: DS.danger, fontSize: 16, flexShrink: 0 }}>⚠</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: DS.ink, marginBottom: 2 }}>
+                        {v.node}
+                      </div>
+                      <div style={{ fontSize: 11, color: DS.inkSub }}>{v.msg}</div>
                     </div>
                   </div>
                 ))}
               </div>
+            )}
 
-              {/* Add uncertainty inline */}
-              <AddUncertaintyForm onAdd={add} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── DIAGRAM VIEW ── */}
-      {view==="diagram" && (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-          <div style={{ padding:"8px 20px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`,
-            display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
-            <button onClick={()=>setLinkMode(l=>!l)}
-              style={{ padding:"5px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-                border:`1px solid ${linkMode?DS.accent:DS.canvasBdr}`, borderRadius:5,
-                background:linkMode?DS.accentSoft:"transparent",
-                color:linkMode?DS.accent:DS.inkSub, cursor:"pointer" }}>
-              {linkMode ? (linkSource?"Click target to link…":"Click source to start link") : "Draw Influence Links"}
-            </button>
-            {linkMode && <span style={{ fontSize:11, color:DS.accent }}>Click two nodes to draw an influence arrow</span>}
-            <span style={{ marginLeft:"auto", fontSize:11, color:DS.inkTer }}>{items.length} nodes · {links.length} links</span>
-          </div>
-          <div style={{ flex:1, overflow:"auto", position:"relative", background:"#fafaf8" }}>
-            <svg style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", pointerEvents:"none" }}>
-              <defs>
-                <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                  <path d="M0,0 L0,6 L8,3 z" fill={DS.accent}/>
-                </marker>
-              </defs>
-              {links.map(lk => {
-                const from = items.find(i=>i.id===lk.from);
-                const to   = items.find(i=>i.id===lk.to);
-                if (!from||!to) return null;
-                const fx=from.x+90, fy=from.y+28, tx=to.x+90, ty=to.y+28;
-                const mx=(fx+tx)/2, my=(fy+ty)/2;
-                return (
-                  <g key={lk.id}>
-                    <line x1={fx} y1={fy} x2={tx} y2={ty} stroke={DS.accent}
-                      strokeWidth={2} strokeDasharray="5,3" markerEnd="url(#arrow)" opacity={.6}/>
-                    <text x={mx} y={my-6} textAnchor="middle" fontSize="9" fill={DS.accent}
-                      fontFamily="'IBM Plex Sans',sans-serif">influences</text>
-                  </g>
-                );
-              })}
-            </svg>
-            {items.map(item => {
-              const q = quadrant(item);
-              const isSrc = linkSource===item.id;
-              return (
-                <div key={item.id}
-                  onClick={()=>{ if(linkMode) handleLink(item.id); else setSelected(selected===item.id?null:item.id); }}
-                  style={{ position:"absolute", left:item.x, top:item.y,
-                    width:180, padding:"10px 12px", borderRadius:8, cursor:"pointer",
-                    border:`2px solid ${isSrc?DS.accent:q.color}`,
-                    background:selected===item.id||isSrc?q.bg:DS.canvas,
-                    boxShadow:isSrc?`0 0 0 3px ${DS.accentLine}`:"0 2px 8px rgba(0,0,0,.08)",
-                    userSelect:"none", transition:"all .12s" }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:q.color, marginBottom:4, lineHeight:1.35 }}>{item.label}</div>
-                  <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                    <span style={{ fontSize:9, fontWeight:700, color:q.color,
-                      padding:"1px 5px", borderRadius:3, background:q.color+"18" }}>{q.label}</span>
-                    <span style={{ fontSize:9, color:DS.inkTer }}>{item.type}</span>
-                  </div>
-                  {selected===item.id && (
-                    <button onClick={e=>{e.stopPropagation();remove(item.id);}}
-                      style={{ position:"absolute", top:4, right:4, background:"none", border:"none",
-                        cursor:"pointer", color:DS.danger, fontSize:12, lineHeight:1 }}>×</button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── DRIVERS VIEW ── */}
-      {view==="drivers" && (
-        <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
-          {!drivers ? (
-            <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10, color:DS.inkTer, fontSize:13 }}>
-              <div style={{ marginBottom:16 }}>Map your uncertainties in the matrix first, then run AI Key Driver Analysis.</div>
-              <Btn variant="primary" icon="spark" onClick={analyzeDrivers} disabled={aiBusy||analyzing||items.length<3}>
-                {analyzing?"Analysing…":"Run AI Key Driver Analysis"}
-              </Btn>
-            </div>
-          ) : (
-            <div style={{ maxWidth:860, margin:"0 auto" }}>
-              {drivers.overallInsight && (
-                <div style={{ marginBottom:24, padding:"16px 20px", background:DS.accentSoft,
-                  border:`1px solid ${DS.accentLine}`, borderRadius:9 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:DS.accent, letterSpacing:.8,
-                    textTransform:"uppercase", marginBottom:6 }}>Uncertainty Landscape</div>
-                  <div style={{ fontSize:13, color:DS.ink, lineHeight:1.65 }}>{drivers.overallInsight}</div>
-                </div>
-              )}
-
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
-                {/* Key drivers */}
-                {drivers.keyDrivers?.length > 0 && (
-                  <div>
-                    <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:15, fontWeight:700, color:DS.ink, marginBottom:12 }}>Key Drivers</div>
-                    {drivers.keyDrivers.map((d,i) => (
-                      <div key={i} style={{ padding:"14px 16px", background:DS.dangerSoft,
-                        border:`1px solid ${DS.dangerLine}`, borderRadius:8, marginBottom:10 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:DS.danger, marginBottom:5 }}>{d.id}</div>
-                        <div style={{ fontSize:12, color:DS.ink, lineHeight:1.55, marginBottom:8 }}>{d.reason}</div>
-                        <div style={{ fontSize:11, color:DS.inkSub, fontStyle:"italic" }}>Resolution path: {d.resolutionPath}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Deal breakers */}
-                {drivers.dealBreakers?.length > 0 && (
-                  <div>
-                    <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:15, fontWeight:700, color:DS.ink, marginBottom:12 }}>Deal-Breaker Scenarios</div>
-                    {drivers.dealBreakers.map((db,i) => (
-                      <div key={i} style={{ padding:"14px 16px", background:DS.warnSoft,
-                        border:`1px solid ${DS.warnLine}`, borderRadius:8, marginBottom:10 }}>
-                        <div style={{ display:"flex", gap:8, marginBottom:5, flexWrap:"wrap" }}>
-                          <Badge variant="warn" size="xs">{db.uncertainty}</Badge>
-                          <span style={{ fontSize:11, color:DS.inkTer }}>→</span>
-                          <Badge variant="default" size="xs">{db.strategy}</Badge>
-                        </div>
-                        <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>{db.scenario}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            {/* DQ principles */}
+            <div style={{ padding: "16px 18px", background: DS.canvasAlt,
+              border: "1px solid " + DS.canvasBdr, borderRadius: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 10 }}>
+                Influence Diagram DQ Principles
               </div>
-
-              {/* Resolution sequence */}
-              {drivers.resolutionSequence?.length > 0 && (
-                <div style={{ padding:"16px 20px", background:DS.successSoft,
-                  border:`1px solid ${DS.successLine}`, borderRadius:9 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:DS.success,
-                    letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>Recommended Resolution Sequence</div>
-                  {drivers.resolutionSequence.map((step,i) => (
-                    <div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}>
-                      <span style={{ width:22,height:22,borderRadius:5,background:DS.success,color:"#fff",
-                        fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",
-                        justifyContent:"center",flexShrink:0 }}>{i+1}</span>
-                      <span style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>{step}</span>
-                    </div>
-                  ))}
+              {[
+                "Decision nodes must have at least one outgoing influence — they must affect something.",
+                "Value/Outcome nodes must have at least one incoming influence — something must drive the outcome.",
+                "Value/Outcome nodes should not influence upstream nodes — they are terminal.",
+                "No circular dependencies — influence must flow in one direction only.",
+                "Every uncertainty should ultimately connect to a value node (directly or indirectly).",
+                "Orphan nodes (no connections) are not contributing to the model — link or remove them.",
+                "Duplicate node labels suggest redundant thinking — consolidate into one node.",
+                "Every diagram needs at least one value node — what is this decision optimising for?",
+              ].map((rule, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6,
+                  fontSize: 11, color: DS.inkSub, lineHeight: 1.5 }}>
+                  <span style={{ color: DS.accent, flexShrink: 0 }}>·</span>
+                  <span>{rule}</span>
                 </div>
-              )}
-
-              {/* Modelling candidates */}
-              {drivers.modellingCandidates?.length > 0 && (
-                <div style={{ marginTop:16, padding:"12px 16px", background:DS.canvasAlt,
-                  border:`1px solid ${DS.canvasBdr}`, borderRadius:8 }}>
-                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
-                    letterSpacing:.8, textTransform:"uppercase", marginBottom:6 }}>Worth Quantitative Modelling</div>
-                  <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
-                    {drivers.modellingCandidates.map((c,i)=>(
-                      <Badge key={i} variant="blue">{c}</Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
+              ))}
             </div>
-          )}
+          </div>
+        )}
+
+      </div>
+    </div>
+
+
+      {/* ── FINANCIAL MODEL MODAL ── */}
+      {showModelModal && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:24 }}>
+          <div style={{ background:DS.canvas,borderRadius:12,width:"100%",maxWidth:520,boxShadow:"0 24px 60px rgba(0,0,0,.25)",border:"1px solid "+DS.canvasBdr,overflow:"hidden" }}>
+            <div style={{ padding:"16px 20px",background:DS.ink,display:"flex",alignItems:"center",gap:10 }}>
+              <div style={{ flex:1,fontFamily:"'Libre Baskerville',serif",fontSize:16,fontWeight:700,color:"#fff" }}>📊 Build Financial Model</div>
+              <button onClick={()=>setShowModelModal(false)} style={{ background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:18 }}>×</button>
+            </div>
+            <div style={{ padding:20 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12 }}>
+                {[["investment","Initial Investment (M)"],["baseRevenue","Year 1 Revenue Base (M)"],["growthRate","Annual Growth Rate (%)"],["costMargin","Cost as % of Revenue"],["discount","Discount Rate / WACC (%)"],["horizon","Forecast Horizon (years)"]].map(([key,label])=>(
+                  <div key={key}>
+                    <div style={{ fontSize:10,fontWeight:700,color:DS.inkTer,marginBottom:4 }}>{label}</div>
+                    <input value={modelParams[key]||""} onChange={e=>setModelParams(p=>({...p,[key]:e.target.value}))}
+                      style={{ width:"100%",padding:"7px 10px",fontSize:12,fontFamily:"inherit",background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,borderRadius:5,color:DS.ink,outline:"none",boxSizing:"border-box" }}/>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display:"flex",gap:8,justifyContent:"flex-end",marginTop:8 }}>
+                <Btn variant="secondary" onClick={()=>setShowModelModal(false)}>Cancel</Btn>
+                <Btn variant="primary" onClick={buildFinancialModel} disabled={buildingModel||aiBusy}>
+                  {buildingModel?"Building…":"Build Model"}
+                </Btn>
+              </div>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+
+      {/* ── FINANCIAL MODEL RESULT ── */}
+      {showModelResult && modelResult && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:500,overflowY:"auto",padding:"24px 16px" }}>
+          <div style={{ width:"100%",maxWidth:900,background:DS.canvas,borderRadius:14,boxShadow:"0 32px 80px rgba(0,0,0,.3)",overflow:"hidden" }}>
+            <div style={{ padding:"20px 28px",display:"flex",alignItems:"center",background:"linear-gradient(135deg,#1e2433,#2d3748)" }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:18,fontWeight:700,color:"#fff",marginBottom:2 }}>📊 {modelResult.modelTitle||"Financial Model"}</div>
+                <div style={{ fontSize:11,color:"#93c5fd" }}>{modelResult.scenarioBase}</div>
+              </div>
+              <div style={{ display:"flex",gap:8 }}>
+                <button onClick={()=>downloadExcel(modelResult)} style={{ padding:"5px 12px",border:"1px solid rgba(255,255,255,.3)",borderRadius:5,cursor:"pointer",color:"#fff",background:"rgba(255,255,255,.1)",fontSize:11,fontWeight:700,fontFamily:"inherit" }}>⬇ Download</button>
+                <button onClick={()=>setShowModelResult(false)} style={{ background:"none",border:"1px solid rgba(255,255,255,.2)",borderRadius:5,cursor:"pointer",color:"rgba(255,255,255,.7)",fontSize:11,padding:"5px 10px",fontFamily:"inherit" }}>Close ×</button>
+              </div>
+            </div>
+            <div id="vdq-model-print-area" style={{ padding:"24px 28px",overflowY:"auto",maxHeight:"80vh" }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:20 }}>
+                {[{metric:"NPV",key:"npv",unit:(modelResult.params?.currency||"$")+"M"},{metric:"IRR",key:"irr",unit:"%"},{metric:"Payback",key:"payback",unit:"yrs"}].map(item=>(
+                  <div key={item.key} style={{ borderRadius:8,overflow:"hidden",border:"1px solid "+DS.canvasBdr }}>
+                    <div style={{ padding:"7px 12px",background:"#1e2433",fontSize:10,fontWeight:700,color:"#94a3b8" }}>📊 {item.metric}</div>
+                    {[{sc:"low",col:"#dc2626",bg:"#fff5f5"},{sc:"base",col:"#2563eb",bg:"#eff6ff"},{sc:"high",col:"#059669",bg:"#f0fdf4"}].map(r=>(
+                      <div key={r.sc} style={{ padding:"8px 12px",background:r.bg,display:"flex",justifyContent:"space-between",borderBottom:"1px solid "+DS.canvasBdr }}>
+                        <span style={{ fontSize:10,color:r.col,fontWeight:700,textTransform:"capitalize" }}>{r.sc}</span>
+                        <span style={{ fontSize:15,fontWeight:700,color:r.col,fontFamily:"'Libre Baskerville',serif" }}>{modelResult[item.key]?.[r.sc]??"-"}{item.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              {(modelResult.keyRisks||[]).length>0&&(
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:12,fontWeight:700,color:DS.ink,marginBottom:8,borderBottom:"2px solid #dc2626",paddingBottom:4 }}>Key Risks</div>
+                  {modelResult.keyRisks.map((r,i)=><div key={i} style={{ padding:"7px 10px",marginBottom:4,background:"#fff5f5",borderLeft:"3px solid #dc2626",borderRadius:4,fontSize:11,color:DS.inkSub }}>⚠ {r}</div>)}
+                </div>
+              )}
+              {modelResult.notes&&<div style={{ fontSize:11,color:DS.inkTer,padding:"10px",background:DS.canvasAlt,borderRadius:6,border:"1px solid "+DS.canvasBdr }}>{modelResult.notes}</div>}
+            </div>
+          </div>
+        </div>
+      )}
   );
 }
-
-function AddUncertaintyForm({ onAdd }) {
-  const [label,   setLabel]   = useState("");
-  const [type,    setType]    = useState("Market");
-  const [impact,  setImpact]  = useState("High");
-  const [control, setControl] = useState("Some Control");
-  const submit = () => {
-    if (!label.trim()) return;
-    onAdd({ label:label.trim(), type, impact, control, description:label.trim(), source:"manual" });
-    setLabel("");
-  };
-  return (
-    <div style={{ display:"flex", gap:8, flexWrap:"wrap", padding:"14px 16px",
-      background:DS.canvasAlt, borderRadius:9, border:`1px solid ${DS.canvasBdr}` }}>
-      <input value={label} onChange={e=>setLabel(e.target.value)}
-        onKeyDown={e=>e.key==="Enter"&&submit()}
-        placeholder="Add an uncertainty…"
-        style={{ flex:1, minWidth:200, padding:"8px 12px", fontSize:12, fontFamily:"inherit",
-          background:DS.canvas, border:`1px solid ${DS.canvasBdr}`, borderRadius:6,
-          color:DS.ink, outline:"none" }}
-        onFocusCapture={e=>e.target.style.borderColor=DS.accent}
-        onBlurCapture={e=>e.target.style.borderColor=DS.canvasBdr}/>
-      <Select value={type} onChange={setType} options={UNCERTAINTY_TYPES.map(t=>({value:t,label:t}))} style={{ width:130 }}/>
-      <Select value={impact} onChange={setImpact} options={IMPACT_LEVELS.map(t=>({value:t,label:t+" impact"}))} style={{ width:140 }}/>
-      <Select value={control} onChange={setControl} options={CONTROL_LEVELS.map(t=>({value:t,label:t}))} style={{ width:150 }}/>
-      <Btn variant="primary" icon="plus" onClick={submit}>Add</Btn>
-    </div>
-  );
-}
-
 
 
 function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssues, onStrategies, onExit, aiCall, aiBusy, onAIMsg }) {
@@ -6646,6 +7400,8 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
   const [generating, setGenerating]   = useState(false);
   const [filling, setFilling]         = useState(false);
   const [fillingScenarios, setFillingScenarios] = useState(false);
+  const [scenarioMode, setScenarioMode] = useState(null);
+  const [multiScenarios, setMultiScenarios] = useState([]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const addUnc = () => setUncs(prev => [...prev, {
@@ -6756,6 +7512,30 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
       setFillingScenarios(false);
     });
   };
+
+
+  const generateMultiScenarios = () => {
+    setFillingScenarios(true);
+    const uncList = sortedUncs.map((u,i)=>(i+1)+". "+u.label+" (Impact: "+u.impact+", Uncertainty: "+u.uncertainty+")").join("\n");
+    aiCall(
+      "You are a scenario planning expert. Generate 4 distinct, plausible future scenarios from this full set of uncertainties. "+
+      "Each scenario should specify how each uncertainty resolves in a coherent future world. "+
+      "Scenarios must be meaningfully different — not simply optimistic/pessimistic. "+
+      "Decision: "+(problem?.decisionStatement||"Not defined")+".\nUncertainties:\n"+uncList+"\n\n"+
+      "Return ONLY JSON: "+
+      '{"scenarios":[{"id":"s1","name":"Scenario name","narrative":"2-3 sentence story","uncertaintyResolutions":{"uncertainty label":"how it resolves"},"assumptions":"key assumptions","earlyWarningIndicators":"2-3 signposts","risks":"strategic risks","opportunities":"strategic opportunities"}],"insight":"observation"}',
+    (r)=>{
+      let result=r;
+      if(r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setFillingScenarios(false);return;}}
+      if(!result||result.error){setFillingScenarios(false);return;}
+      const newScens=(result.scenarios||[]).map((s,i)=>({id:uid("sc"),name:s.name||"Scenario "+(i+1),narrative:s.narrative||"",assumptions:s.assumptions||"",earlyWarningIndicators:s.earlyWarningIndicators||"",risks:s.risks||"",opportunities:s.opportunities||"",uncertaintyResolutions:s.uncertaintyResolutions||{},pos:null}));
+      setMultiScenarios(newScens);
+      setScenarios(newScens);
+      onAIMsg({role:"ai",text:result.insight||("Generated "+newScens.length+" scenarios from all "+sortedUncs.length+" uncertainties.")});
+      setFillingScenarios(false);
+    });
+  };
+
 
   // ── AI: fill performance matrix ───────────────────────────────────────────
   const fillMatrix = () => {
