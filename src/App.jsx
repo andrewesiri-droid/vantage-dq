@@ -552,6 +552,7 @@ function ProjectSetupModal({ data, onChange, onClose }) {
 function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onAIMsg, onAISend }) {
   const [tab, setTab] = useState("frame");
   const [checking, setChecking] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   const upd = (key, val) => onChange({ ...data, [key]: val });
   const updStakeholder = (id, key, val) =>
@@ -599,6 +600,64 @@ Evaluate strictly. Return ONLY valid JSON:
     { id:"outcomes",     label:"Outcomes" },
     { id:"validation",   label:"AI Validation" },
   ];
+
+  const applyImprovements = () => {
+    const v = data.aiValidation;
+    if (!v) return;
+    setApplying(true);
+
+    // Build a prompt that asks the AI to rewrite ALL flagged fields
+    const flaggedFields = (v.flags||[]).map(f => f.field + ": " + f.message).join("\n");
+    const missingElements = (v.missingElements||[]).join(", ");
+
+    aiCall(dqPrompt(
+      "You are a senior Decision Quality expert rewriting a decision frame to address validation flags. " +
+      "Current decision frame:\n" +
+      "Decision Statement: \"" + (data.decisionStatement||"") + "\"\n" +
+      "Context: \"" + (data.context||"") + "\"\n" +
+      "Scope In: \"" + (data.scopeIn||"") + "\"\n" +
+      "Scope Out: \"" + (data.scopeOut||"") + "\"\n" +
+      "Success Criteria: \"" + (data.successCriteria||"") + "\"\n" +
+      "Owner: \"" + (data.owner||"") + "\"\n" +
+      "Deadline: \"" + (data.deadline||"") + "\"\n" +
+      "Constraints: \"" + (data.constraints||"") + "\"\n" +
+      "Assumptions: \"" + (data.assumptions||"") + "\"\n" +
+      "\nValidation flags to fix:\n" + flaggedFields + "\n" +
+      "Missing elements to add: " + missingElements + "\n" +
+      "Improved statement already suggested: \"" + (v.improvedStatement||"") + "\"\n" +
+      "Hidden assumptions identified: " + (v.hiddenAssumptions||[]).join(", ") + "\n\n" +
+      "Rewrite ALL fields to address every flag. Be specific and concrete. " +
+      "Return ONLY JSON with improved values for each field (omit unchanged fields):\n" +
+      '{"decisionStatement":"improved statement","context":"improved context","scopeIn":"what is in scope","scopeOut":"what is excluded","successCriteria":"measurable success criteria","constraints":"real constraints","assumptions":"key assumptions now explicit","owner":"if missing"}'
+    ), (r) => {
+      let result = r;
+      if (r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); } catch(e) { setApplying(false); return; } }
+      if (result.error) { setApplying(false); return; }
+
+      // Apply each improved field that was returned
+      const updates = {};
+      const fieldMap = {
+        decisionStatement: "decisionStatement",
+        context: "context",
+        scopeIn: "scopeIn",
+        scopeOut: "scopeOut",
+        successCriteria: "successCriteria",
+        constraints: "constraints",
+        assumptions: "assumptions",
+        owner: "owner",
+      };
+      Object.entries(fieldMap).forEach(([aiKey, dataKey]) => {
+        if (result[aiKey] && result[aiKey].trim()) {
+          updates[dataKey] = result[aiKey];
+        }
+      });
+
+      // Apply all updates at once
+      onChange({ ...data, ...updates });
+      setApplying(false);
+      onAIMsg({ role:"ai", text: "Applied improvements to " + Object.keys(updates).length + " fields: " + Object.keys(updates).join(", ") + ". Re-run Frame Check to see the new score." });
+    });
+  };
 
   const scoreColor = (s) => s>=75 ? DS.success : s>=50 ? DS.warning : DS.danger;
   const statusVar = (s) => s==="strong"?"green":s==="adequate"?"warn":"danger";
@@ -944,6 +1003,26 @@ Evaluate strictly. Return ONLY valid JSON:
                   </div>
                 </div>
 
+                {/* Apply All Improvements banner */}
+                {data.aiValidation.overallScore < 90 && (
+                  <div style={{ margin:"16px 0", padding:"14px 16px",
+                    background:DS.accentSoft, border:"1px solid "+DS.accentLine,
+                    borderRadius:8, display:"flex", alignItems:"center", gap:14 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:DS.accent, marginBottom:3 }}>
+                        Apply AI improvements to all flagged fields
+                      </div>
+                      <div style={{ fontSize:11, color:DS.inkTer, lineHeight:1.5 }}>
+                        Rewrites decision statement, context, scope, success criteria and assumptions to address every flag. Re-run Frame Check after to see your new score.
+                      </div>
+                    </div>
+                    <Btn variant="primary" onClick={applyImprovements}
+                      disabled={applying||aiBusy} style={{ flexShrink:0 }}>
+                      {applying ? "Applying…" : "✓ Apply All Improvements"}
+                    </Btn>
+                  </div>
+                )}
+
                 {/* Flags */}
                 {data.aiValidation.flags?.length > 0 && (
                   <SectionCard title="Validation Flags">
@@ -972,9 +1051,15 @@ Evaluate strictly. Return ONLY valid JSON:
                       <div style={{ fontSize:13, color:DS.ink, lineHeight:1.6, fontStyle:"italic" }}>
                         "{data.aiValidation.improvedStatement}"
                       </div>
-                      <div style={{ marginTop:12 }}>
-                        <Btn variant="secondary" size="sm" onClick={()=>upd("decisionStatement", data.aiValidation.improvedStatement)}>
-                          Apply Improvement
+                      <div style={{ marginTop:12, display:"flex", gap:8, flexWrap:"wrap" }}>
+                        <Btn variant="secondary" size="sm"
+                          onClick={()=>upd("decisionStatement", data.aiValidation.improvedStatement)}>
+                          Apply Statement Only
+                        </Btn>
+                        <Btn variant="primary" size="sm"
+                          onClick={applyImprovements}
+                          disabled={applying||aiBusy}>
+                          {applying ? "Applying…" : "✓ Apply All Improvements"}
                         </Btn>
                       </div>
                     </SectionCard>
