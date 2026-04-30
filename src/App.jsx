@@ -11746,14 +11746,27 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
 
   // ── LANDING ──
   if (phase === "landing") return (
-    <div style={{ ...overlay, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <style>{sharedStyles}</style>
-      <div style={{ width:"100%", maxWidth:700, padding:"40px 32px", animation:"fadeUp .4s ease" }}>
+    <div style={{ ...overlay, display:"flex", alignItems:"center", justifyContent:"center",
+      background:"linear-gradient(135deg,#0d1117 0%,#0f172a 50%,#0d1117 100%)" }}>
+      <style>{`
+        @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+        @keyframes shimmer{0%,100%{opacity:.4}50%{opacity:1}}
+        .qs-card:hover { transform:translateY(-3px)!important; box-shadow:0 16px 48px rgba(0,0,0,.4)!important; }
+        .qs-card:hover .qs-icon { transform:scale(1.1); }
+        .qs-card { transition:transform .2s ease, box-shadow .2s ease!important; }
+        .qs-icon { transition:transform .2s ease; }
+      `}</style>
 
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:52 }}>
-          <div style={{ width:34, height:34, borderRadius:7, background:DS.accent,
-            display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+      <div style={{ width:"100%", maxWidth:820, padding:"40px 32px", animation:"fadeUp .5s ease" }}>
+
+        {/* Logo */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:48 }}>
+          <div style={{ width:36, height:36, borderRadius:9,
+            background:"linear-gradient(135deg,#2563eb,#7c3aed)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            boxShadow:"0 4px 16px rgba(37,99,235,.4)" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
               <polygon points="12,2 22,8.5 22,15.5 12,22 2,15.5 2,8.5"/>
               <line x1="12" y1="2" x2="12" y2="22"/>
               <line x1="2" y1="8.5" x2="22" y2="8.5"/>
@@ -11761,63 +11774,142 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
             </svg>
           </div>
           <div>
-            <div style={{ fontSize:15, fontWeight:700, color:DS.textPri, letterSpacing:-.1 }}>Vantage DQ</div>
-            <div style={{ fontSize:9, color:DS.textTer, letterSpacing:1.5, textTransform:"uppercase" }}>Decision Quality Platform</div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#f1f5f9", letterSpacing:-.2 }}>Vantage DQ</div>
+            <div style={{ fontSize:9, color:"#475569", letterSpacing:1.8, textTransform:"uppercase" }}>
+              Decision Quality Platform
+            </div>
           </div>
         </div>
 
-        <div style={{ marginBottom:44 }}>
-          <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:38, fontWeight:700,
-            color:DS.textPri, lineHeight:1.12, letterSpacing:-.5, marginBottom:16 }}>
-            Start with your<br/>problem, not a blank page.
+        {/* Headline */}
+        <div style={{ marginBottom:48 }}>
+          <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif",
+            fontSize:42, fontWeight:700, color:"#f1f5f9",
+            lineHeight:1.1, letterSpacing:-.5, marginBottom:16 }}>
+            Make better decisions.<br/>
+            <span style={{ background:"linear-gradient(90deg,#3b82f6,#7c3aed)",
+              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
+              With rigour.
+            </span>
           </div>
-          <div style={{ fontSize:14, color:DS.textSec, lineHeight:1.7, maxWidth:520 }}>
-            Paste a brief, memo, board paper, or rough description of your decision. Vantage reads it through a Decision Quality lens and builds your first draft — frame, issues, hierarchy, criteria, and strategies — in seconds.
+          <div style={{ fontSize:15, color:"#64748b", lineHeight:1.7, maxWidth:540 }}>
+            A structured Decision Quality environment for teams making high-stakes decisions
+            under uncertainty.
           </div>
         </div>
 
+        {/* 4 option cards */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:32 }}>
           {[
-            { mode:"paste", emoji:"📄", title:"Paste or drop text",
-              desc:"Board paper, strategy memo, brief, case study, email thread, or any description of the decision problem." },
-            { mode:"guided", emoji:"🗂", title:"Answer 5 questions",
-              desc:"No document? Answer five quick questions about the decision and we'll structure the draft from your answers." },
-          ].map(opt => (
-            <button key={opt.mode} onClick={()=>{ setInputMode(opt.mode); setPhase("input"); }}
-              style={{ padding:"22px 22px", background:DS.chromeMid, border:`1.5px solid ${DS.borderMid}`,
-                borderRadius:10, cursor:"pointer", textAlign:"left", transition:"all .15s", fontFamily:"inherit" }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=DS.accent; e.currentTarget.style.background=DS.chromeSub;}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.borderMid; e.currentTarget.style.background=DS.chromeMid;}}>
-              <div style={{ fontSize:24, marginBottom:11 }}>{opt.emoji}</div>
-              <div style={{ fontSize:13, fontWeight:700, color:DS.textPri, marginBottom:6 }}>{opt.title}</div>
-              <div style={{ fontSize:11, color:DS.textTer, lineHeight:1.55 }}>{opt.desc}</div>
+            {
+              mode:"paste",
+              icon:"📄",
+              label:"AI Deep Dive",
+              sublabel:"Fastest start",
+              desc:"Paste a brief, memo, board paper or any text — AI structures your complete decision frame in seconds.",
+              color:"#3b82f6",
+              gradient:"linear-gradient(135deg,#1e3a5f,#1e40af)",
+              action:()=>{ setInputMode("paste"); setPhase("input"); },
+              featured:true,
+            },
+            {
+              mode:"guided",
+              icon:"🗂",
+              label:"Guided Questions",
+              sublabel:"No document needed",
+              desc:"Answer 5 focused questions about your decision. We build the frame from your answers.",
+              color:"#7c3aed",
+              gradient:"linear-gradient(135deg,#2e1065,#5b21b6)",
+              action:()=>{ setInputMode("guided"); setPhase("input"); },
+              featured:false,
+            },
+            {
+              mode:"clean",
+              icon:"◌",
+              label:"Start Clean",
+              sublabel:"Blank workspace",
+              desc:"Begin with a completely blank workspace. Your decision, your frame, your way.",
+              color:"#059669",
+              gradient:"linear-gradient(135deg,#064e3b,#065f46)",
+              action:()=>onSkip("clean"),
+              featured:false,
+            },
+            {
+              mode:"example",
+              icon:"🌏",
+              label:"Load Example",
+              sublabel:"APAC market entry",
+              desc:"Explore a pre-built decision to see how Vantage DQ works end-to-end before you start.",
+              color:"#d97706",
+              gradient:"linear-gradient(135deg,#451a03,#78350f)",
+              action:()=>onSkip("example"),
+              featured:false,
+            },
+          ].map((opt,i)=>(
+            <button key={opt.mode} className="qs-card" onClick={opt.action}
+              style={{ padding:"24px 26px", textAlign:"left",
+                background:opt.featured
+                  ? "linear-gradient(135deg,#1e3a5f 0%,#1e2d45 100%)"
+                  : "rgba(255,255,255,.04)",
+                border:`1.5px solid ${opt.featured?"#3b82f680":"rgba(255,255,255,.08)"}`,
+                borderRadius:14, cursor:"pointer",
+                fontFamily:"inherit",
+                position:"relative", overflow:"hidden",
+                boxShadow:opt.featured?"0 8px 32px rgba(37,99,235,.25)":"none" }}>
+
+              {/* Subtle gradient top border */}
+              <div style={{ position:"absolute", top:0, left:0, right:0, height:2,
+                background:opt.gradient, opacity:.8 }}/>
+
+              {/* Featured badge */}
+              {opt.featured && (
+                <div style={{ position:"absolute", top:12, right:12,
+                  fontSize:8, fontWeight:700, letterSpacing:.5,
+                  textTransform:"uppercase", padding:"2px 8px",
+                  background:"rgba(59,130,246,.2)",
+                  border:"1px solid rgba(59,130,246,.3)",
+                  borderRadius:4, color:"#93c5fd" }}>
+                  Recommended
+                </div>
+              )}
+
+              {/* Icon */}
+              <div className="qs-icon" style={{ fontSize:28, marginBottom:14,
+                display:"inline-block" }}>{opt.icon}</div>
+
+              {/* Labels */}
+              <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:6 }}>
+                <div style={{ fontSize:16, fontWeight:700, color:"#f1f5f9",
+                  letterSpacing:-.2 }}>{opt.label}</div>
+                <div style={{ fontSize:10, color:opt.color, fontWeight:600 }}>
+                  {opt.sublabel}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div style={{ fontSize:12, color:"#64748b", lineHeight:1.6 }}>
+                {opt.desc}
+              </div>
+
+              {/* Arrow */}
+              <div style={{ position:"absolute", bottom:20, right:20,
+                fontSize:14, color:opt.color, opacity:.7 }}>→</div>
             </button>
           ))}
         </div>
 
-        <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-          <button onClick={()=>onSkip("clean")}
-            style={{ background:"none", border:"1px dashed "+DS.border, cursor:"pointer",
-              color:DS.textTer, fontSize:12, fontFamily:"inherit",
-              display:"flex", alignItems:"center", gap:6,
-              padding:"7px 14px", borderRadius:6 }}>
-            <Svg path={ICONS.plus} size={13} color={DS.textTer}/>
-            Start Clean
-          </button>
-          <div style={{ height:1, flex:1, background:DS.border, minWidth:20 }}/>
-          <button onClick={()=>onSkip("example")}
-            style={{ background:"none", border:"none", cursor:"pointer", color:DS.textTer,
-              fontSize:12, fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
-              padding:"7px 0" }}>
-            <Svg path={ICONS.chevR} size={13} color={DS.textTer}/>
-            Load APAC example
-          </button>
+        {/* Footer */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+          gap:24 }}>
+          <div style={{ fontSize:11, color:"#334155" }}>
+            11 modules · AI-powered · Built for high-stakes decisions
+          </div>
         </div>
       </div>
     </div>
   );
 
-  // ── INPUT ──
+  // ── INPUT  ──
   if (phase === "input") return (
     <div style={{ ...overlay, display:"flex", flexDirection:"column" }}>
       <style>{sharedStyles}</style>
