@@ -8493,8 +8493,8 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
         <div style={{padding:"0 20px 8px",display:"flex",gap:2}}>
           {[
             {id:"uncertainties",label:"1. Uncertainties"},
-            {id:"matrix2x2",label:"2. Select Axes",hidden:scenarioMode==="multi"||scenarioMode===null},
-            {id:"multi",label:"2. Multi-Scenario",hidden:scenarioMode==="2x2"||scenarioMode===null},
+            {id:"matrix2x2",label:"2. Select Axes",hidden:scenarioMode==="multi"},
+            {id:"multi",label:"2. Multi-Scenario",hidden:scenarioMode==="2x2"},
             {id:"scenarios",label:"3. Scenarios",hidden:scenarioMode==="multi"},
             {id:"test",label:scenarioMode==="multi"?"3. Test Strategies":"4. Test Strategies"},
             {id:"insights",label:scenarioMode==="multi"?"4. Robustness":"5. Robustness"},
