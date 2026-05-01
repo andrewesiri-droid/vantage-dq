@@ -4431,7 +4431,7 @@ Return ONLY JSON:
                                         const isSel = selected.includes(idx);
                                         return (
                                           <button key={idx}
-                                            onClick={()=>toggleSelection(s.id,d.id,idx)}
+                                            onClick={()=>selectCell(s.id,d.id,idx)}
                                             style={{ padding:"5px 10px",fontSize:11,
                                               fontFamily:"inherit",cursor:"pointer",
                                               textAlign:"left",
