@@ -6621,7 +6621,7 @@ function GaugeArc({ score, size=120, color }) {
 }
 
 function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, assessmentScores, brief,
-  scores, onScores, aiCall, aiBusy, onAIMsg }) {
+  scores, onScores, stakeholders, scenarioData, voiItems, aiCall, aiBusy, onAIMsg }) {
 
   const [generating, setGenerating]   = useState(false);
   const [narrative, setNarrative]     = useState(null);
@@ -6638,6 +6638,174 @@ function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, a
 
   const scoreColor  = (s) => s===0?DS.inkDis:s>=70?DS.success:s>=45?DS.warning:DS.danger;
   const scoreVariant= (s) => s===0?"default":s>=70?"green":s>=45?"warn":"danger";
+  const [autoPanel, setAutoPanel] = useState(false);
+  const [autoScores, setAutoScores] = useState(null);
+
+  // ── COMPUTE SIGNALS FROM PLATFORM DATA ────────────────────────────────────
+  // Each element returns { suggested: 0-100, confidence: "high|medium|low", evidence: string[] }
+  const computeSignals = () => {
+    const focusDecs = decisions.filter(d => d.tier === "focus");
+    const infoGapIssues = issues.filter(i =>
+      i.category === "information-gap" || i.category?.includes("uncertainty")
+    );
+    const criticalIssues = issues.filter(i => i.severity === "Critical");
+    const scoredCells = Object.keys(assessmentScores).length;
+    const totalCells = strategies.length * criteria.length;
+    const scoredPct = totalCells > 0 ? scoredCells / totalCells : 0;
+    const stakeList = stakeholders || [];
+    const blockers = stakeList.filter(s => s.alignment === "blocker");
+    const champions = stakeList.filter(s => s.alignment === "champion");
+    const scenarios = scenarioData?.scenarios || [];
+    const perfMatrix = scenarioData?.perfMatrix || {};
+    const voiClassified = (voiItems || []).filter(x => x.classification);
+
+    // ── FRAME ────────────────────────────────────────────────────────────────
+    const frameSigs = [];
+    let frameScore = 0;
+    if (problem.decisionStatement?.length > 30) { frameScore += 20; frameSigs.push("Decision statement present and substantive"); }
+    else frameSigs.push("⚠ Decision statement missing or very short");
+    if (problem.owner?.length > 2) { frameScore += 15; frameSigs.push("Decision owner named: " + problem.owner); }
+    else frameSigs.push("⚠ No decision owner specified");
+    if (problem.scopeIn?.length > 10) { frameScore += 15; frameSigs.push("Scope-in defined"); }
+    else frameSigs.push("⚠ Scope-in not defined");
+    if (problem.scopeOut?.length > 10) { frameScore += 10; frameSigs.push("Scope-out defined"); }
+    if (problem.deadline?.length > 2) { frameScore += 10; frameSigs.push("Deadline set: " + problem.deadline); }
+    else frameSigs.push("⚠ No decision deadline");
+    if (problem.successCriteria?.length > 10) { frameScore += 15; frameSigs.push("Success criteria defined"); }
+    else frameSigs.push("⚠ Success criteria missing");
+    if (problem.constraints?.length > 5) { frameScore += 15; frameSigs.push("Constraints documented"); }
+
+    // ── ALTERNATIVES ─────────────────────────────────────────────────────────
+    const altSigs = [];
+    let altScore = 0;
+    if (strategies.length === 0) { altSigs.push("⚠ No strategies built yet"); }
+    else if (strategies.length === 1) { altScore += 15; altSigs.push("⚠ Only 1 strategy — DQ requires ≥3 genuine alternatives"); }
+    else if (strategies.length === 2) { altScore += 30; altSigs.push("⚠ 2 strategies — consider a third genuine alternative"); }
+    else { altScore += 50; altSigs.push(strategies.length + " strategies developed"); }
+    const filledStrats = strategies.filter(s => Object.keys(s.selections||{}).length >= Math.ceil(focusDecs.length * 0.7));
+    if (filledStrats.length === strategies.length && strategies.length > 0) {
+      altScore += 25; altSigs.push("All strategies have decision selections");
+    } else if (filledStrats.length > 0) {
+      altScore += 10; altSigs.push(filledStrats.length + "/" + strategies.length + " strategies fully specified");
+    }
+    const withObjectives = strategies.filter(s => s.objective?.length > 10);
+    if (withObjectives.length === strategies.length && strategies.length > 0) {
+      altScore += 15; altSigs.push("All strategies have clear objectives");
+    } else if (withObjectives.length > 0) {
+      altSigs.push("⚠ " + (strategies.length - withObjectives.length) + " strategies missing objectives");
+    }
+    if (strategies.length > 0 && focusDecs.length === 0) {
+      altScore = Math.min(altScore, 40);
+      altSigs.push("⚠ No Focus decisions — strategies may not be truly distinct");
+    }
+
+    // ── INFORMATION ──────────────────────────────────────────────────────────
+    const infoSigs = [];
+    let infoScore = 0;
+    if (infoGapIssues.length === 0) { infoSigs.push("⚠ No uncertainties or information gaps raised in Issue Raising"); }
+    else { infoScore += 20; infoSigs.push(infoGapIssues.length + " uncertainties/info gaps identified"); }
+    if (criticalIssues.length > 0) { infoScore += 10; infoSigs.push(criticalIssues.length + " critical issues flagged"); }
+    const uncNodes = (scenarioData?.uncertainties || []).length;
+    if (uncNodes > 0) { infoScore += 20; infoSigs.push(uncNodes + " uncertainties in scenario planning"); }
+    if (scenarios.length > 0) { infoScore += 20; infoSigs.push(scenarios.length + " scenarios developed"); }
+    else infoSigs.push("⚠ No scenarios built — key uncertainty not stress-tested");
+    if (voiClassified.length > 0) { infoScore += 20; infoSigs.push(voiClassified.length + " VoI items classified"); }
+    else infoSigs.push("⚠ Value of Information not assessed");
+    if (problem.keyUncertainties?.length > 20) { infoScore += 10; infoSigs.push("Key uncertainties documented in problem frame"); }
+
+    // ── VALUES ───────────────────────────────────────────────────────────────
+    const valuesSigs = [];
+    let valuesScore = 0;
+    if (criteria.length === 0) { valuesSigs.push("⚠ No decision criteria defined"); }
+    else if (criteria.length < 3) { valuesScore += 20; valuesSigs.push("⚠ Only " + criteria.length + " criteria — consider 4-7 for balanced evaluation"); }
+    else { valuesScore += 35; valuesSigs.push(criteria.length + " decision criteria defined"); }
+    const withDesc = criteria.filter(cr => cr.description?.length > 10);
+    if (withDesc.length === criteria.length && criteria.length > 0) {
+      valuesScore += 20; valuesSigs.push("All criteria have descriptions");
+    }
+    if (scoredPct > 0.8) { valuesScore += 30; valuesSigs.push(Math.round(scoredPct*100) + "% of assessment matrix scored"); }
+    else if (scoredPct > 0.4) { valuesScore += 15; valuesSigs.push(Math.round(scoredPct*100) + "% of assessment matrix scored"); valuesSigs.push("⚠ Assessment incomplete"); }
+    else if (scoredPct > 0) { valuesScore += 5; valuesSigs.push("⚠ Assessment barely started (" + Math.round(scoredPct*100) + "%)"); }
+    else { valuesSigs.push("⚠ Qualitative assessment not started"); }
+    if (brief) { valuesScore += 15; valuesSigs.push("Decision brief generated from assessment"); }
+
+    // ── REASONING ────────────────────────────────────────────────────────────
+    const reasonSigs = [];
+    let reasonScore = 0;
+    if (scoredPct > 0.8) { reasonScore += 30; reasonSigs.push("Assessment matrix " + Math.round(scoredPct*100) + "% complete"); }
+    else if (scoredPct > 0) { reasonScore += 10; reasonSigs.push("Assessment " + Math.round(scoredPct*100) + "% complete"); }
+    else { reasonSigs.push("⚠ No qualitative assessment completed"); }
+    // Check rationale coverage in assessmentScores
+    const cellsWithRationale = Object.values(assessmentScores)
+      .filter(v => typeof v === "object" && v.rationale?.length > 10).length;
+    if (cellsWithRationale > 0 && totalCells > 0) {
+      const rat_pct = Math.round(cellsWithRationale / Math.max(scoredCells,1) * 100);
+      if (rat_pct > 70) { reasonScore += 25; reasonSigs.push(rat_pct + "% of scores have rationale"); }
+      else if (rat_pct > 30) { reasonScore += 10; reasonSigs.push("⚠ Only " + rat_pct + "% of scores have rationale"); }
+      else { reasonSigs.push("⚠ Most scores lack rationale — reasoning not documented"); }
+    } else if (scoredCells > 0) {
+      reasonSigs.push("⚠ No score rationale documented");
+    }
+    if (scenarios.length > 0 && Object.keys(perfMatrix).length > 0) {
+      const ratedCells = Object.keys(perfMatrix).length;
+      const totalScenCells = strategies.length * scenarios.length;
+      if (ratedCells >= totalScenCells * 0.8) { reasonScore += 25; reasonSigs.push("Strategies stress-tested across scenarios"); }
+      else { reasonScore += 10; reasonSigs.push("Scenario testing partial (" + ratedCells + "/" + totalScenCells + " cells)"); }
+    } else {
+      reasonSigs.push("⚠ No scenario stress-testing");
+    }
+    if (brief) { reasonScore += 20; reasonSigs.push("Decision brief generated — reasoning consolidated"); }
+
+    // ── COMMITMENT ───────────────────────────────────────────────────────────
+    const commitSigs = [];
+    let commitScore = 0;
+    if (stakeList.length === 0) { commitSigs.push("⚠ Stakeholder mapping not completed"); }
+    else {
+      commitScore += 20; commitSigs.push(stakeList.length + " stakeholders mapped");
+      if (blockers.length > 0) {
+        commitSigs.push("⚠ " + blockers.length + " blocker(s): " + blockers.map(s=>s.name).join(", "));
+      } else { commitScore += 15; commitSigs.push("No blockers identified"); }
+      if (champions.length > 0) { commitScore += 15; commitSigs.push(champions.length + " champion(s) identified"); }
+      const mustAlign = stakeList.filter(s => s.mustAlign);
+      if (mustAlign.length > 0 && mustAlign.every(s => s.alignment === "champion" || s.alignment === "neutral")) {
+        commitScore += 20; commitSigs.push("Must-align stakeholders are supportive");
+      } else if (mustAlign.some(s => s.alignment === "blocker" || s.alignment === "skeptic")) {
+        commitSigs.push("⚠ Some must-align stakeholders are blockers or skeptics");
+      }
+    }
+    if (problem.owner?.length > 2) { commitScore += 15; commitSigs.push("Decision owner identified: " + problem.owner); }
+    else commitSigs.push("⚠ No decision owner — commitment authority unclear");
+    if (decisions.some(d => d.owner?.length > 2)) { commitScore += 15; commitSigs.push("Individual decision owners assigned"); }
+
+    return {
+      frame:       { suggested: Math.min(100, frameScore),   confidence: frameScore>60?"high":frameScore>30?"medium":"low",   evidence: frameSigs },
+      alternatives:{ suggested: Math.min(100, altScore),     confidence: altScore>60?"high":altScore>30?"medium":"low",       evidence: altSigs },
+      information: { suggested: Math.min(100, infoScore),    confidence: infoScore>60?"high":infoScore>30?"medium":"low",     evidence: infoSigs },
+      values:      { suggested: Math.min(100, valuesScore),  confidence: valuesScore>60?"high":valuesScore>30?"medium":"low", evidence: valuesSigs },
+      reasoning:   { suggested: Math.min(100, reasonScore),  confidence: reasonScore>60?"high":reasonScore>30?"medium":"low", evidence: reasonSigs },
+      commitment:  { suggested: Math.min(100, commitScore),  confidence: commitScore>60?"high":commitScore>30?"medium":"low", evidence: commitSigs },
+    };
+  };
+
+  const runAutoPopulate = () => {
+    const signals = computeSignals();
+    setAutoScores(signals);
+    setAutoPanel(true);
+  };
+
+  const applyAutoScores = (overrides = {}) => {
+    const signals = autoScores;
+    if (!signals) return;
+    const newScores = { ...scores };
+    DQ_ELEMENTS.forEach(el => {
+      const sig = signals[el.key];
+      const val = overrides[el.key] !== undefined ? overrides[el.key] : sig?.suggested;
+      if (val !== undefined) newScores[el.key] = val;
+    });
+    onScores(newScores);
+    setAutoPanel(false);
+    onAIMsg({ role:"ai", text:"DQ elements auto-populated from platform data. Review each score and adjust where your team's judgement differs from the computed signals." });
+  };
 
   // ── AI GENERATE NARRATIVE ────────────────────────────────────────────────────
   const generateNarrative = () => {
@@ -6879,6 +7047,30 @@ Return ONLY valid JSON:
                       ))}
                     </div>
                   </div>
+
+                  {/* Signal evidence — visible on every card */}
+                  {autoScores?.[el.key] && (
+                    <div style={{ marginTop:8, padding:"7px 10px",
+                      background:DS.canvasAlt,
+                      border:`1px solid ${DS.canvasBdr}`,
+                      borderRadius:5 }}>
+                      <div style={{ fontSize:8, fontWeight:700, color:DS.inkDis,
+                        textTransform:"uppercase", letterSpacing:.6, marginBottom:4 }}>
+                        Data signals
+                      </div>
+                      {(autoScores[el.key].evidence||[]).slice(0,3).map((ev,i) => (
+                        <div key={i} style={{ fontSize:9, lineHeight:1.4, marginBottom:2,
+                          color:ev.startsWith("⚠") ? DS.warning : DS.inkTer }}>
+                          {ev}
+                        </div>
+                      ))}
+                      {autoScores[el.key].evidence.length > 3 && (
+                        <div style={{ fontSize:9, color:DS.inkDis, marginTop:2 }}>
+                          +{autoScores[el.key].evidence.length-3} more signals
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Expanded content */}
                   {isSel && (
@@ -17622,7 +17814,7 @@ export default function App() {
     hierarchy:    { decisions, criteria, onDecisions:setDecisions, onCriteria:setCriteria, issues, aiCall, aiBusy, onAIMsg:pushAIMsg },
     strategy:     { decisions, strategies, onChange:setStrategies, onDecisions:setDecisions, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
     assessment:   { strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    scorecard:    { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    scorecard:    { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, stakeholders, scenarioData, voiItems, aiCall, aiBusy, onAIMsg:pushAIMsg },
     stakeholders: { strategies, decisions, problem, issues, stakeholders, onChange:setStakeholders, aiCall, aiBusy, onAIMsg:pushAIMsg },
     export:       { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, stakeholders, scenarioData, voiItems, timelineEvents, aiCall, aiBusy, onAIMsg:pushAIMsg },
     influence:    { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg, problem, onNodesChange:setInfluenceNodes, onEdgesChange:setInfluenceEdges },
