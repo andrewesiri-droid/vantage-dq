@@ -4131,86 +4131,74 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
   const aiValidate = () => {
     setValidating(true);
 
-    const clean = (s) => (s||"").replace(/[\r\n]+/g," ").replace(/"/g,"'").trim();
+    const clean = (s) => String(s||"").replace(/[\r\n\t]+/g," ").replace(/"/g,"'").slice(0,120).trim();
 
-    const tableDesc = nowDecisions.map(d =>
-      clean(d.label) + ": [" + d.choices.map(clean).join(" / ") + "]"
-    ).join(" | ");
+    const decisionsText = nowDecisions.map((d,i) =>
+      "D"+(i+1)+": "+clean(d.label)+" ["+d.choices.map(clean).join(" / ")+"]"
+    ).join(", ");
 
-    const stratDesc = strategies.map((s, i) => {
-      const path = nowDecisions.map(d => {
+    const strategiesText = strategies.map((s,i) => {
+      const choices = nowDecisions.map((d,di) => {
         const idx = s.selections?.[d.id];
-        return idx !== undefined
-          ? clean(d.label) + "=" + clean(d.choices[idx])
-          : clean(d.label) + "=MISSING";
-      }).join("; ");
-      return (i+1) + ". " + clean(s.name) +
-        (s.objective ? " | Goal: " + clean(s.objective) : "") +
-        (s.description ? " | Logic: " + clean(s.description) : "") +
-        " | Choices: " + path;
-    }).join(" || ");
+        return idx !== undefined ? "D"+(di+1)+"="+clean(d.choices[idx]) : "D"+(di+1)+"=?";
+      }).join(", ");
+      return "S"+(i+1)+": "+clean(s.name)+" ("+choices+")";
+    }).join(" | ");
 
     const prompt =
-      "You are a DQ expert evaluating a strategy table. " +
-      "Decision: " + clean(problem?.decisionStatement || "Not defined") + ". " +
-      "Decisions available: " + tableDesc + ". " +
-      "Strategies: " + stratDesc + ". " +
-      "Evaluate: (1) completeness per strategy, (2) coherence of choices within each strategy, " +
-      "(3) distinctiveness across strategies, (4) missing strategic alternatives. " +
-      "Return ONLY a single valid JSON object with NO markdown, NO code fences, NO explanation. " +
-      "JSON schema: " +
-      '{"overall":"pass","qualityScore":75,' +
-      '"completenessScores":[{"strategy":"name","score":80,"missing":[]}],' +
-      '"coherenceIssues":[{"strategy":"name","issue":"description","severity":"warning"}],' +
-      '"distinctiveness":"high","distinctivenessNote":"explanation",' +
-      '"dominatedStrategies":[],' +
-      '"missingAlternatives":["description"],' +
-      '"tradeOffInsights":["observation"],' +
-      '"validationFlags":[{"type":"non_distinct","severity":"warning","message":"observation"}],' +
-      '"facilitatorQuestions":["question"],' +
-      '"recommendations":["recommendation"],' +
-      '"executiveSummary":"plain English summary of strategy table quality"}';
+      "You are a Decision Quality expert. Evaluate this strategy table.\n" +
+      "Decision: " + clean(problem?.decisionStatement || "Not stated") + "\n" +
+      "Dimensions: " + decisionsText + "\n" +
+      "Strategies: " + strategiesText + "\n" +
+      "Evaluate completeness, coherence, distinctiveness, and missing alternatives.\n" +
+      "Respond with only a JSON object. No markdown, no explanation, no code fences.\n" +
+      "Fields needed:\n" +
+      "overall (pass/warn/fail), qualityScore (0-100), executiveSummary (string),\n" +
+      "distinctiveness (high/medium/low), distinctivenessNote (string),\n" +
+      "completenessScores (array: {strategy, score, missing[]}),\n" +
+      "coherenceIssues (array: {strategy, issue, severity}),\n" +
+      "dominatedStrategies (array of names),\n" +
+      "missingAlternatives (array of strings),\n" +
+      "tradeOffInsights (array of strings),\n" +
+      "validationFlags (array: {type, severity, message}),\n" +
+      "facilitatorQuestions (array of strings),\n" +
+      "recommendations (array of strings)";
 
     aiCall(prompt, (r) => {
-      // useAI already tries to parse _raw before calling back.
-      // If it still comes as _raw, extract JSON manually.
       let result = r;
-      if (!result || result._raw || result.error) {
-        const raw = result?._raw || result?.error || "";
-        if (raw) {
-          // Try: extract first { ... } block
-          const jsonMatch = raw.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
+      if (result && result._raw) {
+        const raw = result._raw;
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (match) {
+          try { result = JSON.parse(match[0]); }
+          catch(e) {
             try {
-              result = JSON.parse(jsonMatch[0]);
-            } catch(e) {
-              // Try stripping control chars then parse
-              try {
-                const cleaned = jsonMatch[0]
-                  .replace(/[\x00-\x1f]/g, " ")
-                  .replace(/,\s*([}\]])/g, "$1");
-                result = JSON.parse(cleaned);
-              } catch(e2) {
-                setValidating(false);
-                onAIMsg({role:"ai", text:"Analysis returned unparseable JSON. Please try again."});
-                return;
-              }
+              const fixed = match[0]
+                .replace(/[\x00-\x1f]/g, " ")
+                .replace(/,\s*([}\]])/g, "$1");
+              result = JSON.parse(fixed);
+            } catch(e2) {
+              setValidating(false);
+              onAIMsg({role:"ai", text:"Could not parse analysis. Please try again."});
+              return;
             }
-          } else {
-            setValidating(false);
-            onAIMsg({role:"ai", text:"Analysis returned no JSON. Please try again."});
-            return;
           }
         } else {
           setValidating(false);
+          onAIMsg({role:"ai", text:"No JSON found in response. Please try again."});
           return;
         }
       }
+      if (!result || result.error) {
+        setValidating(false);
+        onAIMsg({role:"ai", text:"Analysis failed: "+(result?.error||"unknown")});
+        return;
+      }
       setValidation(result);
-      const score = result.qualityScore != null ? " Quality: " + result.qualityScore + "/100." : "";
-      const dist  = result.distinctiveness ? " Distinctiveness: " + result.distinctiveness + "." : "";
-      const summ  = result.executiveSummary || result.recommendations?.[0] || "";
-      onAIMsg({ role:"ai", text: "Strategy Analysis complete." + score + dist + (summ ? " " + summ : "") });
+      const score = result.qualityScore != null ? " Score: "+result.qualityScore+"/100." : "";
+      const dist  = result.distinctiveness ? " Distinctiveness: "+result.distinctiveness+"." : "";
+      onAIMsg({role:"ai", text:"Strategy Analysis complete."+score+dist+
+        (result.executiveSummary ? " "+result.executiveSummary : "")});
       setValidating(false);
     });
   };
@@ -4859,234 +4847,281 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
           </div>
         )}
 
-        {/* ══ ANALYSIS MODE ══ */}
-        {/* ── COMPARE & CONTRAST ──────────────────────────────────────── */}
+   
+
+        {/* ══ COMPARE & CONTRAST MODE ══ */}
         {mode==="compare" && (
-          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
-            <div style={{ maxWidth:960, margin:"0 auto" }}>
+          <div style={{ flex:1, overflowY:"auto", overflowX:"auto", padding:"24px 28px" }}>
+            {strategies.length < 2 ? (
+              <div style={{ padding:"60px 32px", textAlign:"center",
+                border:`1.5px dashed ${DS.canvasBdr}`, borderRadius:10, color:DS.inkTer, margin:"20px 0" }}>
+                <div style={{ fontSize:28, marginBottom:12, opacity:.4 }}>⊞</div>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>Need at least 2 strategies</div>
+                <div style={{ fontSize:12, lineHeight:1.6 }}>Add strategies in the Builder tab first.</div>
+              </div>
+            ) : (
+              <div style={{ maxWidth:1100, margin:"0 auto" }}>
 
-              {strategies.length < 2 ? (
-                <div style={{ padding:"48px 32px", textAlign:"center",
-                  border:`1.5px dashed ${DS.canvasBdr}`, borderRadius:10, color:DS.inkTer }}>
-                  <div style={{ fontSize:28, marginBottom:12, opacity:.4 }}>⊞</div>
-                  <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>Need at least 2 strategies</div>
-                  <div style={{ fontSize:12, lineHeight:1.6 }}>Add strategies in the Builder tab first.</div>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                      fontWeight:700, color:DS.ink, marginBottom:3 }}>Compare & Contrast</div>
+                    <div style={{ fontSize:12, color:DS.inkTer }}>
+                      Side-by-side view of every strategy across all decision dimensions.
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div>
-                  <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
-                    fontWeight:700, color:DS.ink, marginBottom:4 }}>Compare & Contrast</div>
-                  <div style={{ fontSize:12, color:DS.inkTer, marginBottom:24 }}>
-                    Side-by-side comparison of all strategies across every decision dimension.
-                  </div>
 
-                  {/* ── DECISION CHOICES GRID ── */}
-                  <div style={{ marginBottom:28, overflowX:"auto" }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
-                      textTransform:"uppercase", letterSpacing:.6, marginBottom:12 }}>
-                      Decision Choices by Strategy
-                    </div>
-                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ padding:"8px 12px", textAlign:"left",
-                            background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
-                            fontSize:10, fontWeight:700, color:DS.inkTer,
-                            textTransform:"uppercase", letterSpacing:.5, minWidth:160 }}>
-                            Decision
-                          </th>
-                          {strategies.map((s,i) => {
-                            const col = DS.s[i%DS.s.length];
-                            return (
-                              <th key={s.id} style={{ padding:"8px 12px", textAlign:"center",
-                                background:col.soft, border:`1px solid ${DS.canvasBdr}`,
-                                fontSize:11, fontWeight:700, color:col.fill, minWidth:140 }}>
-                                {s.name}
-                              </th>
-                            );
-                          })}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {nowDecisions.map((d, di) => (
-                          <tr key={d.id} style={{ background:di%2===0?DS.canvas:DS.canvasAlt }}>
-                            <td style={{ padding:"10px 12px",
-                              border:`1px solid ${DS.canvasBdr}`,
-                              fontWeight:600, color:DS.ink }}>
-                              {d.label}
-                              <div style={{ fontSize:10, color:DS.inkTer, marginTop:2,
-                                fontWeight:400 }}>
-                                {d.choices.join(" / ")}
-                              </div>
-                            </td>
-                            {strategies.map((s, si) => {
-                              const sel = s.selections?.[d.id];
-                              const idxs = Array.isArray(sel) ? sel : sel !== undefined ? [sel] : [];
-                              const chosen = idxs.map(i => d.choices[i]).filter(Boolean);
-                              const col = DS.s[si%DS.s.length];
-                              // Check if this choice differs from others (highlight divergence)
-                              const allChoices = strategies.map(st2 => {
-                                const s2sel = st2.selections?.[d.id];
-                                const s2idxs = Array.isArray(s2sel) ? s2sel : s2sel !== undefined ? [s2sel] : [];
-                                return s2idxs.sort().join(",");
-                              });
-                              const isUnique = allChoices.filter(x => x === idxs.sort().join(",")).length === 1;
-                              return (
-                                <td key={s.id} style={{ padding:"10px 12px",
-                                  textAlign:"center",
-                                  border:`1px solid ${DS.canvasBdr}`,
-                                  background:chosen.length===0?"#fff8f8":isUnique?col.soft+"80":"transparent" }}>
-                                  {chosen.length > 0 ? (
-                                    <div>
-                                      <span style={{ fontSize:11, fontWeight:700, color:col.fill }}>
-                                        {chosen.join(" + ")}
-                                      </span>
-                                      {isUnique && (
-                                        <div style={{ fontSize:8, color:col.fill,
-                                          marginTop:2, fontWeight:600 }}>unique</div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span style={{ fontSize:10, color:DS.danger }}>—</span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {/* ── CHOICES MATRIX ── */}
+                {nowDecisions.length === 0 ? (
+                  <div style={{ padding:"32px", textAlign:"center", color:DS.inkTer,
+                    border:`1px dashed ${DS.canvasBdr}`, borderRadius:8, marginBottom:20 }}>
+                    No decisions defined yet. Add decisions in Module 03.
                   </div>
+                ) : (
+                  <div style={{ marginBottom:28, borderRadius:10, border:`1px solid ${DS.canvasBdr}`,
+                    overflow:"hidden" }}>
 
-                  {/* ── STRATEGY PROFILES ── */}
-                  <div style={{ marginBottom:28 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
-                      textTransform:"uppercase", letterSpacing:.6, marginBottom:12 }}>
-                      Strategy Profiles
-                    </div>
+                    {/* Header row */}
                     <div style={{ display:"grid",
-                      gridTemplateColumns:`repeat(${Math.min(strategies.length,3)},1fr)`,
-                      gap:14 }}>
-                      {strategies.map((s, si) => {
-                        const col = DS.s[si%DS.s.length];
-                        const completeness = nowDecisions.length > 0
-                          ? Math.round((Object.keys(s.selections||{}).filter(k =>
-                              nowDecisions.find(d=>d.id===k)).length / nowDecisions.length) * 100)
-                          : 0;
+                      gridTemplateColumns:`200px repeat(${strategies.length}, minmax(140px,1fr))`,
+                      background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
+                      <div style={{ padding:"10px 14px", fontSize:10, fontWeight:700,
+                        color:DS.inkTer, textTransform:"uppercase", letterSpacing:.6 }}>
+                        Decision Dimension
+                      </div>
+                      {strategies.map((s,si) => {
+                        const col = DS.s[si % DS.s.length];
                         return (
-                          <div key={s.id} style={{ padding:"16px 18px",
-                            border:`1.5px solid ${col.line}`,
-                            borderRadius:10, background:col.soft }}>
-                            <div style={{ display:"flex", alignItems:"center",
-                              gap:8, marginBottom:10 }}>
-                              <div style={{ width:10, height:10, borderRadius:"50%",
-                                background:col.fill, flexShrink:0 }}/>
-                              <div style={{ fontSize:13, fontWeight:700, color:DS.ink }}>
-                                {s.name}
-                              </div>
-                              <div style={{ marginLeft:"auto", fontSize:10, fontWeight:700,
-                                color:completeness===100?DS.success:completeness>50?DS.warning:DS.danger }}>
-                                {completeness}%
-                              </div>
+                          <div key={s.id} style={{ padding:"10px 14px",
+                            borderLeft:`1px solid ${DS.canvasBdr}`,
+                            background:col.soft }}>
+                            <div style={{ fontSize:12, fontWeight:700, color:col.fill,
+                              whiteSpace:"nowrap", overflow:"hidden",
+                              textOverflow:"ellipsis" }}>
+                              {s.name}
                             </div>
                             {s.objective && (
-                              <div style={{ fontSize:11, color:DS.ink,
-                                lineHeight:1.5, marginBottom:8,
-                                fontStyle:"italic" }}>"{s.objective}"</div>
+                              <div style={{ fontSize:10, color:DS.inkTer, marginTop:2,
+                                overflow:"hidden", textOverflow:"ellipsis",
+                                whiteSpace:"nowrap" }}>
+                                {s.objective}
+                              </div>
                             )}
-                            {s.description && (
-                              <div style={{ fontSize:11, color:DS.inkSub,
-                                lineHeight:1.5, marginBottom:8 }}>{s.description}</div>
-                            )}
-                            {/* Key choices */}
-                            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                              {nowDecisions.map(d => {
-                                const sel = s.selections?.[d.id];
-                                const idxs = Array.isArray(sel) ? sel : sel !== undefined ? [sel] : [];
-                                const chosen = idxs.map(i => d.choices[i]).filter(Boolean);
-                                return chosen.length > 0 ? (
-                                  <div key={d.id} style={{ fontSize:10, color:DS.inkSub,
-                                    display:"flex", gap:6 }}>
-                                    <span style={{ color:DS.inkTer, flexShrink:0 }}>{d.label}:</span>
-                                    <span style={{ fontWeight:600, color:col.fill }}>
-                                      {chosen.join(" + ")}
-                                    </span>
-                                  </div>
-                                ) : null;
-                              })}
-                            </div>
                           </div>
                         );
                       })}
                     </div>
-                  </div>
 
-                  {/* ── DIVERGENCE SUMMARY ── */}
-                  <div style={{ padding:"14px 18px",
-                    background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
-                    borderRadius:8, marginBottom:20 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
-                      textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
-                      Divergence Analysis
-                    </div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                      {nowDecisions.map(d => {
-                        const uniqueChoices = new Set(strategies.map(s => {
-                          const sel = s.selections?.[d.id];
-                          const idxs = Array.isArray(sel) ? sel : sel !== undefined ? [sel] : [];
-                          return idxs.sort().join(",");
-                        }));
-                        const diverged = uniqueChoices.size > 1;
-                        const allMissing = strategies.every(s => {
-                          const sel = s.selections?.[d.id];
-                          return sel === undefined;
-                        });
-                        return (
-                          <div key={d.id} style={{ display:"flex", alignItems:"center", gap:10 }}>
-                            <div style={{ width:8, height:8, borderRadius:"50%", flexShrink:0,
-                              background:allMissing?DS.danger:diverged?DS.success:DS.inkDis }}/>
-                            <div style={{ fontSize:11, color:DS.ink, flex:1 }}>
-                              <span style={{ fontWeight:600 }}>{d.label}:</span>{" "}
-                              {allMissing ? (
-                                <span style={{ color:DS.danger }}>Not selected in any strategy</span>
-                              ) : diverged ? (
-                                <span style={{ color:DS.success }}>
-                                  Strategies diverge — genuinely different choices ({uniqueChoices.size} distinct paths)
-                                </span>
-                              ) : (
-                                <span style={{ color:DS.inkTer }}>
-                                  All strategies make the same choice — not a differentiator
-                                </span>
+                    {/* Decision rows */}
+                    {nowDecisions.map((d, di) => {
+                      // Find unique choice sets across strategies
+                      const allChoiceSets = strategies.map(s => {
+                        const sel = s.selections?.[d.id];
+                        const idxs = Array.isArray(sel) ? sel : (sel !== undefined ? [sel] : []);
+                        return idxs.map(i => d.choices[i]).filter(Boolean).join(" + ") || "";
+                      });
+                      const uniqueSets = new Set(allChoiceSets.filter(x => x));
+                      const hasDivergence = uniqueSets.size > 1;
+                      const allEmpty = allChoiceSets.every(x => !x);
+
+                      return (
+                        <div key={d.id}
+                          style={{ display:"grid",
+                            gridTemplateColumns:`200px repeat(${strategies.length}, minmax(140px,1fr))`,
+                            borderBottom:`1px solid ${DS.canvasBdr}`,
+                            background: di % 2 === 0 ? DS.canvas : DS.canvasAlt }}>
+                          {/* Dimension label */}
+                          <div style={{ padding:"12px 14px",
+                            borderRight:`1px solid ${DS.canvasBdr}` }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:DS.ink,
+                              lineHeight:1.4, marginBottom:3 }}>{d.label}</div>
+                            <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                              {allEmpty && (
+                                <span style={{ fontSize:9, color:DS.danger,
+                                  padding:"1px 5px", background:"#fef2f2",
+                                  borderRadius:3 }}>not set</span>
+                              )}
+                              {hasDivergence && (
+                                <span style={{ fontSize:9, color:"#059669",
+                                  padding:"1px 5px", background:"#ecfdf5",
+                                  borderRadius:3, fontWeight:700 }}>diverges</span>
+                              )}
+                              {!hasDivergence && !allEmpty && (
+                                <span style={{ fontSize:9, color:DS.inkDis,
+                                  padding:"1px 5px", background:DS.canvasAlt,
+                                  borderRadius:3 }}>same</span>
                               )}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                    <div style={{ marginTop:10, fontSize:11, color:DS.accent, fontStyle:"italic" }}>
-                      {(() => {
-                        const divergingCount = nowDecisions.filter(d => {
-                          const choices = new Set(strategies.map(s => {
+                          {/* Strategy cells */}
+                          {strategies.map((s, si) => {
+                            const col = DS.s[si % DS.s.length];
                             const sel = s.selections?.[d.id];
-                            const idxs = Array.isArray(sel) ? sel : sel !== undefined ? [sel] : [];
-                            return idxs.sort().join(",");
-                          }));
-                          return choices.size > 1;
-                        }).length;
-                        if (nowDecisions.length === 0) return "Add decisions to see divergence analysis.";
-                        if (divergingCount === 0) return "⚠ Strategies make identical choices on every decision — they may not be genuinely distinct.";
-                        if (divergingCount === nowDecisions.length) return "✓ Strategies diverge on every decision — high distinctiveness.";
-                        return `Strategies diverge on ${divergingCount} of ${nowDecisions.length} decisions. Consider whether the ${nowDecisions.length-divergingCount} shared decisions are truly given or could be differentiated.`;
-                      })()}
-                    </div>
+                            const idxs = Array.isArray(sel) ? sel : (sel !== undefined ? [sel] : []);
+                            const chosen = idxs.map(i => d.choices[i]).filter(Boolean);
+                            const isUnique = chosen.length > 0 &&
+                              allChoiceSets.filter(x => x === chosen.join(" + ")).length === 1;
+                            return (
+                              <div key={s.id}
+                                style={{ padding:"12px 14px",
+                                  borderLeft:`1px solid ${DS.canvasBdr}`,
+                                  background: chosen.length === 0
+                                    ? "rgba(220,38,38,.03)"
+                                    : isUnique ? col.soft + "88" : "transparent" }}>
+                                {chosen.length > 0 ? (
+                                  <div>
+                                    <div style={{ fontSize:11, fontWeight:700,
+                                      color: isUnique ? col.fill : DS.ink,
+                                      lineHeight:1.4 }}>
+                                      {chosen.join(" + ")}
+                                    </div>
+                                    {isUnique && (
+                                      <div style={{ fontSize:8, color:col.fill,
+                                        fontWeight:700, marginTop:2,
+                                        textTransform:"uppercase", letterSpacing:.3 }}>
+                                        unique
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize:11, color:"#fca5a5" }}>—</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
                   </div>
+                )}
 
+                {/* ── STRATEGY CARDS ── */}
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    textTransform:"uppercase", letterSpacing:.6, marginBottom:12 }}>
+                    Strategy Profiles
+                  </div>
+                  <div style={{ display:"grid",
+                    gridTemplateColumns:`repeat(${Math.min(strategies.length, 4)}, minmax(200px, 1fr))`,
+                    gap:12 }}>
+                    {strategies.map((s, si) => {
+                      const col = DS.s[si % DS.s.length];
+                      const filled = nowDecisions.filter(d => {
+                        const sel = s.selections?.[d.id];
+                        return Array.isArray(sel) ? sel.length > 0 : sel !== undefined;
+                      }).length;
+                      const pct = nowDecisions.length > 0
+                        ? Math.round(filled / nowDecisions.length * 100) : 0;
+                      const pctCol = pct === 100 ? DS.success : pct >= 50 ? DS.warning : DS.danger;
+                      return (
+                        <div key={s.id} style={{ padding:"14px 16px",
+                          border:`1.5px solid ${col.line}`,
+                          borderRadius:10, background:col.soft }}>
+                          <div style={{ display:"flex", alignItems:"center",
+                            gap:8, marginBottom:8 }}>
+                            <div style={{ width:10, height:10, borderRadius:"50%",
+                              background:col.fill, flexShrink:0 }}/>
+                            <div style={{ fontSize:13, fontWeight:700,
+                              color:DS.ink, flex:1 }}>{s.name}</div>
+                            <div style={{ fontSize:11, fontWeight:700,
+                              color:pctCol }}>{pct}%</div>
+                          </div>
+                          {s.objective && (
+                            <div style={{ fontSize:11, color:DS.inkSub,
+                              lineHeight:1.5, marginBottom:6,
+                              fontStyle:"italic" }}>"{s.objective}"</div>
+                          )}
+                          {s.description && (
+                            <div style={{ fontSize:11, color:DS.inkTer,
+                              lineHeight:1.4, marginBottom:8 }}>{s.description}</div>
+                          )}
+                          <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                            {nowDecisions.map(d => {
+                              const sel = s.selections?.[d.id];
+                              const idxs = Array.isArray(sel) ? sel : (sel !== undefined ? [sel] : []);
+                              const chosen = idxs.map(i => d.choices[i]).filter(Boolean);
+                              if (!chosen.length) return null;
+                              return (
+                                <div key={d.id} style={{ fontSize:10,
+                                  display:"flex", gap:5, alignItems:"baseline" }}>
+                                  <span style={{ color:DS.inkDis, flexShrink:0 }}>
+                                    {d.label.slice(0,20)}{d.label.length>20?"…":""}:
+                                  </span>
+                                  <span style={{ fontWeight:600, color:col.fill }}>
+                                    {chosen.join(" + ")}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* ── DIVERGENCE SUMMARY ── */}
+                <div style={{ padding:"14px 18px", background:DS.accentSoft,
+                  border:`1px solid ${DS.accentLine}`, borderRadius:8 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
+                    textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
+                    Divergence Summary
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+                    {nowDecisions.map(d => {
+                      const choices = strategies.map(s => {
+                        const sel = s.selections?.[d.id];
+                        const idxs = Array.isArray(sel) ? sel : (sel !== undefined ? [sel] : []);
+                        return idxs.map(i => d.choices[i]).filter(Boolean).join("+");
+                      });
+                      const unique = new Set(choices.filter(Boolean));
+                      const allMissing = choices.every(x => !x);
+                      const diverges = unique.size > 1;
+                      return (
+                        <div key={d.id} style={{ display:"flex",
+                          alignItems:"center", gap:8, fontSize:11 }}>
+                          <div style={{ width:7, height:7, borderRadius:"50%", flexShrink:0,
+                            background: allMissing ? DS.danger
+                              : diverges ? DS.success : DS.inkDis }}/>
+                          <span style={{ fontWeight:600, color:DS.ink,
+                            minWidth:140 }}>{d.label}:</span>
+                          <span style={{ color: allMissing ? DS.danger
+                            : diverges ? DS.success : DS.inkTer }}>
+                            {allMissing
+                              ? "Not set in any strategy"
+                              : diverges
+                              ? `${unique.size} distinct paths — strategies genuinely differ`
+                              : "All strategies make the same choice — not a differentiator"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize:11, color:DS.accent, fontStyle:"italic" }}>
+                    {(() => {
+                      if (!nowDecisions.length) return "Add decisions to see divergence analysis.";
+                      const diverging = nowDecisions.filter(d => {
+                        const s = new Set(strategies.map(st => {
+                          const sel = st.selections?.[d.id];
+                          const idxs = Array.isArray(sel) ? sel : (sel !== undefined ? [sel] : []);
+                          return idxs.map(i => d.choices[i]).join("+");
+                        }).filter(Boolean));
+                        return s.size > 1;
+                      }).length;
+                      if (diverging === 0) return "No divergence — strategies may not be genuinely distinct. Consider revisiting the alternatives.";
+                      if (diverging === nowDecisions.length) return "Strategies diverge on every dimension — high distinctiveness.";
+                      return `Strategies diverge on ${diverging} of ${nowDecisions.length} dimensions. The other ${nowDecisions.length - diverging} are shared — confirm these are truly given.`;
+                    })()}
+                  </div>
+                </div>
+
+              </div>
+            )}
           </div>
         )}
 
+        {/* ══ ANALYSIS MODE ══ */}
         {mode==="analysis" && (
           <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
             <div style={{ maxWidth:820, margin:"0 auto" }}>
