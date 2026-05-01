@@ -5558,7 +5558,31 @@ function ModuleQualitativeAssessment({
 
       {/* ── MATRIX VIEW ── */}
       {view === "matrix" && (
-        <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
+        <div style={{ flex:1, display:"flex", overflow:"hidden", position:"relative" }}>
+
+          {/* ── AI SCORING LOADING OVERLAY ── */}
+          {assessing && (
+            <div style={{ position:"absolute", inset:0, zIndex:10,
+              background:"rgba(255,255,255,.85)", backdropFilter:"blur(3px)",
+              display:"flex", flexDirection:"column",
+              alignItems:"center", justifyContent:"center", gap:16 }}>
+              <div style={{ display:"flex", gap:8 }}>
+                {[0,1,2,3].map(i => (
+                  <div key={i} style={{ width:10, height:10, borderRadius:"50%",
+                    background:DS.accent,
+                    animation:`pulse 1.2s ${i*0.2}s infinite ease-in-out` }}/>
+                ))}
+              </div>
+              <div style={{ fontFamily:"'Libre Baskerville',serif",
+                fontSize:18, fontWeight:700, color:DS.ink }}>
+                AI Scoring…
+              </div>
+              <div style={{ fontSize:12, color:DS.inkTer, maxWidth:320, textAlign:"center" }}>
+                Scoring {strategies.length} {strategies.length===1?"strategy":"strategies"} × {criteria.length} {criteria.length===1?"criterion":"criteria"}
+                {" = "}{strategies.length*criteria.length} cells
+              </div>
+            </div>
+          )}
 
           {/* Left: scoring grid */}
           <div style={{ flex:1, overflowY:"auto", overflowX:"auto" }}>
