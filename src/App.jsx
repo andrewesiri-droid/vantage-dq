@@ -9440,40 +9440,59 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   };
 
   // ── Validation engine ─────────────────────────────────────────────────────
-  const aiAnalyseMap = () => {
+        const prompt =
+        "Evaluate this influence diagram for decision quality.\n" +
+        "Decision: " + (problem?.decisionStatement||"Not set") + "\n" +
+        "Nodes (" + nodes.length + "): " + (nodeSummary||"none") + "\n" +
+        "Edges (" + edges.length + "): " + (edgeSummary||"none") + "\n\n" +
+        "Assess causal quality, completeness, and decision relevance.\n" +
+        "Return a JSON object with no markdown and no explanation.\n" +
+        "Keys required:\n" +
+        "qualityScore: integer 0-100\n" +
+        "dimensions: object with keys causalClarity, structuralCompleteness, uncertaintyIntegration, logicConsistency, decisionRelevance — each an integer 0-10\n" +
+        "validationFlags: array of objects each with type (string), severity (critical or warning or info), node (string), message (string), suggestion (string)\n" +
+        "criticalDrivers: array of node label strings\n" +
+        "missingDrivers: array of strings\n" +
+        "uncertaintyPathways: array of strings\n" +
+        "weakLogicAreas: array of strings\n" +
+        "diagnosticSummary: string of 2-3 sentences\n" +
+        "facilitatorQuestions: array of strings";
+
+    const aiAnalyseMap = () => {
     setAnalysing(true);
-    const nodeSummary = nodes.map(n =>
-      n.type + ": " + n.label +
-      (n.impact ? " [impact:" + n.impact + "]" : "") +
-      (n.criticality ? " [criticality:" + n.criticality + "]" : "") +
-      (n.confidence ? " [confidence:" + n.confidence + "]" : "")
-    ).join("; ");
+    const nodeSummary = nodes.map(n => n.type + ": " + n.label).join("; ");
     const edgeSummary = edges.map(e => {
-      const f = nodes.find(n=>n.id===e.from);
-      const t = nodes.find(n=>n.id===e.to);
-      return (f?.label||"?") + " --[" + (e.influenceType||"influences") + "]--> " + (t?.label||"?") +
-        (e.strength ? " [" + e.strength + "]" : "");
+      const src = nodes.find(n => n.id === e.from);
+      const tgt = nodes.find(n => n.id === e.to);
+      return (src?.label||"?") + " → " + (tgt?.label||"?");
     }).join("; ");
+
     const prompt =
-      "You are an elite Decision Quality systems analyst evaluating an influence diagram. " +
-      "Decision: " + (problem?.decisionStatement||"Not set") + ". " +
-      "Nodes (" + nodes.length + "): " + (nodeSummary||"none") + ". " +
-      "Edges (" + edges.length + "): " + (edgeSummary||"none") + ". " +
-      "Evaluate this influence map for causal quality, completeness, and decision relevance. " +
-      "Return ONLY JSON: " +
-      '{"qualityScore":72,' +
-      '"dimensions":{"causalClarity":7,"structuralCompleteness":6,"uncertaintyIntegration":5,"logicConsistency":7,"dependencyVisibility":6,"systemsThinkingQuality":5,"decisionRelevance":8,"relationshipTransparency":6},' +
-      '"validationFlags":[{"type":"disconnected_node|unclear_causality|assumption_as_fact|missing_driver|oversimplified|circular_logic|unsupported_relationship|uncertainty_gap|low_decision_relevance","severity":"critical|warning|info","node":"node label","message":"specific issue","suggestion":"how to fix"}],' +
-      '"criticalDrivers":["node label that most drives outcomes"],' +
-      '"missingDrivers":["suggested missing variable or relationship"],' +
-      '"uncertaintyPathways":["how uncertainty propagates through the diagram"],' +
-      '"weakLogicAreas":["area where causal reasoning is weakest"],' +
-      '"diagnosticSummary":"2-3 sentence expert assessment of the map quality",' +
-      '"facilitatorQuestions":["What variable most strongly drives outcomes?","What uncertainty affects the most downstream nodes?"],' +
-      '"downstreamRecommendations":[{"module":"Scenario Planning","reason":"why"}]}';
+      "Evaluate this influence diagram for decision quality.\n" +
+      "Decision: " + (problem?.decisionStatement||"Not set") + "\n" +
+      "Nodes (" + nodes.length + "): " + (nodeSummary||"none") + "\n" +
+      "Edges (" + edges.length + "): " + (edgeSummary||"none") + "\n\n" +
+      "Assess causal quality, completeness, and decision relevance.\n" +
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "Keys required:\n" +
+      "qualityScore: integer 0-100\n" +
+      "dimensions: object with keys causalClarity, structuralCompleteness, uncertaintyIntegration, logicConsistency, decisionRelevance — each an integer 0-10\n" +
+      "validationFlags: array of objects each with type (string), severity (critical or warning or info), node (string), message (string), suggestion (string)\n" +
+      "criticalDrivers: array of node label strings\n" +
+      "missingDrivers: array of strings\n" +
+      "uncertaintyPathways: array of strings\n" +
+      "weakLogicAreas: array of strings\n" +
+      "diagnosticSummary: string of 2-3 sentences\n" +
+      "facilitatorQuestions: array of strings";
+
     aiCall(prompt, (r) => {
       let result = r;
-      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
+      if (r&&r._raw){
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (!m) { setAnalysing(false); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setAnalysing(false); return; }
+      }
       if (!result||result.error){setAnalysing(false);return;}
       setMapAnalysis(result);
       onAIMsg({ role:"ai", text:"Influence Map Analysis: " + (result.qualityScore||"?") + "/100. " + (result.diagnosticSummary||"") });
@@ -9524,31 +9543,37 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
     const focusDecs = decisions.filter(d => d.tier === "focus").map(d => d.label).join(", ");
     const strats = strategies.map(s => s.name).join(", ");
     const existing = nodes.map(n => n.type + ": " + n.label).join("; ");
-    const today = new Date().toISOString().slice(0, 10);
 
-    aiCall(
-      "You are a decision analysis expert building an influence diagram per the Decision Quality methodology. " +
-      "Decision: " + (problem?.decisionStatement || "Not defined") + ". " +
-      "Focus decisions: " + (focusDecs || "none") + ". " +
-      "Strategies being evaluated: " + (strats || "none") + ". " +
-      "Existing nodes (do not duplicate): " + (existing || "none") + ". " +
-      "Generate a realistic influence diagram. Include all four node types: " +
-      "decision nodes (controllable choices), uncertainty nodes (unknown variables), " +
-      "deterministic nodes (calculated relationships like revenue/cost), value nodes (outcomes like NPV/market share), " +
-      "constraint nodes (budget/regulatory limits), and objective nodes (strategic goals). " +
-      "Suggest influence edges. Value nodes must be terminal -- they cannot influence other nodes. " +
-      "Decision nodes must have outgoing edges. No circular dependencies. " +
-      'Return ONLY JSON: {"nodes":[{"type":"uncertainty","label":"Oil Price","description":"Global crude benchmark","impact":"High","control":"Low","owner":""}],' +
-      '"edges":[{"from":"Oil Price","to":"Revenue","label":"drives"}],' +
-      '"insight":"Key observation about the decision structure","missingNodes":["what else should be added"]}',
-    (r) => {
+    const prompt =
+      "Build an influence diagram for this decision using Decision Quality methodology.\n" +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
+      "Focus decisions: " + (focusDecs || "none") + "\n" +
+      "Strategies: " + (strats || "none") + "\n" +
+      "Existing nodes (do not duplicate): " + (existing || "none") + "\n\n" +
+      "Include all four DQ node types:\n" +
+      "- decision: controllable choices the decision maker can make\n" +
+      "- uncertainty: unknown external variables that affect outcomes\n" +
+      "- deterministic: calculated values like revenue, cost, NPV\n" +
+      "- value: terminal outcome nodes like total NPV or strategic value\n" +
+      "Value nodes must be terminal — they cannot influence other nodes.\n" +
+      "No circular dependencies.\n\n" +
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "Keys required:\n" +
+      "nodes: array of objects each with type (decision or uncertainty or deterministic or value), label (short name), description (one sentence), impact (High or Medium or Low), control (High or Medium or Low)\n" +
+      "edges: array of objects each with from (node label), to (node label), label (relationship verb like drives or affects or determines)\n" +
+      "insight: one sentence about the decision structure\n" +
+      "missingNodes: array of strings naming what else should be added";
+
+    aiCall(prompt, (r) => {
       let result = r;
       if (r && r._raw) {
-        try { result = JSON.parse(r._raw.replace(/```json|```/g,"").trim()); }
-        catch(e) { setGenerating(false); return; }
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (!m) { setGenerating(false); onAIMsg({role:"ai",text:"No JSON returned. Try again."}); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setGenerating(false); onAIMsg({role:"ai",text:"Could not parse response. Try again."}); return; }
       }
       if (!result || result.error) {
-        onAIMsg({ role:"ai", text:"Error: " + (result?.error||"No response") });
+        onAIMsg({ role:"ai", text: "Error: " + (result?.error||"No response") });
         setGenerating(false); return;
       }
 
@@ -9556,11 +9581,10 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       const rawEdges = result.edges || [];
 
       if (!rawNodes.length) {
-        onAIMsg({ role:"ai", text:"No nodes returned. Try again." });
+        onAIMsg({ role:"ai", text: "No nodes returned. Try again." });
         setGenerating(false); return;
       }
 
-      // Build new nodes with IDs
       const newNodes = rawNodes.map((n, i) => ({
         id: uid("n"), type: n.type || "uncertainty",
         label: n.label || "Node "+(i+1),
@@ -9570,8 +9594,6 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
         x: 150 + (i % 4) * 260, y: 100 + Math.floor(i / 4) * 180,
       }));
 
-      // Build edges using newNodes + existing nodes together
-      // Do this BEFORE setNodes so we have the full combined list
       const allNodes = [...nodes, ...newNodes];
       const normalize = s => (s||"").toLowerCase().trim();
       const newEdges = rawEdges.map(e => {
@@ -9580,7 +9602,6 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
         return src && tgt ? { id:uid("e"), from:src.id, to:tgt.id, label:e.label||"influences" } : null;
       }).filter(Boolean);
 
-      // Apply both in one render cycle
       setNodes(prev => [...prev, ...newNodes]);
       setEdges(prev => [...prev, ...newEdges]);
 
@@ -9721,10 +9742,22 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
     const growth=parseFloat(p.growthRate)||0, costPct=parseFloat(p.costMargin)||0;
     const wacc=parseFloat(p.discount)||10, yrs=parseInt(p.horizon)||5;
     aiCall(
-      "Decision: "+(problem?.decisionStatement||"Not defined")+". Uncertainties: "+uncNodes+". Decisions: "+decNodes+". "+
-      "Define uncertainty multipliers for Low/Base/High scenarios only -- no numbers, just multipliers and narrative. "+
-      "Return ONLY JSON: "+
-      '{"modelTitle":"short title","revenueMultipliers":{"low":0.6,"base":1.0,"high":1.4},"costMultipliers":{"low":1.1,"base":1.0,"high":0.85},"growthMultipliers":{"low":0.6,"base":1.0,"high":1.3},"assumptions":[{"name":"assumption","driver":"uncertainty node","low":"desc","base":"desc","high":"desc"}],"scenarioLow":"downside","scenarioBase":"base case","scenarioHigh":"upside","keyRisks":["risk1"],"notes":"modelling notes"}',
+      "Define uncertainty multipliers for a financial model based on this decision.\n" +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + "\n" +
+      "Uncertainties: " + uncNodes + "\n" +
+      "Decisions: " + decNodes + "\n\n" +
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "Keys required:\n" +
+      "modelTitle: short string\n" +
+      "revenueMultipliers: object with low (number), base (number 1.0), high (number)\n" +
+      "costMultipliers: object with low (number), base (number 1.0), high (number)\n" +
+      "growthMultipliers: object with low (number), base (number 1.0), high (number)\n" +
+      "assumptions: array of objects each with name (string), driver (uncertainty node label), low (description), base (description), high (description)\n" +
+      "scenarioLow: string describing the downside scenario\n" +
+      "scenarioBase: string describing the base case\n" +
+      "scenarioHigh: string describing the upside scenario\n" +
+      "keyRisks: array of strings\n" +
+      "notes: string with modelling notes",
     (r)=>{
       let structure=r;
       if(r&&r._raw){try{structure=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setBuildingModel(false);return;}}
@@ -11199,8 +11232,8 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
       "Context: " + context + ". " +
       "Respond with 3-5 sharp, specific facilitation insights. " +
       "Each should be a single sentence that the facilitator can act on immediately. " +
-      "Return ONLY JSON: " +
-      '{"insights":["insight 1","insight 2","insight 3"],"tensions":["tension 1"],"missingPerspectives":["missing 1"],"recommendation":"one key facilitation move right now"}',
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "Keys: insights (array of 3-5 strings), tensions (array of strings), missingPerspectives (array of strings), recommendation (string).",
     (r) => {
       let result = r;
       if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
