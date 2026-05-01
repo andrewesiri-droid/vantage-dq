@@ -2445,6 +2445,17 @@ Return ONLY JSON:
 /* ─────────────────────────────────────────────────────────────────────────────
    MODULE 3 — DECISION HIERARCHY (six tiers + criteria)
 ───────────────────────────────────────────────────────────────────────────── */
+const defaultIssues = () => ([
+  { id:uid("i"), text:"Regulatory approval timelines are uncertain and vary significantly by country", severity:"High",   category:"Regulatory",   type:"uncertainty" },
+  { id:uid("i"), text:"Local partner quality and alignment with our values is unproven",              severity:"High",   category:"Stakeholder",  type:"uncertainty" },
+  { id:uid("i"), text:"Capital requirements may exceed current budget envelope",                      severity:"High",   category:"Financial",    type:"constraint"  },
+  { id:uid("i"), text:"Competitive response from incumbents could compress margins faster than modelled", severity:"Medium", category:"Competitive",  type:"uncertainty" },
+  { id:uid("i"), text:"Our brand is largely unknown in key APAC markets",                            severity:"Medium", category:"Market",       type:"fact"        },
+  { id:uid("i"), text:"Currency exposure creates earnings volatility we have not budgeted for",      severity:"Medium", category:"Financial",    type:"risk"        },
+  { id:uid("i"), text:"Internal capability gaps in regional operations management",                  severity:"Medium", category:"Capability",   type:"assumption"  },
+  { id:uid("i"), text:"We have assumed first-mover advantage but this has not been validated",       severity:"Low",    category:"Strategy",     type:"assumption"  },
+]);
+
 const defaultDecisions = () => ([
   { id:uid("d"), label:"Market Entry Mode", sourceId:null, choices:["Direct subsidiary","Strategic partnership","Acquire local player","Agent / reseller model"], tier:"focus", owner:"CSO", rationale:"Most consequential variable — determines capital, speed, and control" },
   { id:uid("d"), label:"Geographic Priority", sourceId:null, choices:["Singapore first","Japan first","Australia first","Multi-market simultaneous"], tier:"focus", owner:"CEO", rationale:"Sets the operational blueprint for the full APAC build-out" },
