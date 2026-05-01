@@ -2043,7 +2043,7 @@ Return ONLY JSON:
       "unsupported_assertion (treats assumption as confirmed fact). " +
       "Score issue quality 0-100: 0-40=poor, 41-70=adequate, 71-100=strong. " +
       "Return ONLY JSON: " +
-      "{"qualityScore":75,"flags":[{"type":"vague_issue|duplicate_issue|solution_disguised|no_decision_impact|low_materiality|missing_owner|category_confusion|root_cause_missing|unsupported_assertion","severity":"critical|warning|info","message":"specific issue found","suggestion":"how to fix it"}],"improvedText":"sharper issue title if needed or null","improvedDescription":"better description if needed or null","summary":"1-sentence quality assessment"}",
+      '{"qualityScore":75,"flags":[{"type":"vague_issue|duplicate_issue|solution_disguised|no_decision_impact|low_materiality|missing_owner|category_confusion|root_cause_missing|unsupported_assertion","severity":"critical|warning|info","message":"specific issue found","suggestion":"how to fix it"}],"improvedText":"sharper issue title if needed or null","improvedDescription":"better description if needed or null","summary":"1-sentence quality assessment"}',
     (r) => {
       let result = r;
       if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setValidating(null);return;}}
@@ -2080,7 +2080,7 @@ Return ONLY JSON:
       "Identify issue categories and themes that are under-represented or completely absent. " +
       "Be specific — name the actual missing issues, not just categories. " +
       "Return ONLY JSON: " +
-      "{"blindSpots":[{"category":"category-key","title":"missing issue title","why":"why this matters for the decision","severity":"Critical|High|Medium"}],"coverageAssessment":"brief assessment of issue landscape coverage","missingCategories":["category with no issues"]}",
+      '{"blindSpots":[{"category":"category-key","title":"missing issue title","why":"why this matters for the decision","severity":"Critical|High|Medium"}],"coverageAssessment":"brief assessment of issue landscape coverage","missingCategories":["category with no issues"]}',
     (r) => {
       let result = r;
       if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setDetectingBlinds(false);return;}}
