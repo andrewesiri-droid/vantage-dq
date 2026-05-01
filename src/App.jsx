@@ -1735,7 +1735,6 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                   )}
                 </div>
               )}
-            </div>
 
             {/* ── AI Facilitator Chat ── */}
             {v && !checking && (
