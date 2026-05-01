@@ -13993,7 +13993,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
   const [phase, setPhase] = useState("landing");
   const [inputMode, setInputMode] = useState("paste");
   const [rawText, setRawText] = useState("");
-  const [guidedAnswers, setGuidedAnswers] = useState({ what:"", why:"", who:"", when:"", constraints:"" });
+  const [guidedAnswers, setGuidedAnswers] = useState({ frame:"", trigger:"", options:"", uncertainty:"", success:"" });
   const [analysisProgress, setAnalysisProgress] = useState([]);
   const [draft, setDraft] = useState(null);
   const [accepted, setAccepted] = useState({});
@@ -14001,11 +14001,31 @@ function QuickStartScreen({ onComplete, onSkip }) {
   const { busy, call } = useAI();
 
   const GUIDED_QUESTIONS = [
-    { key:"what", label:"What decision needs to be made?", placeholder:"Describe the core decision in your own words." },
-    { key:"why",  label:"Why does this decision matter now?", placeholder:"What is driving the urgency? What triggered this?" },
-    { key:"who",  label:"Who owns this decision and who is affected?", placeholder:"Decision maker, key stakeholders, those impacted." },
-    { key:"when", label:"What is the time horizon or deadline?", placeholder:"When must this be decided? What happens if delayed?" },
-    { key:"constraints", label:"What constraints or givens exist?", placeholder:"Budget limits, regulatory requirements, non-negotiables." },
+    {
+      key: "frame",
+      label: "What is the decision you are trying to make?",
+      placeholder: "Describe the decision in your own words — not the problem, not a task, but the actual choice. Who has to decide, and on what?\n\nExample: \"We need to decide whether to build our own logistics capability or continue outsourcing — and if we build, at what scale and pace.\"",
+    },
+    {
+      key: "trigger",
+      label: "What triggered this decision, and what happens if it is delayed or avoided?",
+      placeholder: "What changed — internally or externally — that put this on the agenda now? What is the cost of inaction or delay?\n\nExample: \"A key logistics partner just announced a 40% price increase effective Q3. If we don't act, our margins collapse. If we delay, we lose 12 months of build time.\"",
+    },
+    {
+      key: "options",
+      label: "What are the main options or directions being considered?",
+      placeholder: "List the real alternatives on the table — not just the preferred one. Include the \"do nothing\" or \"status quo\" option if relevant.\n\nExample: \"(1) Build in-house fulfilment centres, (2) Acquire a regional logistics firm, (3) Re-negotiate existing contracts, (4) Hybrid — partial build plus outsource peak capacity.\"",
+    },
+    {
+      key: "uncertainty",
+      label: "What do you not know that most affects this decision?",
+      placeholder: "What are the key unknowns, risks, or variables outside your control that could make the right answer different?\n\nExample: \"We don't know whether customer demand will sustain at current levels. We're also uncertain whether we can hire operations talent fast enough. Regulatory changes in two markets could shift our cost structure.\"",
+    },
+    {
+      key: "success",
+      label: "What does a great outcome look like — and what would a poor one cost you?",
+      placeholder: "Describe what success looks like in concrete terms: financial, strategic, operational. Then describe what a bad decision would cost.\n\nExample: \"Success = logistics cost per unit drops 25% within 18 months, NPS improves, no customer SLA breach during transition. Failure = >$15M written off, 6-month operational disruption, competitor takes market share during our distraction.\"",
+    },
   ];
 
   const getInputText = () => {
@@ -14208,7 +14228,7 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
               icon:"🗂",
               label:"Guided Questions",
               sublabel:"No document needed",
-              desc:"Answer 5 focused questions about your decision. We build the frame from your answers.",
+              desc:"Answer 5 DQ-specific questions about your decision — frame, trigger, options, uncertainty, and success criteria. The AI builds your complete decision structure from your answers.",
               color:"#7c3aed",
               gradient:"linear-gradient(135deg,#2e1065,#5b21b6)",
               action:()=>{ setInputMode("guided"); setPhase("input"); },
@@ -14395,9 +14415,9 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
             <div style={{ animation:"fadeUp .25s ease" }}>
               <div style={{ marginBottom:24 }}>
                 <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:22,
-                  fontWeight:700, color:DS.textPri, marginBottom:8 }}>Five questions about your decision</div>
+                  fontWeight:700, color:DS.textPri, marginBottom:8 }}>Five DQ-focused questions</div>
                 <div style={{ fontSize:13, color:DS.textSec, lineHeight:1.6 }}>
-                  Rough answers are fine — the AI will structure and infer. Answer at least 2 questions.
+                  Be specific — the more concrete your answers, the sharper the AI output. Answer at least 2 questions. Rough notes are fine.
                 </div>
               </div>
 
@@ -14409,7 +14429,7 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
                       fontSize:11, fontWeight:700, color:"#fff", flexShrink:0 }}>{i+1}</span>
                     <label style={{ fontSize:13, fontWeight:700, color:DS.textPri }}>{q.label}</label>
                   </div>
-                  <textarea value={guidedAnswers[q.key]} rows={3}
+                  <textarea value={guidedAnswers[q.key]} rows={4}
                     onChange={e=>setGuidedAnswers(a=>({...a,[q.key]:e.target.value}))}
                     placeholder={q.placeholder}
                     style={{ width:"100%", padding:"11px 14px", fontSize:12, fontFamily:"inherit",
