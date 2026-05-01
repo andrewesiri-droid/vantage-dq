@@ -5575,65 +5575,50 @@ function ModuleQualitativeAssessment({
     }
     setAssessing(true);
 
-    const critLines = criteria.map((cr, i) =>
-      (i+1) + "=" + cr.label
-    ).join(", ");
-
-    const stratLines = strategies.map((s, i) =>
-      (i+1) + "=" + s.name
-    ).join(", ");
-
-    const totalCells = strategies.length * criteria.length;
+    const critLines = criteria.map((cr, i) => (i+1) + ". " + cr.label).join(", ");
+    const stratLines = strategies.map((s, i) => (i+1) + ". " + s.name).join(", ");
+    const total = strategies.length * criteria.length;
 
     const prompt =
-      "Score each strategy against each criterion for this decision.\n" +
+      "Score every strategy against every criterion.\n" +
       "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
-      "Criteria (by number): " + critLines + "\n" +
-      "Strategies (by number): " + stratLines + "\n\n" +
-      "Return a JSON object. The object must have one key called scores.\n" +
-      "scores is an array of exactly " + totalCells + " objects.\n" +
-      "Each object has: sI (strategy number 1-" + strategies.length + "), cI (criterion number 1-" + criteria.length + "), v (score 1-5), r (one sentence rationale).\n" +
-      "Use the full range 1-5. Do not give everything the same score.\n" +
-      "No markdown. No explanation. Only the JSON object.";
+      "Criteria: " + critLines + "\n" +
+      "Strategies: " + stratLines + "\n\n" +
+      "Return a JSON object with one key: scores.\n" +
+      "scores is an array of exactly " + total + " items.\n" +
+      "Each item: strategyIndex (integer), criterionIndex (integer), score (integer 1-5), rationale (string).\n" +
+      "strategyIndex and criterionIndex match the numbers above.\n" +
+      "Use scores 1 to 5. Be differentiated. No markdown. No explanation.";
 
     aiCall(prompt, (r) => {
       let result = r;
       if (r && r._raw) {
         const m = (r._raw||"").match(/\{[\s\S]*\}/);
-        if (m) { try { result = JSON.parse(m[0]); } catch(e) { setAssessing(false); return; } }
-        else { setAssessing(false); onAIMsg({role:"ai",text:"No JSON returned. Try again."}); return; }
+        if (!m) { setAssessing(false); onAIMsg({role:"ai",text:"No JSON returned. Try again."}); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setAssessing(false); onAIMsg({role:"ai",text:"Could not parse. Try again."}); return; }
       }
       if (!result || result.error) { setAssessing(false); return; }
 
-      // Handle different response shapes
-      let scoreArr = result.scores || result.Scores || result.SCORES;
-      if (!scoreArr && Array.isArray(result)) scoreArr = result;
-      if (!scoreArr) {
-        // Try finding any array in the result
-        const arrKey = Object.keys(result).find(k => Array.isArray(result[k]));
-        if (arrKey) scoreArr = result[arrKey];
-      }
-
-      if (!scoreArr || !scoreArr.length) {
-        setAssessing(false);
-        onAIMsg({role:"ai", text:"AI returned no scores array. Please try again."});
-        return;
-      }
+      // Find the scores array wherever it is
+      let arr = result.scores || result.Scores || result.data;
+      if (!arr) { const k = Object.keys(result).find(k => Array.isArray(result[k])); if (k) arr = result[k]; }
+      if (!arr || !arr.length) { setAssessing(false); onAIMsg({role:"ai",text:"No scores in response. Try again."}); return; }
 
       const newScores = { ...scores };
       let filled = 0;
-      scoreArr.forEach(cell => {
-        // sI/cI are the compact keys; also support strategyIndex/criterionIndex
-        const si = (typeof cell.sI==="number" ? cell.sI : typeof cell.strategyIndex==="number" ? cell.strategyIndex : 0) - 1;
-        const ci = (typeof cell.cI==="number" ? cell.cI : typeof cell.criterionIndex==="number" ? cell.criterionIndex : 0) - 1;
+      arr.forEach(cell => {
+        // Try every possible key name the model might use
+        const si = Number(cell.strategyIndex ?? cell.strategy_index ?? cell.sI ?? cell.si ?? 0) - 1;
+        const ci = Number(cell.criterionIndex ?? cell.criterion_index ?? cell.cI ?? cell.ci ?? 0) - 1;
+        const sc = Number(cell.score ?? cell.value ?? cell.v ?? cell.rating ?? 0);
         const strat = si >= 0 && si < strategies.length ? strategies[si] : null;
         const crit  = ci >= 0 && ci < criteria.length  ? criteria[ci]    : null;
-        const score = typeof cell.v==="number" ? cell.v : typeof cell.score==="number" ? cell.score : 0;
-        if (strat && crit && score >= 1 && score <= 5) {
+        if (strat && crit && sc >= 1 && sc <= 5) {
           newScores[scoreKey(strat.id, crit.id)] = {
             ...getCell(strat.id, crit.id),
-            score,
-            rationale: cell.r || cell.rationale || "",
+            score: sc,
+            rationale: String(cell.rationale || cell.r || cell.reason || ""),
             confidence: "moderate",
           };
           filled++;
@@ -5641,11 +5626,10 @@ function ModuleQualitativeAssessment({
       });
 
       onScores(newScores);
-      const total = strategies.length * criteria.length;
       onAIMsg({ role:"ai", text:
         filled === total ? "All " + total + " cells scored." :
         filled > 0 ? "Scored " + filled + " of " + total + " cells." :
-        "Scores returned but none matched. Please try again."
+        "Scores received but none matched. Check DevTools console for details."
       });
       setAssessing(false);
     });
@@ -8149,11 +8133,21 @@ function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholde
         else { setAnalysing(false); return; }
       }
       if (!result || result.error) { setAnalysing(false); return; }
-      setAnalysis(result);
+      // Normalise field names — model may use snake_case
+      const norm = {
+        alignmentScore:      result.alignmentScore      ?? result.alignment_score      ?? result.score        ?? 50,
+        alignmentVerdict:    result.alignmentVerdict    || result.alignment_verdict    || result.verdict      || "at_risk",
+        criticalUnaligned:   result.criticalUnaligned   || result.critical_unaligned   || result.unaligned    || [],
+        hiddenTensions:      result.hiddenTensions      || result.hidden_tensions      || result.tensions     || [],
+        missingVoices:       result.missingVoices       || result.missing_voices       || result.missing      || [],
+        engagementPriority:  result.engagementPriority  || result.engagement_priority  || result.actions      || [],
+        commitmentReadiness: result.commitmentReadiness || result.commitment_readiness || result.readiness    || "",
+      };
+      setAnalysis(norm);
       onAIMsg({role:"ai", text:
-        "Alignment score: " + (result.alignmentScore||"?") + "/100. " +
-        "Verdict: " + (result.alignmentVerdict||"?") + ". " +
-        (result.commitmentReadiness||"")
+        "Alignment score: " + norm.alignmentScore + "/100. " +
+        "Verdict: " + norm.alignmentVerdict + ". " +
+        (norm.commitmentReadiness||"")
       });
       setAnalysing(false);
       setView("analysis");
