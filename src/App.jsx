@@ -1904,6 +1904,36 @@ function ProblemDefChat({ data, v, aiCall, aiBusy, onAIMsg }) {
   );
 }
 
+const SEVERITY_LEVELS = ["Critical","High","Medium","Low"];
+const ISSUE_STATUS   = ["Open","In Progress","Resolved","Parked","Escalated"];
+
+const ISSUE_CATEGORIES = [
+  { key:"focus-decision",      label:"Focus Decision",       icon:"⊕", color:"#2563eb", soft:"#eff6ff", line:"#bfdbfe", dqRole:"decisions",    flowTo:"Strategy Table",         desc:"Strategic choices that must be made now — drive the strategy table" },
+  { key:"given-decision",      label:"Given Decision",       icon:"🔒", color:"#6b7280", soft:"#f9fafb", line:"#e5e7eb", dqRole:"decisions",    flowTo:"Decision Hierarchy",     desc:"Already decided, locked, or non-negotiable" },
+  { key:"tactical-decision",   label:"Tactical Decision",    icon:"◎", color:"#7c3aed", soft:"#f5f3ff", line:"#ddd6fe", dqRole:"decisions",    flowTo:"Decision Hierarchy",     desc:"Downstream from focus decisions — cannot resolve yet" },
+  { key:"decision-criteria",   label:"Decision Criteria",    icon:"◉", color:"#059669", soft:"#ecfdf5", line:"#a7f3d0", dqRole:"decisions",    flowTo:"Qualitative Assessment", desc:"What we value — how strategies will be judged" },
+  { key:"uncertainty-external",label:"External Uncertainty", icon:"◈", color:"#dc2626", soft:"#fef2f2", line:"#fecaca", dqRole:"uncertainties",flowTo:"Influence Diagram",      desc:"Unknown external factors outside the team's control" },
+  { key:"uncertainty-internal",label:"Internal Uncertainty", icon:"◇", color:"#ea580c", soft:"#fff7ed", line:"#fed7aa", dqRole:"uncertainties",flowTo:"Influence Diagram",      desc:"Unknown internal factors the team could resolve" },
+  { key:"brutal-truth",        label:"Brutal Truth",         icon:"⚡", color:"#9f1239", soft:"#fff1f2", line:"#fecdd3", dqRole:"uncertainties",flowTo:"Issue Raising",          desc:"Known reality being avoided or understated" },
+  { key:"assumption",          label:"Assumption",           icon:"◷", color:"#d97706", soft:"#fffbeb", line:"#fde68a", dqRole:"frame",        flowTo:"Problem Definition",     desc:"Treated as true without verification — could be wrong" },
+  { key:"information-gap",     label:"Information Gap",      icon:"◫", color:"#0891b2", soft:"#ecfeff", line:"#a5f3fc", dqRole:"frame",        flowTo:"Value of Information",   desc:"Need to know but don't have yet" },
+  { key:"constraint",          label:"Constraint",           icon:"⊟", color:"#475569", soft:"#f8fafc", line:"#e2e8f0", dqRole:"frame",        flowTo:"Problem Definition",     desc:"Hard limit bounding the solution space" },
+  { key:"opportunity",         label:"Opportunity",          icon:"⬡", color:"#16a34a", soft:"#f0fdf4", line:"#bbf7d0", dqRole:"value",        flowTo:"Strategy Table",         desc:"Upside possibility worth preserving in strategy design" },
+  { key:"stakeholder-concern", label:"Stakeholder Concern",  icon:"◑", color:"#7c3aed", soft:"#f5f3ff", line:"#ddd6fe", dqRole:"value",        flowTo:"Influence Diagram",      desc:"Specific stakeholder alignment or commitment risk" },
+];
+
+const CAT_MAP = Object.fromEntries(ISSUE_CATEGORIES.map(c=>[c.key,c]));
+
+const SEVERITY_COLOR = { Critical:"#dc2626", High:"#f97316", Medium:"#d97706", Low:"#64748b" };
+const STATUS_COLOR   = { Open:"#2563eb", "In Progress":"#d97706", Resolved:"#059669", Parked:"#64748b", Escalated:"#dc2626" };
+
+const DQ_ROLE_GROUPS = [
+  { key:"decisions",     label:"Decisions",     desc:"Items that should flow into the Decision Hierarchy" },
+  { key:"uncertainties", label:"Uncertainties", desc:"Unknown factors requiring analysis or monitoring" },
+  { key:"frame",         label:"Frame",         desc:"Items that refine or constrain the problem definition" },
+  { key:"value",         label:"Value",         desc:"Opportunities and stakeholder concerns affecting value" },
+];
+
 function ModuleIssueRaising({ issues, onChange, decisions, onDecisions, criteria, onCriteria, problem, aiCall, aiBusy, onAIMsg }) {
   const [view, setView]               = useState("raise");   // raise | categorise | heatmap
   const [input, setInput]             = useState("");
