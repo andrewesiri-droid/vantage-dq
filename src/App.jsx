@@ -780,19 +780,20 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
           onChange={e=>handleChange(fieldKey, e.target.value)}
           placeholder={placeholder}
           style={{ width:"100%", padding:"9px 12px", fontSize:12, fontFamily:"inherit",
-            background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+            background:DS.canvasAlt,
+            border:`1.5px solid ${liveFlags[fieldKey]?.level==="critical"?"#fca5a5":liveFlags[fieldKey]?.level==="warning"?"#fde68a":DS.canvasBdr}`,
             borderRadius:6, color:DS.ink, outline:"none", resize:"vertical",
             lineHeight:1.6, boxSizing:"border-box",
-            borderColor: liveFlags[fieldKey]?.level==="critical"
-              ? "#fca5a5" : liveFlags[fieldKey]?.level==="warning"
-              ? "#fde68a" : DS.canvasBdr }}/>
+            cursor:"text", userSelect:"text",
+            transition:"border-color .15s" }}/>
       ) : (
         <input type={type} value={data[fieldKey]||""}
           onChange={e=>handleChange(fieldKey, e.target.value)}
           placeholder={placeholder}
           style={{ width:"100%", padding:"9px 12px", fontSize:12, fontFamily:"inherit",
-            background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
-            borderRadius:6, color:DS.ink, outline:"none", boxSizing:"border-box" }}/>
+            background:DS.canvasAlt, border:`1.5px solid ${DS.canvasBdr}`,
+            borderRadius:6, color:DS.ink, outline:"none", boxSizing:"border-box",
+            cursor:"text", userSelect:"text", transition:"border-color .15s" }}/>
       )}
       <LiveFlag field={fieldKey}/>
     </div>
@@ -1051,15 +1052,22 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                 {pct}%
               </div>
             </div>
-            {v?.overallScore > 0 && (
               <div style={{ textAlign:"right", paddingLeft:10,
-                borderLeft:`1px solid ${DS.canvasBdr}` }}>
+                borderLeft:`1px solid ${DS.canvasBdr}`,
+                cursor: v ? "default" : "pointer" }}
+                onClick={v ? undefined : validateWithAI}>
                 <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
                   letterSpacing:.5 }}>DQ Score</div>
-                <div style={{ fontSize:20, fontWeight:700, fontFamily:"'Libre Baskerville',serif",
-                  color:scoreColor(v.overallScore), lineHeight:1 }}>{v.overallScore}</div>
+                {v?.overallScore > 0 ? (
+                  <div style={{ fontSize:20, fontWeight:700, fontFamily:"'Libre Baskerville',serif",
+                    color:scoreColor(v.overallScore), lineHeight:1 }}>{v.overallScore}</div>
+                ) : (
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.accent,
+                    lineHeight:1.2, maxWidth:90, textAlign:"right" }}>
+                    {checking ? "..." : "Run Check →"}
+                  </div>
+                )}
               </div>
-            )}
           </div>
           {/* Action buttons */}
           <div style={{ display:"flex", gap:6 }}>
@@ -1172,6 +1180,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                   style={{ width:"100%", padding:"9px 12px", fontSize:12, fontFamily:"inherit",
                     background:DS.canvasAlt, borderRadius:6, color:DS.ink, outline:"none",
                     resize:"vertical", lineHeight:1.6, boxSizing:"border-box",
+                    cursor:"text", userSelect:"text",
                     border:`1.5px solid ${
                       liveFlags.decisionStatement?.level==="critical"?"#fca5a5":
                       liveFlags.decisionStatement?.level==="warning"?"#fde68a":DS.canvasBdr}`}}/>
@@ -1247,6 +1256,99 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                   The absence of a named decision-owner is one of the most common causes of decision failure.
                 </div>
               </div>
+
+              {/* ── AI Frame Check inline results ── */}
+              {v && !checking && (
+                <div style={{ marginTop:20, borderTop:`1px solid ${DS.canvasBdr}`,
+                  paddingTop:20 }}>
+
+                  {/* Improved statement */}
+                  {v.improvedStatement && (
+                    <div style={{ marginBottom:16, padding:"14px 16px",
+                      background:"#f0fdf4", border:"1.5px solid #86efac",
+                      borderRadius:8 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:"#059669",
+                          textTransform:"uppercase", letterSpacing:.5 }}>
+                          ✦ Suggested Decision Statement
+                        </div>
+                        <div style={{ fontSize:10, color:"#64748b" }}>
+                          — from AI Frame Check
+                        </div>
+                      </div>
+                      <div style={{ fontSize:13, color:"#065f46", lineHeight:1.6,
+                        fontStyle:"italic", marginBottom:10 }}>
+                        "{v.improvedStatement}"
+                      </div>
+                      <button onClick={()=>handleChange("decisionStatement", v.improvedStatement)}
+                        style={{ padding:"5px 12px", fontSize:11, fontWeight:700,
+                          fontFamily:"inherit", border:"1px solid #86efac",
+                          borderRadius:5, background:"#dcfce7",
+                          color:"#059669", cursor:"pointer" }}>
+                        Apply this statement →
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Top critical flags */}
+                  {(v.flags||[]).filter(f=>f.severity==="critical"||f.severity==="warning").slice(0,3).map((flag,i) => (
+                    <div key={i} style={{ marginBottom:8, padding:"10px 14px",
+                      background:flag.severity==="critical"?"#fef2f2":"#fffbeb",
+                      border:`1px solid ${flag.severity==="critical"?"#fecaca":"#fde68a"}`,
+                      borderRadius:7 }}>
+                      <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                        <span style={{ fontSize:9, fontWeight:700, padding:"2px 6px",
+                          borderRadius:3, flexShrink:0,
+                          background:flag.severity==="critical"?"#dc2626":"#d97706",
+                          color:"#fff" }}>
+                          {flag.severity?.toUpperCase()}
+                        </span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:11, fontWeight:700,
+                            color:DS.ink, marginBottom:2 }}>
+                            {flag.title}
+                          </div>
+                          <div style={{ fontSize:11, color:DS.inkSub,
+                            lineHeight:1.5 }}>{flag.message}</div>
+                          {flag.suggestion && (
+                            <div style={{ fontSize:10, color:DS.accent,
+                              marginTop:3 }}>→ {flag.suggestion}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Link to full results */}
+                  {(v.flags||[]).length > 3 && (
+                    <button onClick={()=>setTab("validation")}
+                      style={{ fontSize:11, color:DS.accent, background:"none",
+                        border:"none", cursor:"pointer", fontFamily:"inherit",
+                        padding:"4px 0", fontWeight:600 }}>
+                      See all {v.flags.length} flags in AI Frame Check tab →
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* ── Nudge to run Frame Check when fields are filled ── */}
+              {!v && !checking && (data.decisionStatement||"").length > 20 && (
+                <div style={{ marginTop:16, padding:"10px 16px",
+                  background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
+                  borderRadius:7, display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ flex:1, fontSize:11, color:DS.inkSub }}>
+                    Decision statement looks ready for AI review.
+                    Get a DQ score and improvement suggestions.
+                  </div>
+                  <button onClick={validateWithAI} disabled={aiBusy||checking}
+                    style={{ padding:"6px 14px", fontSize:11, fontWeight:700,
+                      fontFamily:"inherit", border:"none", borderRadius:6,
+                      background:DS.accent, color:"#fff", cursor:"pointer",
+                      whiteSpace:"nowrap", opacity:aiBusy?0.6:1 }}>
+                    ✦ Run Frame Check
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
