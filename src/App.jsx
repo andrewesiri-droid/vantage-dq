@@ -13645,174 +13645,715 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
     </div>
   );
 }
-function CrossModuleAI({ problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, aiCall, aiBusy, onAIMsg }) {
-  const [insights, setInsights] = useState(null);
-  const [running, setRunning]   = useState(false);
-  const [open, setOpen]         = useState(false);
+function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
+  assessmentScores, dqScores, nodes, edges, aiCall, aiBusy, onAIMsg }) {
+
+  const [insights, setInsights]     = useState(null);
+  const [running, setRunning]       = useState(false);
+  const [open, setOpen]             = useState(false);
+  const [activeTab, setActiveTab]   = useState("flags");
+  const [dataHash, setDataHash]     = useState("");
+  const [lastRunHash, setLastRunHash] = useState("");
+
+  // Track when data changes after a run (staleness detection)
+  useEffect(() => {
+    const hash = [
+      problem?.decisionStatement?.slice(0,30),
+      issues.length,
+      decisions.length,
+      strategies.length,
+      criteria.length,
+      Object.keys(assessmentScores).length,
+      Object.keys(dqScores).length,
+      (nodes||[]).length,
+    ].join("|");
+    setDataHash(hash);
+  }, [problem, issues, decisions, strategies, criteria, assessmentScores, dqScores, nodes]);
+
+  const isStale = insights && dataHash !== lastRunHash;
 
   const run = () => {
     setRunning(true);
-    const focusDecs = decisions.filter(d=>d.tier==="focus");
-    const issueCats = {};
-    ISSUE_CATEGORIES.forEach(c => { issueCats[c.key] = issues.filter(i=>i.category===c.key).length; });
-    const brutals  = issues.filter(i=>i.category==="brutal-truth").map(i=>i.text.slice(0,80));
-    const assumptions = issues.filter(i=>i.category==="assumption").map(i=>i.text.slice(0,80));
-    const dqEl = DQ_ELEMENTS.map(e=>`${e.label}:${dqScores[e.key]||0}`).join(", ");
-    const scored = strategies.map(s => {
-      const total = criteria.reduce((sum,c)=>{
-        const sc = assessmentScores[`${s.id}__${c.id}`]||0;
-        return sum+sc;
-      },0);
-      return `${DS.sNames[s.colorIdx]||s.name}:${total}pts`;
-    }).join(", ");
+    setLastRunHash(dataHash);
 
-    aiCall(`You are a senior DQ expert performing a cross-module intelligence audit of a decision framing session.
+    const focusDecs = decisions.filter(d => d.tier === "focus");
+    const givenDecs = decisions.filter(d => d.tier === "given");
+    const deferredDecs = decisions.filter(d => d.tier === "deferred");
 
-Decision: "${problem.decisionStatement}"
-Frame quality indicators: owner="${problem.owner}", scope-in="${problem.scopeIn?.slice(0,60)}", deadline="${problem.deadline}"
-Issues: ${issues.length} total, ${issueCats["brutal-truth"]||0} brutal truths, ${issueCats["assumption"]||0} assumptions, ${issueCats["information-gap"]||0} info gaps
-Brutal truths raised: ${brutals.join("; ")||"none"}
-Assumptions: ${assumptions.join("; ")||"none"}
-Focus decisions: ${focusDecs.map(d=>d.label).join(", ")||"none"}
-Criteria: ${criteria.map(c=>c.label).join(", ")||"none"}
-Strategies: ${strategies.map(s=>DS.sNames[s.colorIdx]||s.name).join(", ")||"none"}
-Assessment scores: ${scored||"not scored"}
-DQ element scores: ${dqEl}
+    const issueSummary = {
+      total: issues.length,
+      critical: issues.filter(i => i.severity === "Critical").length,
+      brutalTruths: issues.filter(i => i.category === "brutal-truth").map(i => i.text.slice(0,70)),
+      assumptions: issues.filter(i => i.category === "assumption").map(i => i.text.slice(0,70)),
+      infoGaps: issues.filter(i => i.category === "information-gap").map(i => i.text.slice(0,70)),
+      uncertainties: issues.filter(i => i.category?.includes("uncertainty")).map(i => i.text.slice(0,70)),
+      stakeholder: issues.filter(i => i.category === "stakeholder").map(i => i.text.slice(0,70)),
+    };
 
-Identify CROSS-MODULE inconsistencies, blind spots, and opportunities that a single-module view would miss.
-Be specific and direct. Each insight must reference at least two modules.
+    const stratSummary = strategies.map(s => {
+      const totalScore = criteria.reduce((sum, cr) => {
+        return sum + (assessmentScores[`${s.id}__${cr.id}`] || 0);
+      }, 0);
+      const maxScore = criteria.length * 5;
+      return `${DS.sNames[s.colorIdx]||s.name}: objective="${s.objective?.slice(0,60)||"none"}", ` +
+        `score=${totalScore}/${maxScore}, assumptions="${s.keyAssumptions?.slice(0,60)||"none"}"`;
+    }).join("\n");
 
-Return ONLY JSON:
-{
-  "insights":[{
-    "title":"short headline",
-    "body":"2-3 sentences — specific observation referencing actual data from the session",
-    "modules":["Module A","Module B"],
-    "severity":"critical|warning|opportunity",
-    "action":"specific recommended action"
-  }],
-  "healthScore":0-100,
-  "healthSummary":"one frank sentence on overall session coherence"
-}`,
-    (r) => {
-      if (!r.error) {
-        setInsights(r);
-        onAIMsg({ role:"ai", text: r.healthSummary || "Cross-module analysis complete." });
+    const dqSummary = DQ_ELEMENTS.map(e =>
+      `${e.label}: ${dqScores[e.key] || 0}/10`
+    ).join(", ");
+
+    const influenceSummary = (nodes||[]).length > 0
+      ? `${(nodes||[]).filter(n=>n.type==="uncertainty").length} uncertainty nodes, ` +
+        `${(nodes||[]).filter(n=>n.type==="decision").length} decision nodes, ` +
+        `${(nodes||[]).filter(n=>n.type==="value").length} value nodes, ` +
+        `${(edges||[]).length} influence edges`
+      : "not built";
+
+    const scopeQuality = [
+      problem?.decisionStatement ? "has decision statement" : "MISSING decision statement",
+      problem?.scopeIn ? "scope defined" : "scope not defined",
+      problem?.constraints ? "constraints noted" : "no constraints",
+      problem?.successCriteria ? "success criteria set" : "no success criteria",
+      problem?.owner ? "owner assigned" : "no owner",
+    ].join("; ");
+
+    aiCall(
+      "You are an elite Decision Quality intelligence engine performing a cross-module audit of a live decision session. " +
+      "Your role is to detect contradictions, framing drift, missing analysis, unresolved tensions, and coherence failures " +
+      "that ONLY become visible when reading across all modules simultaneously. " +
+      "Be specific — every flag must reference actual data from the session. No generic observations.\n\n" +
+      "=== SESSION DATA ===\n" +
+      "Decision: \"" + (problem?.decisionStatement || "NOT SET") + "\"\n" +
+      "Frame quality: " + scopeQuality + "\n" +
+      "Owner: " + (problem?.owner || "none") + " | Deadline: " + (problem?.deadline || "none") + "\n\n" +
+      "ISSUES (" + issueSummary.total + " total, " + issueSummary.critical + " critical):\n" +
+      "  Brutal truths: " + (issueSummary.brutalTruths.join("; ") || "none") + "\n" +
+      "  Assumptions: " + (issueSummary.assumptions.join("; ") || "none") + "\n" +
+      "  Information gaps: " + (issueSummary.infoGaps.join("; ") || "none") + "\n" +
+      "  Uncertainties: " + (issueSummary.uncertainties.join("; ") || "none") + "\n" +
+      "  Stakeholder issues: " + (issueSummary.stakeholder.join("; ") || "none") + "\n\n" +
+      "DECISIONS: Focus=" + focusDecs.map(d=>d.label).join(", ") + " | Given=" + givenDecs.map(d=>d.label).join(", ") + " | Deferred=" + deferredDecs.map(d=>d.label).join(", ") + "\n\n" +
+      "CRITERIA: " + (criteria.map(c=>c.label).join(", ") || "none") + "\n\n" +
+      "STRATEGIES:\n" + (stratSummary || "none") + "\n\n" +
+      "INFLUENCE MAP: " + influenceSummary + "\n\n" +
+      "DQ ELEMENT SCORES: " + dqSummary + "\n\n" +
+      "=== ANALYSIS REQUIRED ===\n" +
+      "Detect ALL of the following where present:\n" +
+      "1. LOGIC CONTRADICTION: two modules whose content directly contradicts each other\n" +
+      "2. FRAMING DRIFT: strategies/criteria that have drifted from the stated decision or original objectives\n" +
+      "3. UNRESOLVED UNCERTAINTY: critical uncertainty from issues/influence map not addressed in strategy or criteria\n" +
+      "4. MISSING STRATEGIC ALIGNMENT: a strategy whose objective conflicts with the decision statement\n" +
+      "5. ORPHAN RISK: a risk/issue with no corresponding strategy, criterion, or mitigation\n" +
+      "6. DISCONNECTED MODULE: a module that appears empty or inconsistent with others\n" +
+      "7. STAKEHOLDER MISALIGNMENT: stakeholder tension in issues not reflected in criteria or strategy\n" +
+      "8. FALSE CONFIDENCE RISK: the decision process implies more certainty than the evidence supports\n" +
+      "9. GROUPTHINK RISK: strategies are too similar, no genuine challenge perspective visible\n" +
+      "10. DECISION TENSION: two legitimate objectives or constraints that pull in opposite directions\n\n" +
+      "Also assess module health (0-10 each) and overall decision readiness.\n\n" +
+      "Return ONLY JSON:\n" +
+      '{"flags":[{"type":"logic_contradiction|framing_drift|unresolved_uncertainty|missing_alignment|orphan_risk|disconnected_module|stakeholder_misalignment|false_confidence|groupthink|decision_tension","severity":"critical|warning|info","title":"short headline","body":"2-3 sentences referencing actual session data","modules":["Module A","Module B"],"action":"specific recommended action"}],' +
+      '"moduleHealth":{"problemDefinition":7,"issueRaising":5,"decisionHierarchy":6,"strategyTable":8,"qualitativeAssessment":4,"influenceMap":3,"dqScorecard":7},' +
+      '"tensions":[{"tension":"growth vs capital preservation","betweenModules":["Problem Definition","Strategy Table"],"severity":"critical|warning","note":"why this matters"}],' +
+      '"framingDrift":{"detected":true,"original":"original intent","current":"where it has drifted to","recommendation":"how to realign"},' +
+      '"readinessAssessment":{"score":65,"verdict":"ready|not_ready|conditional","conditions":["condition that must be met before committing"],"blockers":["hard blocker preventing commitment"],"strengths":["what the team has done well"]},' +
+      '"healthScore":72,"healthSummary":"one frank sentence on overall decision coherence"}',
+      (r) => {
+        let result = r;
+        if (r && r._raw) {
+          try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
+          catch(e) { setRunning(false); return; }
+        }
+        if (!result || result.error) { setRunning(false); return; }
+        setInsights(result);
+        onAIMsg({ role:"ai", text:
+          "Cross-Module Audit: " + (result.healthScore||"?") + "/100. " +
+          (result.healthSummary||"") +
+          (result.readinessAssessment?.verdict ? " Decision readiness: " + result.readinessAssessment.verdict + "." : "")
+        });
+        setRunning(false);
       }
-      setRunning(false);
-    });
+    );
   };
 
-  const sevColor = { critical:DS.danger, warning:DS.warning, opportunity:DS.success };
-  const sevBg    = { critical:DS.dangerSoft, warning:DS.warnSoft, opportunity:DS.successSoft };
-  const sevLine  = { critical:DS.dangerLine, warning:DS.warnLine, opportunity:DS.successLine };
-  const sevVar   = { critical:"danger", warning:"warn", opportunity:"green" };
+  // Flag type config
+  const FLAG_CONFIG = {
+    logic_contradiction:      { icon:"⚡", label:"Logic Contradiction",      col:"#dc2626", bg:"#fef2f2", border:"#fecaca" },
+    framing_drift:            { icon:"◈", label:"Framing Drift",             col:"#7c3aed", bg:"#f5f3ff", border:"#ddd6fe" },
+    unresolved_uncertainty:   { icon:"◎", label:"Unresolved Uncertainty",    col:"#d97706", bg:"#fffbeb", border:"#fde68a" },
+    missing_alignment:        { icon:"⊟", label:"Missing Alignment",         col:"#d97706", bg:"#fffbeb", border:"#fde68a" },
+    orphan_risk:              { icon:"⚑", label:"Orphan Risk",               col:"#dc2626", bg:"#fef2f2", border:"#fecaca" },
+    disconnected_module:      { icon:"◧", label:"Disconnected Module",       col:"#6b7280", bg:"#f9fafb", border:"#e5e7eb" },
+    stakeholder_misalignment: { icon:"◉", label:"Stakeholder Misalignment",  col:"#d97706", bg:"#fffbeb", border:"#fde68a" },
+    false_confidence:         { icon:"⊕", label:"False Confidence Risk",     col:"#dc2626", bg:"#fef2f2", border:"#fecaca" },
+    groupthink:               { icon:"⊞", label:"Groupthink Risk",           col:"#7c3aed", bg:"#f5f3ff", border:"#ddd6fe" },
+    decision_tension:         { icon:"⚖", label:"Decision Tension",          col:"#2563eb", bg:"#eff6ff", border:"#bfdbfe" },
+  };
+
+  const SEV_CONFIG = {
+    critical: { col:"#dc2626", bg:"#fef2f2", border:"#fecaca", badge:"danger" },
+    warning:  { col:"#d97706", bg:"#fffbeb", border:"#fde68a", badge:"warn" },
+    info:     { col:"#2563eb", bg:"#eff6ff", border:"#bfdbfe", badge:"blue" },
+  };
+
+  const criticalCount = (insights?.flags||[]).filter(f => f.severity === "critical").length;
+  const warningCount  = (insights?.flags||[]).filter(f => f.severity === "warning").length;
+
+  const READINESS_CONFIG = {
+    ready:        { col:"#059669", bg:"#ecfdf5", border:"#a7f3d0", label:"Ready to Commit" },
+    conditional:  { col:"#d97706", bg:"#fffbeb", border:"#fde68a", label:"Conditional — resolve blockers" },
+    not_ready:    { col:"#dc2626", bg:"#fef2f2", border:"#fecaca", label:"Not Ready — critical gaps remain" },
+  };
+
+  const MODULE_HEALTH_LABELS = {
+    problemDefinition: "Problem Definition",
+    issueRaising: "Issue Raising",
+    decisionHierarchy: "Decision Hierarchy",
+    strategyTable: "Strategy Table",
+    qualitativeAssessment: "Assessment",
+    influenceMap: "Influence Map",
+    dqScorecard: "DQ Scorecard",
+  };
+
+  const TABS = [
+    { id:"flags",     label:"Flags",     count: (insights?.flags||[]).length },
+    { id:"tensions",  label:"Tensions",  count: (insights?.tensions||[]).length },
+    { id:"readiness", label:"Readiness" },
+    { id:"health",    label:"Module Health" },
+  ];
 
   return (
     <>
-      {/* Trigger button in top bar */}
-      <button onClick={()=>setOpen(o=>!o)}
-        style={{ padding:"5px 12px", border:`1px solid ${open?DS.accent:DS.border}`,
-          borderRadius:6, background:open?DS.chromeMid:"transparent",
-          color:open?DS.accent:DS.textSec, cursor:"pointer", fontSize:11,
-          fontWeight:600, display:"flex", alignItems:"center", gap:5,
-          fontFamily:"inherit", transition:"all .12s",
-          ...(insights ? { borderColor:insights.insights?.some(i=>i.severity==="critical")?DS.danger:DS.accent } : {}) }}
-        onMouseEnter={e=>{e.currentTarget.style.borderColor=DS.accent;e.currentTarget.style.color=DS.accent;}}
-        onMouseLeave={e=>{if(!open){e.currentTarget.style.borderColor=DS.border;e.currentTarget.style.color=DS.textSec;}}}>
+      {/* Trigger button */}
+      <button onClick={() => setOpen(o => !o)}
+        style={{ padding:"5px 12px",
+          border:`1px solid ${criticalCount > 0 ? "#dc2626" : open ? DS.accent : DS.border}`,
+          borderRadius:6,
+          background: open ? DS.chromeMid : criticalCount > 0 ? "rgba(220,38,38,.08)" : "transparent",
+          color: criticalCount > 0 ? "#dc2626" : open ? DS.accent : DS.textSec,
+          cursor:"pointer", fontSize:11, fontWeight:600,
+          display:"flex", alignItems:"center", gap:5,
+          fontFamily:"inherit", transition:"all .12s" }}>
         <Svg path={ICONS.link} size={12} color="currentColor"/>
         Cross-Module AI
-        {insights?.insights?.filter(i=>i.severity==="critical").length > 0 && (
-          <span style={{ width:7,height:7,borderRadius:"50%",background:DS.danger,display:"inline-block"}}/>
+        {criticalCount > 0 && (
+          <span style={{ padding:"1px 5px", borderRadius:3, fontSize:9, fontWeight:700,
+            background:"#dc2626", color:"#fff" }}>{criticalCount}</span>
+        )}
+        {isStale && (
+          <span style={{ width:6, height:6, borderRadius:"50%",
+            background:DS.warning, display:"inline-block" }} title="Data changed — re-run recommended"/>
         )}
       </button>
 
-      {/* Panel */}
+      {/* Full modal */}
       {open && (
-        <div style={{ position:"fixed", right:0, top:46, width:380, height:"calc(100vh - 46px)",
-          background:DS.canvas, borderLeft:`1px solid ${DS.canvasBdr}`,
-          display:"flex", flexDirection:"column", zIndex:150,
-          fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif",
-          boxShadow:"-4px 0 24px rgba(0,0,0,.1)" }}>
+        <div style={{ position:"fixed", inset:0, zIndex:500,
+          display:"flex", alignItems:"flex-start", justifyContent:"center",
+          background:"rgba(0,0,0,.5)", padding:"32px 20px" }}
+          onClick={() => setOpen(false)}>
+          <div style={{ width:"100%", maxWidth:860,
+            background:DS.canvas, borderRadius:12,
+            boxShadow:"0 32px 80px rgba(0,0,0,.35)",
+            display:"flex", flexDirection:"column",
+            maxHeight:"calc(100vh - 64px)", overflow:"hidden",
+            fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif" }}
+            onClick={e => e.stopPropagation()}>
 
-          <div style={{ padding:"14px 18px", borderBottom:`1px solid ${DS.canvasBdr}`,
-            display:"flex", alignItems:"center", justifyContent:"space-between",
-            background:DS.canvasAlt }}>
-            <div>
-              <div style={{ fontSize:13, fontWeight:700, color:DS.ink }}>Cross-Module Intelligence</div>
-              <div style={{ fontSize:11, color:DS.inkTer, marginTop:1 }}>
-                AI reads the full session for blind spots
+            {/* Header */}
+            <div style={{ padding:"18px 24px",
+              background:"linear-gradient(135deg,#0d1117,#0f172a)",
+              borderBottom:`1px solid ${DS.canvasBdr}`,
+              display:"flex", alignItems:"center", gap:14, flexShrink:0 }}>
+              <div style={{ width:36, height:36, borderRadius:9,
+                background:"linear-gradient(135deg,#2563eb,#7c3aed)",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                boxShadow:"0 4px 16px rgba(37,99,235,.4)", flexShrink:0 }}>
+                <Svg path={ICONS.link} size={16} color="#fff"/>
               </div>
-            </div>
-            <button onClick={()=>setOpen(false)}
-              style={{ background:"none", border:"none", cursor:"pointer", color:DS.inkTer }}>
-              <Svg path={ICONS.x} size={16} color={DS.inkTer}/>
-            </button>
-          </div>
-
-          {!insights ? (
-            <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-              justifyContent:"center", padding:"28px", textAlign:"center", gap:14 }}>
-              <Svg path={ICONS.link} size={32} color={DS.inkDis}/>
-              <div style={{ fontSize:13, color:DS.inkSub, lineHeight:1.6 }}>
-                Reads all seven modules simultaneously and surfaces inconsistencies, blind spots, and opportunities that single-module views miss.
-              </div>
-              <Btn variant="primary" icon="spark" onClick={run} disabled={aiBusy||running}>
-                {running?"Analysing…":"Run Cross-Module Analysis"}
-              </Btn>
-            </div>
-          ) : (
-            <>
-              {/* Health score */}
-              <div style={{ padding:"14px 18px", borderBottom:`1px solid ${DS.canvasBdr}`,
-                display:"flex", alignItems:"center", gap:14, background:
-                  insights.healthScore>=70?DS.successSoft:insights.healthScore>=45?DS.warnSoft:DS.dangerSoft }}>
-                <div style={{ fontSize:28, fontWeight:700,
-                  fontFamily:"'Libre Baskerville',Georgia,serif",
-                  color:insights.healthScore>=70?DS.success:insights.healthScore>=45?DS.warning:DS.danger }}>
-                  {insights.healthScore}
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:"'Libre Baskerville',serif",
+                  fontSize:17, fontWeight:700, color:"#f0f2f8", marginBottom:2 }}>
+                  Cross-Module Intelligence Engine
                 </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:10, fontWeight:700,
-                    color:insights.healthScore>=70?DS.success:insights.healthScore>=45?DS.warning:DS.danger,
-                    letterSpacing:.8, textTransform:"uppercase", marginBottom:3 }}>Session Coherence</div>
-                  <div style={{ fontSize:11, color:DS.ink, lineHeight:1.5 }}>{insights.healthSummary}</div>
+                <div style={{ fontSize:11, color:"#6e7d9e" }}>
+                  Reads all modules simultaneously — surfaces contradictions, drift, and coherence failures
                 </div>
-                <Btn variant="secondary" size="sm" icon="spark" onClick={run} disabled={aiBusy||running}>Refresh</Btn>
               </div>
-
-              {/* Insights list */}
-              <div style={{ flex:1, overflowY:"auto", padding:"12px" }}>
-                {insights.insights?.map((ins, i) => (
-                  <div key={i} style={{ marginBottom:10, padding:"12px 14px", borderRadius:8,
-                    background:sevBg[ins.severity]||DS.canvasAlt,
-                    border:`1px solid ${sevLine[ins.severity]||DS.canvasBdr}` }}>
-                    <div style={{ display:"flex", alignItems:"flex-start", gap:8, marginBottom:6 }}>
-                      <Badge variant={sevVar[ins.severity]||"default"} size="xs">{ins.severity}</Badge>
-                      <div style={{ fontSize:12, fontWeight:700, color:DS.ink, flex:1, lineHeight:1.3 }}>{ins.title}</div>
-                    </div>
-                    <div style={{ fontSize:11, color:DS.inkSub, lineHeight:1.6, marginBottom:8 }}>{ins.body}</div>
-                    <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:ins.action?8:0 }}>
-                      {ins.modules?.map((m,j) => <Badge key={j} variant="chrome" size="xs">{m}</Badge>)}
-                    </div>
-                    {ins.action && (
-                      <div style={{ fontSize:11, color:sevColor[ins.severity]||DS.inkSub,
-                        fontWeight:600, lineHeight:1.4 }}>→ {ins.action}</div>
-                    )}
+              {insights && (
+                <div style={{ textAlign:"center", flexShrink:0 }}>
+                  <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:32,
+                    fontWeight:700, lineHeight:1,
+                    color:insights.healthScore>=70?"#22c55e":insights.healthScore>=45?"#f59e0b":"#dc2626" }}>
+                    {insights.healthScore}
                   </div>
-                ))}
+                  <div style={{ fontSize:9, color:"#6e7d9e", marginTop:2 }}>COHERENCE</div>
+                </div>
+              )}
+              <button onClick={() => setOpen(false)}
+                style={{ background:"none", border:"none", cursor:"pointer",
+                  color:"#6e7d9e", fontSize:20, padding:4 }}>×</button>
+            </div>
+
+            {/* Empty state / run prompt */}
+            {!insights && !running && (
+              <div style={{ flex:1, display:"flex", flexDirection:"column",
+                alignItems:"center", justifyContent:"center",
+                padding:"48px 32px", textAlign:"center" }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)",
+                  gap:10, marginBottom:32, maxWidth:600 }}>
+                  {Object.entries(FLAG_CONFIG).map(([type, cfg]) => (
+                    <div key={type} style={{ padding:"10px 8px", borderRadius:7,
+                      background:cfg.bg, border:`1px solid ${cfg.border}`,
+                      textAlign:"center" }}>
+                      <div style={{ fontSize:16, marginBottom:4 }}>{cfg.icon}</div>
+                      <div style={{ fontSize:9, fontWeight:700, color:cfg.col,
+                        lineHeight:1.3 }}>{cfg.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize:13, color:DS.inkSub, lineHeight:1.7,
+                  maxWidth:520, marginBottom:24 }}>
+                  Analyses all modules simultaneously for logic contradictions, framing drift,
+                  orphan risks, groupthink, decision tensions, and missing analysis — blind spots
+                  that only appear when reading the full decision architecture at once.
+                </div>
+                <Btn variant="primary" icon="spark" size="lg" onClick={run} disabled={aiBusy||running}>
+                  Run Cross-Module Audit
+                </Btn>
               </div>
-            </>
-          )}
+            )}
+
+            {running && (
+              <div style={{ flex:1, display:"flex", alignItems:"center",
+                justifyContent:"center", padding:48, flexDirection:"column", gap:12 }}>
+                <div style={{ width:40, height:40, borderRadius:"50%",
+                  border:"3px solid #e5e7eb", borderTop:"3px solid #2563eb",
+                  animation:"spin 1s linear infinite" }}/>
+                <div style={{ fontSize:12, color:DS.inkTer }}>
+                  Auditing cross-module coherence…
+                </div>
+              </div>
+            )}
+
+            {insights && !running && (
+              <>
+                {/* Health summary bar */}
+                <div style={{ padding:"10px 24px",
+                  background:insights.healthScore>=70?"#f0fdf4":insights.healthScore>=45?"#fffbeb":"#fef2f2",
+                  borderBottom:`1px solid ${DS.canvasBdr}`,
+                  display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
+                  <div style={{ flex:1, fontSize:12, color:DS.ink, lineHeight:1.5 }}>
+                    {insights.healthSummary}
+                  </div>
+                  <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+                    {criticalCount > 0 && (
+                      <span style={{ fontSize:10, fontWeight:700, color:"#dc2626",
+                        padding:"2px 8px", borderRadius:4,
+                        background:"#fef2f2", border:"1px solid #fecaca" }}>
+                        {criticalCount} critical
+                      </span>
+                    )}
+                    {warningCount > 0 && (
+                      <span style={{ fontSize:10, fontWeight:700, color:"#d97706",
+                        padding:"2px 8px", borderRadius:4,
+                        background:"#fffbeb", border:"1px solid #fde68a" }}>
+                        {warningCount} warnings
+                      </span>
+                    )}
+                    {isStale && (
+                      <span style={{ fontSize:10, fontWeight:700, color:DS.warning,
+                        padding:"2px 8px", borderRadius:4,
+                        background:DS.warnSoft, border:`1px solid ${DS.warnLine}` }}>
+                        ⚠ data changed
+                      </span>
+                    )}
+                    <Btn variant="secondary" size="sm" icon="spark"
+                      onClick={run} disabled={aiBusy||running}>
+                      Re-run
+                    </Btn>
+                  </div>
+                </div>
+
+                {/* Tab bar */}
+                <div style={{ display:"flex", borderBottom:`1px solid ${DS.canvasBdr}`,
+                  flexShrink:0, padding:"0 24px", background:DS.canvasAlt }}>
+                  {TABS.map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                      style={{ padding:"9px 16px", fontSize:11, fontWeight:700,
+                        fontFamily:"inherit", cursor:"pointer", border:"none",
+                        background:"transparent",
+                        borderBottom:`2px solid ${activeTab===tab.id ? DS.accent : "transparent"}`,
+                        color:activeTab===tab.id ? DS.accent : DS.inkTer,
+                        display:"flex", alignItems:"center", gap:6,
+                        transition:"all .12s" }}>
+                      {tab.label}
+                      {tab.count > 0 && (
+                        <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px",
+                          borderRadius:10,
+                          background:activeTab===tab.id ? DS.accent : DS.canvasBdr,
+                          color:activeTab===tab.id ? "#fff" : DS.inkTer }}>
+                          {tab.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab content */}
+                <div style={{ flex:1, overflowY:"auto" }}>
+
+                  {/* ── FLAGS TAB ── */}
+                  {activeTab === "flags" && (
+                    <div style={{ padding:"16px 24px" }}>
+                      {(insights.flags||[]).length === 0 ? (
+                        <div style={{ textAlign:"center", padding:"40px",
+                          color:DS.success, fontSize:13 }}>
+                          ✓ No flags detected — decision architecture is coherent
+                        </div>
+                      ) : (
+                        // Group by severity
+                        ["critical","warning","info"].map(sev => {
+                          const sevFlags = (insights.flags||[]).filter(f => f.severity === sev);
+                          if (!sevFlags.length) return null;
+                          const sc = SEV_CONFIG[sev];
+                          return (
+                            <div key={sev} style={{ marginBottom:20 }}>
+                              <div style={{ fontSize:10, fontWeight:700, color:sc.col,
+                                textTransform:"uppercase", letterSpacing:.8,
+                                marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>
+                                <div style={{ width:4, height:14, background:sc.col,
+                                  borderRadius:2 }}/>
+                                {sev.toUpperCase()} ({sevFlags.length})
+                              </div>
+                              {sevFlags.map((flag, i) => {
+                                const fc = FLAG_CONFIG[flag.type] || {
+                                  icon:"◎", col:sc.col, bg:sc.bg, border:sc.border
+                                };
+                                return (
+                                  <div key={i} style={{ marginBottom:10, padding:"12px 14px",
+                                    borderRadius:8, background:fc.bg,
+                                    border:`1px solid ${fc.border}` }}>
+                                    <div style={{ display:"flex", alignItems:"flex-start",
+                                      gap:8, marginBottom:6 }}>
+                                      <span style={{ fontSize:14, flexShrink:0,
+                                        lineHeight:1 }}>{fc.icon}</span>
+                                      <div style={{ flex:1 }}>
+                                        <div style={{ display:"flex", alignItems:"center",
+                                          gap:6, marginBottom:3 }}>
+                                          <span style={{ fontSize:9, fontWeight:700,
+                                            color:fc.col, textTransform:"uppercase",
+                                            letterSpacing:.5 }}>
+                                            {fc.label||flag.type?.replace(/_/g," ")}
+                                          </span>
+                                        </div>
+                                        <div style={{ fontSize:12, fontWeight:700,
+                                          color:DS.ink, marginBottom:4, lineHeight:1.3 }}>
+                                          {flag.title}
+                                        </div>
+                                        <div style={{ fontSize:11, color:DS.inkSub,
+                                          lineHeight:1.6, marginBottom:8 }}>
+                                          {flag.body}
+                                        </div>
+                                        <div style={{ display:"flex", gap:5,
+                                          flexWrap:"wrap", marginBottom:flag.action?8:0 }}>
+                                          {(flag.modules||[]).map((m,j) => (
+                                            <span key={j} style={{ fontSize:9, fontWeight:700,
+                                              padding:"1px 6px", borderRadius:3,
+                                              background:DS.chromeSub, color:DS.textSec,
+                                              border:`1px solid ${DS.border}` }}>
+                                              {m}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        {flag.action && (
+                                          <div style={{ fontSize:11, color:fc.col,
+                                            fontWeight:700, lineHeight:1.4,
+                                            paddingTop:6, borderTop:`1px solid ${fc.border}` }}>
+                                            → {flag.action}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── TENSIONS TAB ── */}
+                  {activeTab === "tensions" && (
+                    <div style={{ padding:"16px 24px" }}>
+                      <div style={{ fontSize:12, color:DS.inkTer, marginBottom:16,
+                        lineHeight:1.6 }}>
+                        Decision tensions are legitimate conflicts between objectives, constraints, or strategies.
+                        They should be explicitly acknowledged and managed — not silently resolved.
+                      </div>
+                      {(insights.tensions||[]).length === 0 ? (
+                        <div style={{ textAlign:"center", padding:"40px",
+                          color:DS.inkTer, fontSize:13 }}>
+                          No significant tensions detected
+                        </div>
+                      ) : (
+                        (insights.tensions||[]).map((t, i) => {
+                          const isC = t.severity === "critical";
+                          return (
+                            <div key={i} style={{ marginBottom:12, padding:"14px 16px",
+                              borderRadius:8,
+                              background:isC?"#fef2f2":"#eff6ff",
+                              border:`1px solid ${isC?"#fecaca":"#bfdbfe"}` }}>
+                              <div style={{ fontSize:13, fontWeight:700,
+                                color:DS.ink, marginBottom:6 }}>
+                                ⚖ {t.tension}
+                              </div>
+                              <div style={{ display:"flex", gap:6,
+                                flexWrap:"wrap", marginBottom:8 }}>
+                                {(t.betweenModules||[]).map((m,j) => (
+                                  <span key={j} style={{ fontSize:9, fontWeight:700,
+                                    padding:"1px 6px", borderRadius:3,
+                                    background:DS.chromeSub, color:DS.textSec,
+                                    border:`1px solid ${DS.border}` }}>
+                                    {m}
+                                  </span>
+                                ))}
+                              </div>
+                              {t.note && (
+                                <div style={{ fontSize:11, color:DS.inkSub,
+                                  lineHeight:1.5 }}>{t.note}</div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+
+                      {/* Framing drift */}
+                      {insights.framingDrift?.detected && (
+                        <div style={{ marginTop:20, padding:"14px 16px",
+                          background:"#f5f3ff", border:"1px solid #ddd6fe",
+                          borderRadius:8 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:"#7c3aed",
+                            textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                            ◈ Framing Drift Detected
+                          </div>
+                          <div style={{ display:"grid",
+                            gridTemplateColumns:"1fr auto 1fr", gap:8,
+                            alignItems:"center", marginBottom:10 }}>
+                            <div style={{ padding:"8px 10px",
+                              background:"rgba(124,58,237,.06)",
+                              border:"1px solid #ddd6fe", borderRadius:5 }}>
+                              <div style={{ fontSize:9, color:"#7c3aed",
+                                fontWeight:700, marginBottom:3 }}>Original intent</div>
+                              <div style={{ fontSize:11, color:DS.ink }}>
+                                {insights.framingDrift.original}
+                              </div>
+                            </div>
+                            <div style={{ fontSize:18, color:"#7c3aed" }}>→</div>
+                            <div style={{ padding:"8px 10px",
+                              background:"rgba(220,38,38,.06)",
+                              border:"1px solid #fecaca", borderRadius:5 }}>
+                              <div style={{ fontSize:9, color:"#dc2626",
+                                fontWeight:700, marginBottom:3 }}>Current drift</div>
+                              <div style={{ fontSize:11, color:DS.ink }}>
+                                {insights.framingDrift.current}
+                              </div>
+                            </div>
+                          </div>
+                          {insights.framingDrift.recommendation && (
+                            <div style={{ fontSize:11, color:"#7c3aed",
+                              fontWeight:700 }}>
+                              → {insights.framingDrift.recommendation}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── READINESS TAB ── */}
+                  {activeTab === "readiness" && (() => {
+                    const ra = insights.readinessAssessment;
+                    if (!ra) return (
+                      <div style={{ padding:40, textAlign:"center",
+                        color:DS.inkTer }}>No readiness data</div>
+                    );
+                    const rc = READINESS_CONFIG[ra.verdict] || READINESS_CONFIG.conditional;
+                    return (
+                      <div style={{ padding:"16px 24px" }}>
+
+                        {/* Verdict card */}
+                        <div style={{ padding:"20px 22px", borderRadius:10,
+                          background:rc.bg, border:`2px solid ${rc.border}`,
+                          marginBottom:20 }}>
+                          <div style={{ display:"flex", alignItems:"center",
+                            gap:16, marginBottom:12 }}>
+                            <div style={{ fontFamily:"'Libre Baskerville',serif",
+                              fontSize:48, fontWeight:700, lineHeight:1,
+                              color:rc.col }}>
+                              {ra.score||"—"}
+                            </div>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontSize:14, fontWeight:700,
+                                color:rc.col, marginBottom:4 }}>
+                                {rc.label}
+                              </div>
+                              <div style={{ height:6, background:"rgba(0,0,0,.06)",
+                                borderRadius:3, overflow:"hidden" }}>
+                                <div style={{ height:"100%", width:(ra.score||0)+"%",
+                                  background:rc.col, borderRadius:3,
+                                  transition:"width .6s" }}/>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Blockers */}
+                        {(ra.blockers||[]).length > 0 && (
+                          <div style={{ marginBottom:16 }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:"#dc2626",
+                              marginBottom:8, textTransform:"uppercase",
+                              letterSpacing:.5 }}>
+                              ⛔ Hard Blockers — must resolve before committing
+                            </div>
+                            {ra.blockers.map((b,i) => (
+                              <div key={i} style={{ padding:"8px 12px",
+                                marginBottom:5, background:"#fef2f2",
+                                border:"1px solid #fecaca", borderRadius:6,
+                                fontSize:12, color:DS.ink, lineHeight:1.5,
+                                display:"flex", gap:8 }}>
+                                <span style={{ color:"#dc2626", fontWeight:700,
+                                  flexShrink:0 }}>{i+1}.</span>
+                                {b}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Conditions */}
+                        {(ra.conditions||[]).length > 0 && (
+                          <div style={{ marginBottom:16 }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:"#d97706",
+                              marginBottom:8, textTransform:"uppercase",
+                              letterSpacing:.5 }}>
+                              ⚠ Conditions — resolve before or shortly after committing
+                            </div>
+                            {ra.conditions.map((cond,i) => (
+                              <div key={i} style={{ padding:"8px 12px",
+                                marginBottom:5, background:"#fffbeb",
+                                border:"1px solid #fde68a", borderRadius:6,
+                                fontSize:12, color:DS.ink, lineHeight:1.5,
+                                display:"flex", gap:8 }}>
+                                <span style={{ color:"#d97706", fontWeight:700,
+                                  flexShrink:0 }}>{i+1}.</span>
+                                {typeof cond==="string"?cond:JSON.stringify(cond)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Strengths */}
+                        {(ra.strengths||[]).length > 0 && (
+                          <div style={{ marginBottom:16 }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:"#059669",
+                              marginBottom:8, textTransform:"uppercase",
+                              letterSpacing:.5 }}>
+                              ✓ Strengths
+                            </div>
+                            {ra.strengths.map((s,i) => (
+                              <div key={i} style={{ padding:"8px 12px",
+                                marginBottom:5, background:"#ecfdf5",
+                                border:"1px solid #a7f3d0", borderRadius:6,
+                                fontSize:12, color:DS.ink, lineHeight:1.5,
+                                display:"flex", gap:8 }}>
+                                <span style={{ color:"#059669", flexShrink:0 }}>✓</span>
+                                {typeof s==="string"?s:JSON.stringify(s)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── MODULE HEALTH TAB ── */}
+                  {activeTab === "health" && (
+                    <div style={{ padding:"16px 24px" }}>
+                      <div style={{ fontSize:12, color:DS.inkTer, marginBottom:16,
+                        lineHeight:1.6 }}>
+                        Module health scores reflect completeness, coherence, and integration quality
+                        as assessed by the AI across the full decision architecture.
+                      </div>
+                      <div style={{ display:"grid",
+                        gridTemplateColumns:"repeat(2,1fr)", gap:10 }}>
+                        {Object.entries(insights.moduleHealth||{}).map(([key, score]) => {
+                          const label = MODULE_HEALTH_LABELS[key] || key;
+                          const s = Math.min(10, Math.max(0, score||0));
+                          const col = s >= 7 ? "#059669" : s >= 5 ? "#d97706" : "#dc2626";
+                          const bg  = s >= 7 ? "#ecfdf5" : s >= 5 ? "#fffbeb" : "#fef2f2";
+                          const border = s >= 7 ? "#a7f3d0" : s >= 5 ? "#fde68a" : "#fecaca";
+                          return (
+                            <div key={key} style={{ padding:"12px 14px",
+                              borderRadius:8, background:bg,
+                              border:`1px solid ${border}` }}>
+                              <div style={{ display:"flex",
+                                justifyContent:"space-between",
+                                alignItems:"center", marginBottom:6 }}>
+                                <span style={{ fontSize:11, fontWeight:700,
+                                  color:DS.ink }}>{label}</span>
+                                <span style={{ fontSize:18, fontWeight:700,
+                                  fontFamily:"'Libre Baskerville',serif",
+                                  color:col }}>{s}/10</span>
+                              </div>
+                              <div style={{ height:6, background:"rgba(0,0,0,.06)",
+                                borderRadius:3, overflow:"hidden" }}>
+                                <div style={{ height:"100%", width:(s*10)+"%",
+                                  background:col, borderRadius:3 }}/>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Overall heatmap summary */}
+                      <div style={{ marginTop:16, padding:"12px 14px",
+                        background:DS.ink, borderRadius:8 }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:"#6e7d9e",
+                          textTransform:"uppercase", letterSpacing:.5,
+                          marginBottom:8 }}>Weakest links</div>
+                        {Object.entries(insights.moduleHealth||{})
+                          .sort(([,a],[,b]) => a - b)
+                          .slice(0, 3)
+                          .map(([key, score]) => (
+                            <div key={key} style={{ display:"flex",
+                              alignItems:"center", gap:8, marginBottom:5 }}>
+                              <div style={{ width:4, height:4, borderRadius:"50%",
+                                background:"#dc2626", flexShrink:0 }}/>
+                              <span style={{ fontSize:11, color:"#f0f2f8" }}>
+                                {MODULE_HEALTH_LABELS[key]||key}
+                              </span>
+                              <span style={{ fontSize:11, color:"#dc2626",
+                                fontWeight:700, marginLeft:"auto" }}>
+                                {score}/10
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   PHASE 2 — DQI DASHBOARD (Organisation-Level)
-───────────────────────────────────────────────────────────────────────────── */
+
 
 function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, aiBusy, onClose }) {
   const [projects, setProjects] = useState(() => {
@@ -16448,6 +16989,7 @@ export default function App() {
             <CrossModuleAI problem={problem} issues={issues} decisions={decisions}
               criteria={criteria} strategies={strategies}
               assessmentScores={assessmentScores} dqScores={dqScores}
+              nodes={influenceNodes} edges={influenceEdges}
               aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
 
             {/* Tools dropdown */}
