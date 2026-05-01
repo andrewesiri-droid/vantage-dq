@@ -2066,17 +2066,12 @@ Return ONLY JSON:
   const [blindSpots, setBlindSpots]           = useState([]);
 
   const detectBlindSpots = () => {
-    setDetectingBlinds(true);
-    const existing = issues.map(i=>i.category+": "+i.text).join("
-");
+    const existing = issues.map(i=>i.category+": "+i.text).join("\n");
     aiCall(
       "You are a senior DQ facilitator. Review this issue list and identify what is MISSING. " +
       "Decision: " + (problem?.decisionStatement||"") + ". " +
       "Context: " + (problem?.context||"") + ". " +
-      "Issues raised so far:
-" + (existing||"none") + "
-
-" +
+      "Issues raised so far:\n" + (existing||"none") + "\n\n" +
       "Identify issue categories and themes that are under-represented or completely absent. " +
       "Be specific — name the actual missing issues, not just categories. " +
       "Return ONLY JSON: " +
