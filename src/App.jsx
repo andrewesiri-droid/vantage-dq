@@ -9785,6 +9785,9 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
         try { result = JSON.parse(m[0]); }
         catch(e) { setGenerating(false); onAIMsg({role:"ai",text:"Could not parse. Try again."}); return; }
       }
+      console.log("[InfluenceDiagram] AI result keys:", Object.keys(result||{}));
+      console.log("[InfluenceDiagram] nodes:", (result?.nodes||[]).length, "edges:", (result?.edges||[]).length);
+
       if (!result || result.error) {
         onAIMsg({ role:"ai", text: "Error: " + (result?.error||"No response") });
         setGenerating(false); return;
@@ -9943,8 +9946,8 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
 
   
   // Sync nodes/edges to parent for Scenario Planning and VoI
-  useEffect(() => { if (onNodesChange) onNodesChange(nodes); }, [nodes]);
-  useEffect(() => { if (onEdgesChange) onEdgesChange(edges); }, [edges]);
+  useEffect(() => { if (onNodesChange && nodes !== initNodes) onNodesChange(nodes); }, [nodes]);
+  useEffect(() => { if (onEdgesChange && edges !== initEdges) onEdgesChange(edges); }, [edges]);
   // Sync in: if parent nodes change externally (e.g. Deep Dive seeds them), update local
   useEffect(() => { if (initNodes && initNodes.length > 0 && nodes.length === 0) setNodes(initNodes); }, [initNodes]);
   useEffect(() => { if (initEdges && initEdges.length > 0 && edges.length === 0) setEdges(initEdges); }, [initEdges]);
@@ -20173,6 +20176,12 @@ function AppMain() {
               if (d.strategies)       setStrategies(d.strategies);
               if (d.assessmentScores) setAssessmentScores(d.assessmentScores);
               if (d.dqScores)         setDqScores(d.dqScores);
+              if (d.influenceNodes)   setInfluenceNodes(d.influenceNodes);
+              if (d.influenceEdges)   setInfluenceEdges(d.influenceEdges);
+              if (d.stakeholders)     setStakeholders(d.stakeholders);
+              if (d.scenarioData)     setScenarioData(prev=>({...prev,...d.scenarioData}));
+              if (d.voiItems)         setVoiItems(d.voiItems);
+              if (d.timelineEvents)   setTimelineEvents(d.timelineEvents);
             }
           });
         }
