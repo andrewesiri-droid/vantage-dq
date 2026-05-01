@@ -8564,10 +8564,12 @@ function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholde
 
 
 function ModuleExport({ problem, issues, decisions, criteria, strategies, assessmentScores,
-  dqScores, brief, narrative, stakeholders, scenarioData, voiItems, timelineEvents, aiCall, aiBusy, onAIMsg }) {
+  dqScores, brief, narrative, stakeholders, scenarioData, voiItems, timelineEvents,
+  executivePack: propExecutivePack, onExecutivePack, aiCall, aiBusy, onAIMsg }) {
 
   const [generating, setGenerating]     = useState(false);
-  const [executivePack, setExecutivePack] = useState(null);
+  const executivePack = propExecutivePack;
+  const setExecutivePack = (v) => { if (onExecutivePack) onExecutivePack(v); };
   const [copying, setCopying]           = useState(null);
   const [previewing, setPreviewing]     = useState(false);
 
@@ -8630,34 +8632,32 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
 
     const stressSummary = scenarioData?.stressAnalysis?.keyInsight || "";
 
+    const recStrat = brief?.recommendedStrategyName || (strategies[0]?.name || "");
+    const topStrategies = strategies.slice(0,4).map((s,i) =>
+      (i+1)+". "+s.name+(s.objective?" — "+s.objective.slice(0,60):"")
+    ).join("\n");
+    const topCriteria = criteria.slice(0,5).map(cr => cr.label).join(", ");
+
     const prompt =
-      "You are a senior Decision Quality consultant preparing an executive decision package.\n" +
+      "Write an executive decision package as a JSON object. Be specific and authoritative.\n" +
       "Decision: " + (problem.decisionStatement||"Not defined") + "\n" +
       "Owner: " + (problem.owner||"Not stated") + " | Deadline: " + (problem.deadline||"Not stated") + "\n" +
-      "Context: " + (problem.context||"Not provided") + "\n" +
-      "Success criteria: " + (problem.successCriteria||"Not stated") + "\n\n" +
+      "Context: " + (problem.context||"").slice(0,200) + "\n" +
+      "Recommended strategy: " + recStrat + "\n" +
+      "Strategies considered:\n" + topStrategies + "\n" +
+      "Evaluation criteria: " + topCriteria + "\n" +
       "Issues: " + issues.length + " (" + issues.filter(i=>i.severity==="Critical").length + " critical)\n" +
-      "Focus decisions: " + focusDecisions.map(d=>d.label).join(", ") + "\n" +
-      "Strategies:\n" + strategyPaths + "\n" +
-      "Criteria: " + criteria.map(cr=>cr.label).join(", ") + "\n" +
-      "DQ Scores: " + dqSummary + "\n" +
-      (brief?.recommendedStrategyName ? "Recommended strategy: " + brief.recommendedStrategyName + "\n" : "") +
-      "Scenario stress test: " + scenarioSummary + "\n" +
-      (stressSummary ? "Stress insight: " + stressSummary + "\n" : "") +
-      "Value of information: " + voiSummary + "\n" +
-      "Stakeholder alignment: " + stakeholderSummary + "\n" +
-      "Timeline / risk gates: " + timelineSummary + "\n\n" +
-      "Produce a complete executive decision package. Be specific, direct, and authoritative.\n" +
+      "Stakeholders: " + (stakeholders||[]).length + " mapped\n\n" +
       "Return a JSON object with no markdown and no explanation.\n" +
       "Keys required:\n" +
-      "executiveSummary: object with onePager (4-5 paragraph string), bulletPoints (array of 5 strings), tweetVersion (string under 280 chars)\n" +
-      "decisionPackage: object with problemStatement (string), whyNow (string), whatIsAtStake (string), constraints (string), recommendation (string), keyRisks (array of strings), successMetrics (array of strings), decisionCriteria (string)\n" +
-      "boardNarrative: string of 6-8 sentences for board presentation\n" +
-      "stakeholderMessages: object with board (string), executiveTeam (string), projectTeam (string)\n" +
-      "riskRegister: array of objects each with risk (string), likelihood (High or Medium or Low), impact (High or Medium or Low), mitigation (string)\n" +
-      "nextSteps: array of objects each with action (string), owner (string), deadline (string), dependency (string)";
+      "executiveSummary: object with onePager (3 paragraph string), bulletPoints (array of 5 short strings), tweetVersion (string under 280 chars)\n" +
+      "decisionPackage: object with problemStatement (2 sentences), whyNow (1 sentence), recommendation (2 sentences), keyRisks (array of 3 strings), successMetrics (array of 3 strings)\n" +
+      "boardNarrative: string of 4-5 sentences for board presentation\n" +
+      "stakeholderMessages: object with board (1 sentence), executiveTeam (1 sentence), projectTeam (1 sentence)\n" +
+      "riskRegister: array of 3-4 objects each with risk, likelihood (High or Medium or Low), impact (High or Medium or Low), mitigation\n" +
+      "nextSteps: array of 3 objects each with action, owner, deadline, dependency";
 
-    aiCall(prompt, (r) => {
+        aiCall(prompt, (r) => {
       let result = r;
       if (r && r._raw) {
         const m = (r._raw||"").match(/\{[\s\S]*\}/);
@@ -20081,6 +20081,7 @@ function AppMain() {
   const [dqScores, setDqScores]           = useState({});
   const [brief, setBriefState]            = useState(null);
   const [narrative, setNarrativeState]    = useState(null);
+  const [executivePack, setExecutivePack]   = useState(null);
   const [aiMessages, setAIMessages]       = useState([]);
   const [influenceNodes, setInfluenceNodes] = useState([]);
   const [influenceEdges, setInfluenceEdges] = useState([]);
@@ -20572,7 +20573,7 @@ function AppMain() {
     assessment:   { strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
     scorecard:    { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, stakeholders, scenarioData, voiItems, aiCall, aiBusy, onAIMsg:pushAIMsg },
     stakeholders: { strategies, decisions, problem, issues, stakeholders, onChange:setStakeholders, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    export:       { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, stakeholders, scenarioData, voiItems, timelineEvents, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    export:       { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, stakeholders, scenarioData, voiItems, timelineEvents, executivePack, onExecutivePack:setExecutivePack, aiCall, aiBusy, onAIMsg:pushAIMsg },
     influence:    { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg, problem, nodes:influenceNodes, edges:influenceEdges, onNodesChange:setInfluenceNodes, onEdgesChange:setInfluenceEdges },
     scenarios:    { strategies, decisions, issues, problem, nodes:influenceNodes, edges:influenceEdges, scenarioData, onScenarioData:setScenarioData, aiCall, aiBusy, onAIMsg:pushAIMsg },
     voi:          { nodes:influenceNodes, edges:influenceEdges, issues, strategies, decisions, problem, voiItems, onVoiItems:setVoiItems, aiCall, aiBusy, onAIMsg:pushAIMsg },
