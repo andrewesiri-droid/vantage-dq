@@ -6439,6 +6439,10 @@ Return ONLY valid JSON:
 {
   "overallVerdict": "one sentence overall DQ quality verdict — decisive and frank",
   "readinessStatement": "Is this decision ready to be made? One clear sentence.",
+  "readinessStatus": "not-ready|partially-ready|conditionally-ready|decision-ready",
+  "confidenceIndicator": "low|medium|high",
+  "confidenceNote": "Why this confidence level — what limits reliability of the assessment",
+  "scoreCategory": "elite|strong|moderate|weak|high-risk",
   "elementNarratives": {
     "frame": "2 sentences on frame quality",
     "alternatives": "2 sentences on alternatives quality",
@@ -6448,13 +6452,21 @@ Return ONLY valid JSON:
     "commitment": "2 sentences on commitment quality"
   },
   "weakestLinkAnalysis": "3 sentences: what is the weakest link, why it matters, what specifically needs to improve",
+  "criticalWeaknesses": ["specific critical weakness", "another weakness"],
+  "strengthAreas": ["specific strength", "another strength"],
+  "openRisks": ["unresolved risk 1", "unresolved risk 2"],
+  "biasWarnings": [
+    {"type": "confirmation_bias|anchoring|optimism_bias|groupthink|false_precision|overconfidence", "evidence": "what suggests this bias", "mitigation": "how to counter it"}
+  ],
   "strengthsToPreserve": ["strength 1", "strength 2"],
   "priorityActions": [
     {"action": "specific action", "element": "DQ element key", "urgency": "immediate|before-deciding|can-wait"}
   ],
   "decidingNow": "yes|no|conditional",
   "conditionalNote": "if conditional — what condition must be met first (null if yes/no)",
-  "facilitatorRecommendation": "What the facilitator recommends the team do in the next session"
+  "facilitatorQuestions": ["What weakness most threatens decision quality?", "Where is confidence unsupported?"],
+  "facilitatorRecommendation": "What the facilitator recommends the team do in the next session",
+  "downstreamRecommendations": [{"module": "Value of Information", "reason": "why"}]
 }`,
     (r) => {
       if (!r.error) {
@@ -6533,12 +6545,34 @@ Return ONLY valid JSON:
                 </div>
               </div>
               <div style={{ flex:1 }}>
-                <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:18,
-                  fontWeight:700, color:DS.ink, marginBottom:8 }}>
-                  {overall>=75 ? "Strong decision quality — proceed with confidence." :
-                   overall>=55 ? "Adequate quality — address key gaps before committing." :
-                   overall>=35 ? "Significant gaps — do not decide until weakest links are resolved." :
-                                 "Insufficient quality — substantial rework required."}
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:18,
+                    fontWeight:700, color:DS.ink, marginBottom:6 }}>
+                    {overall>=90 ? "Elite Decision Quality — proceed with high confidence." :
+                     overall>=75 ? "Strong Decision Quality — proceed with confidence." :
+                     overall>=60 ? "Moderate Decision Quality — address key gaps before committing." :
+                     overall>=40 ? "Weak Decision Quality — do not decide until weakest links resolved." :
+                                   "High Risk Decision Process — substantial rework required."}
+                  </div>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {narrative?.readinessStatus && (
+                      <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px",
+                        borderRadius:5,
+                        background:narrative.readinessStatus==="decision-ready"?"#ecfdf5":narrative.readinessStatus==="conditionally-ready"?"#fffbeb":narrative.readinessStatus==="partially-ready"?"#fff7ed":"#fef2f2",
+                        color:narrative.readinessStatus==="decision-ready"?"#059669":narrative.readinessStatus==="conditionally-ready"?"#d97706":narrative.readinessStatus==="partially-ready"?"#ea580c":"#dc2626",
+                        border:`1px solid ${narrative.readinessStatus==="decision-ready"?"#a7f3d0":narrative.readinessStatus==="conditionally-ready"?"#fde68a":narrative.readinessStatus==="partially-ready"?"#fed7aa":"#fecaca"}` }}>
+                        {narrative.readinessStatus==="decision-ready"?"✓ Decision Ready":narrative.readinessStatus==="conditionally-ready"?"⚠ Conditionally Ready":narrative.readinessStatus==="partially-ready"?"◎ Partially Ready":"✗ Not Ready"}
+                      </span>
+                    )}
+                    {narrative?.confidenceIndicator && (
+                      <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px",
+                        borderRadius:5,
+                        background:DS.canvasAlt, color:DS.inkSub,
+                        border:`1px solid ${DS.canvasBdr}` }}>
+                        Confidence: {narrative.confidenceIndicator.charAt(0).toUpperCase()+narrative.confidenceIndicator.slice(1)}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
                   {DQ_ELEMENTS.map(e => {
@@ -6922,6 +6956,148 @@ Return ONLY valid JSON:
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* Critical Weaknesses */}
+              {(narrative.criticalWeaknesses||[]).length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#dc2626",
+                    letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
+                    Critical Weaknesses
+                  </div>
+                  {narrative.criticalWeaknesses.map((w,i)=>(
+                    <div key={i} style={{ display:"flex", gap:10, marginBottom:8,
+                      padding:"10px 14px", background:"#fef2f2",
+                      border:"1px solid #fecaca", borderRadius:7 }}>
+                      <span style={{ flexShrink:0, color:"#dc2626" }}>⛔</span>
+                      <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>
+                        {typeof w==="string"?w:JSON.stringify(w)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Strength Areas */}
+              {(narrative.strengthAreas||[]).length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#059669",
+                    letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
+                    Strength Areas
+                  </div>
+                  {narrative.strengthAreas.map((s,i)=>(
+                    <div key={i} style={{ display:"flex", gap:10, marginBottom:8,
+                      padding:"10px 14px", background:"#ecfdf5",
+                      border:"1px solid #a7f3d0", borderRadius:7 }}>
+                      <span style={{ flexShrink:0, color:"#059669" }}>✓</span>
+                      <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>
+                        {typeof s==="string"?s:JSON.stringify(s)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Open Risks */}
+              {(narrative.openRisks||[]).length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.warning,
+                    letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
+                    Open Decision Risks
+                  </div>
+                  {narrative.openRisks.map((r,i)=>(
+                    <div key={i} style={{ display:"flex", gap:10, marginBottom:8,
+                      padding:"10px 14px", background:"#fffbeb",
+                      border:"1px solid #fde68a", borderRadius:7 }}>
+                      <span style={{ flexShrink:0, color:DS.warning }}>⚠</span>
+                      <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>
+                        {typeof r==="string"?r:JSON.stringify(r)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Bias Warnings */}
+              {(narrative.biasWarnings||[]).length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#7c3aed",
+                    letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
+                    Bias Warnings
+                  </div>
+                  {narrative.biasWarnings.map((b,i)=>(
+                    <div key={i} style={{ marginBottom:8, padding:"12px 14px",
+                      background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:7 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#7c3aed",
+                        marginBottom:4, textTransform:"capitalize" }}>
+                        {(b.type||"").replace(/_/g," ")}
+                      </div>
+                      <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5, marginBottom:b.mitigation?4:0 }}>
+                        {b.evidence}
+                      </div>
+                      {b.mitigation && (
+                        <div style={{ fontSize:11, color:"#7c3aed", fontStyle:"italic" }}>
+                          Mitigation: {b.mitigation}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Confidence note */}
+              {narrative.confidenceNote && (
+                <div style={{ marginBottom:24, padding:"12px 14px",
+                  background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                  borderRadius:7 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    letterSpacing:.5, textTransform:"uppercase", marginBottom:4 }}>
+                    Assessment Confidence: {narrative.confidenceIndicator}
+                  </div>
+                  <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.5 }}>
+                    {narrative.confidenceNote}
+                  </div>
+                </div>
+              )}
+
+              {/* Facilitator questions */}
+              {(narrative.facilitatorQuestions||[]).length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.ink,
+                    letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
+                    🎙 Facilitator Questions
+                  </div>
+                  {narrative.facilitatorQuestions.map((q,i)=>(
+                    <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                      background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                      borderRadius:5, fontSize:12, color:DS.ink, lineHeight:1.5 }}>
+                      {i+1}. {typeof q==="string"?q:JSON.stringify(q)}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Downstream recommendations */}
+              {(narrative.downstreamRecommendations||[]).length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.ink,
+                    letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
+                    → Recommended Next Modules
+                  </div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                    {narrative.downstreamRecommendations.map((r,i)=>(
+                      <div key={i} style={{ padding:"8px 12px", background:DS.canvas,
+                        border:`1px solid ${DS.canvasBdr}`, borderRadius:7, fontSize:11 }}>
+                        <div style={{ fontWeight:700, color:DS.ink, marginBottom:2 }}>
+                          {typeof r==="string"?r:(r.module||"")}
+                        </div>
+                        {r.reason && (
+                          <div style={{ fontSize:10, color:DS.inkTer }}>{r.reason}</div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
