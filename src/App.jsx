@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
-const _SB_URL = (typeof window!=="undefined"&&window.__VITE_SB_URL)||"";
-const _SB_KEY = (typeof window!=="undefined"&&window.__VITE_SB_KEY)||"";
+const _SB_URL = (typeof import.meta!=="undefined"&&import.meta.env?.VITE_SUPABASE_URL)||"";
+const _SB_KEY = (typeof import.meta!=="undefined"&&import.meta.env?.VITE_SUPABASE_ANON_KEY)||"";
 const _sbHeaders = () => ({
   "apikey": _SB_KEY,
   "Authorization": "Bearer " + _SB_KEY,
