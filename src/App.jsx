@@ -1781,12 +1781,11 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                                   onAIMsg({ role:"user", text:qText });
                                   const fp =
                                     "You are an elite DQ facilitator coaching a team on their decision frame. " +
-                                    "The user is asking: "" + qText + "". " +
-                                    "Their frame — Decision: "" + (data.decisionStatement||"") + "". " +
-                                    "Context: "" + (data.context||"") + "". " +
-                                    "Owner: "" + (data.owner||"") + "". " +
-                                    "Objectives: "" + (data.objectives||"") + "". " +
-                                    "DQ Score: " + (v.overallScore||"?") + "/100. " +
+                                    "The user is asking: " + qText + ". " +
+                                    "Their frame — Decision: " + (data.decisionStatement||"not defined") + ". " +
+                                    "Context: " + (data.context||"not defined") + ". " +
+                                    "Owner: " + (data.owner||"not defined") + ". " +
+                                    "Objectives: " + (data.objectives||"not defined") + ". " +
                                     "Respond as a senior DQ facilitator — specific, direct, practical. Under 120 words. Conversational, no bullet points.";
                                   aiCall(fp, (r)=>{
                                     const txt = typeof r==="string"?r:(r&&r._raw?r._raw.replace(/```json|```/g,"").trim():(r&&typeof r==="object"?(r.message||r.text||r.executiveSummary||""):String(r)));
