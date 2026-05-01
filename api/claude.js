@@ -25,15 +25,7 @@ export default async function handler(req, res) {
         model: "claude-haiku-4-5-20251001",
         max_tokens: 8000,
         messages: [
-          {
-            role: "user",
-            content: prompt
-          },
-          {
-            // Pre-fill assistant turn with { to force JSON-only response
-            role: "assistant",
-            content: "{"
-          }
+          { role: "user", content: prompt }
         ],
       }),
     });
@@ -57,42 +49,40 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to parse Anthropic response" });
     }
 
-    // The assistant turn was pre-filled with "{" so prepend it
-    const fullText = "{" + text;
-    console.log("Response length:", fullText.length, "ends with:", fullText.slice(-20));
-
     if (!text) return res.status(500).json({ error: "Empty response from AI" });
 
-    // Strategy 1: parse the prefilled response directly
+    // Strategy 1: direct parse
     try {
-      return res.status(200).json(JSON.parse(fullText));
+      return res.status(200).json(JSON.parse(text));
     } catch(e) {}
 
-    // Strategy 2: find first { to last } in full text
+    // Strategy 2: extract first { ... } block
     try {
-      const start = fullText.indexOf("{");
-      const end = fullText.lastIndexOf("}");
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
       if (start !== -1 && end > start) {
-        return res.status(200).json(JSON.parse(fullText.slice(start, end + 1)));
+        return res.status(200).json(JSON.parse(text.slice(start, end + 1)));
       }
     } catch(e) {}
 
-    // Strategy 3: strip any markdown, try original text
+    // Strategy 3: strip markdown fences
     try {
       const stripped = text
         .replace(/^```(?:json)?\s*/im, "")
         .replace(/\s*```\s*$/im, "")
         .trim();
-      const withBrace = stripped.startsWith("{") ? stripped : "{" + stripped;
-      return res.status(200).json(JSON.parse(withBrace));
+      const start = stripped.indexOf("{");
+      const end = stripped.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        return res.status(200).json(JSON.parse(stripped.slice(start, end + 1)));
+      }
     } catch(e) {}
 
     // Strategy 4: fix trailing commas and control chars
     try {
-      const fixed = fullText
+      const fixed = text
         .replace(/,\s*([}\]])/g, "$1")
-        .replace(/[\u0000-\u001F]/g, " ")
-        .replace(/\n/g, " ").replace(/\r/g, " ");
+        .replace(/[\u0000-\u001F]/g, " ");
       const start = fixed.indexOf("{");
       const end = fixed.lastIndexOf("}");
       if (start !== -1 && end > start) {
@@ -100,8 +90,9 @@ export default async function handler(req, res) {
       }
     } catch(e) {}
 
-    console.error("All strategies failed. Length:", fullText.length, "Preview:", fullText.slice(0, 200));
-    return res.status(200).json({ _raw: fullText });
+    // Fallback: return raw text for client-side handling
+    console.error("All parse strategies failed. Preview:", text.slice(0, 200));
+    return res.status(200).json({ _raw: text });
 
   } catch(err) {
     console.error("Proxy error:", err);

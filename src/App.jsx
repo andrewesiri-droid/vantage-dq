@@ -4131,74 +4131,80 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
   const aiValidate = () => {
     setValidating(true);
 
-    const clean = (s) => String(s||"").replace(/[\r\n\t]+/g," ").replace(/"/g,"'").slice(0,120).trim();
+    const cl = (s) => String(s||"").replace(/[\r\n]+/g," ").replace(/"/g,"'").slice(0,100).trim();
 
-    const decisionsText = nowDecisions.map((d,i) =>
-      "D"+(i+1)+": "+clean(d.label)+" ["+d.choices.map(clean).join(" / ")+"]"
-    ).join(", ");
+    const dims = nowDecisions.map((d,i) =>
+      "D"+(i+1)+": "+cl(d.label)+" ["+d.choices.map(cl).join(" / ")+"]"
+    ).join("; ");
 
-    const strategiesText = strategies.map((s,i) => {
-      const choices = nowDecisions.map((d,di) => {
+    const strats = strategies.map((s,i) => {
+      const picks = nowDecisions.map((d,di) => {
         const idx = s.selections?.[d.id];
-        return idx !== undefined ? "D"+(di+1)+"="+clean(d.choices[idx]) : "D"+(di+1)+"=?";
+        return "D"+(di+1)+"="+(idx!==undefined ? cl(d.choices[idx]) : "unset");
       }).join(", ");
-      return "S"+(i+1)+": "+clean(s.name)+" ("+choices+")";
-    }).join(" | ");
+      return "S"+(i+1)+": "+cl(s.name)+" ("+picks+")";
+    }).join("; ");
 
     const prompt =
-      "You are a Decision Quality expert. Evaluate this strategy table.\n" +
-      "Decision: " + clean(problem?.decisionStatement || "Not stated") + "\n" +
-      "Dimensions: " + decisionsText + "\n" +
-      "Strategies: " + strategiesText + "\n" +
-      "Evaluate completeness, coherence, distinctiveness, and missing alternatives.\n" +
-      "Respond with only a JSON object. No markdown, no explanation, no code fences.\n" +
-      "Fields needed:\n" +
-      "overall (pass/warn/fail), qualityScore (0-100), executiveSummary (string),\n" +
-      "distinctiveness (high/medium/low), distinctivenessNote (string),\n" +
-      "completenessScores (array: {strategy, score, missing[]}),\n" +
-      "coherenceIssues (array: {strategy, issue, severity}),\n" +
-      "dominatedStrategies (array of names),\n" +
-      "missingAlternatives (array of strings),\n" +
-      "tradeOffInsights (array of strings),\n" +
-      "validationFlags (array: {type, severity, message}),\n" +
-      "facilitatorQuestions (array of strings),\n" +
-      "recommendations (array of strings)";
+      "You are a Decision Quality expert. Evaluate a strategy table.\n" +
+      "Decision being made: " + cl(problem?.decisionStatement || "Not stated") + "\n" +
+      "Decision dimensions: " + dims + "\n" +
+      "Strategies: " + strats + "\n\n" +
+      "Evaluate: (1) completeness — does each strategy choose on every dimension, " +
+      "(2) coherence — do the choices within each strategy fit together, " +
+      "(3) distinctiveness — are strategies genuinely different, " +
+      "(4) missing alternatives — what strategic directions are absent.\n\n" +
+      "Return only a JSON object with no markdown and no explanation.\n" +
+      "The JSON must have these keys:\n" +
+      "overall: one of pass, warn, or fail\n" +
+      "qualityScore: integer from 0 to 100\n" +
+      "executiveSummary: string of 2 to 3 sentences\n" +
+      "distinctiveness: one of high, medium, or low\n" +
+      "distinctivenessNote: string\n" +
+      "completenessScores: array where each item has strategy (string), score (integer 0-100), missing (array of strings)\n" +
+      "coherenceIssues: array where each item has strategy (string), issue (string), severity (string)\n" +
+      "dominatedStrategies: array of strings\n" +
+      "missingAlternatives: array of strings\n" +
+      "tradeOffInsights: array of strings\n" +
+      "validationFlags: array where each item has type (string), severity (string), message (string)\n" +
+      "recommendations: array of strings";
 
     aiCall(prompt, (r) => {
       let result = r;
       if (result && result._raw) {
         const raw = result._raw;
-        const match = raw.match(/\{[\s\S]*\}/);
-        if (match) {
-          try { result = JSON.parse(match[0]); }
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (m) {
+          try { result = JSON.parse(m[0]); }
           catch(e) {
             try {
-              const fixed = match[0]
-                .replace(/[\x00-\x1f]/g, " ")
-                .replace(/,\s*([}\]])/g, "$1");
-              result = JSON.parse(fixed);
+              result = JSON.parse(
+                m[0].replace(/[\x00-\x1f]/g," ").replace(/,\s*([}\]])/g,"$1")
+              );
             } catch(e2) {
               setValidating(false);
-              onAIMsg({role:"ai", text:"Could not parse analysis. Please try again."});
+              onAIMsg({role:"ai",text:"Could not parse analysis. Please try again."});
               return;
             }
           }
         } else {
           setValidating(false);
-          onAIMsg({role:"ai", text:"No JSON found in response. Please try again."});
+          onAIMsg({role:"ai",text:"Analysis returned no JSON. Please try again."});
           return;
         }
       }
       if (!result || result.error) {
         setValidating(false);
-        onAIMsg({role:"ai", text:"Analysis failed: "+(result?.error||"unknown")});
+        onAIMsg({role:"ai",text:"Analysis failed: "+(result?.error||"unknown")});
         return;
       }
       setValidation(result);
-      const score = result.qualityScore != null ? " Score: "+result.qualityScore+"/100." : "";
-      const dist  = result.distinctiveness ? " Distinctiveness: "+result.distinctiveness+"." : "";
-      onAIMsg({role:"ai", text:"Strategy Analysis complete."+score+dist+
-        (result.executiveSummary ? " "+result.executiveSummary : "")});
+      onAIMsg({role:"ai",
+        text:"Strategy Analysis: "+
+          (result.qualityScore!=null ? result.qualityScore+"/100. " : "")+
+          (result.distinctiveness ? "Distinctiveness: "+result.distinctiveness+". " : "")+
+          (result.executiveSummary||"")
+      });
       setValidating(false);
     });
   };
@@ -5586,29 +5592,34 @@ function ModuleQualitativeAssessment({
     }).join("\n");
 
     aiCall(
-      "You are a Decision Quality expert. Score EVERY strategy against EVERY criterion. " +
-      "You MUST return one score entry for every strategy-criterion combination. " +
-      "Scores: 1=poor, 2=below average, 3=adequate, 4=good, 5=excellent. " +
-      "Be rigorous and differentiated -- avoid scoring everything 3. " +
-      "IMPORTANT: Use the EXACT strategyIndex and criterionIndex numbers provided. Do not change the names. " +
+      "You are a Decision Quality expert scoring strategies against criteria.\n" +
       "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
-      "CRITERIA:\n" + critList + "\n\n" +
-      "STRATEGIES:\n" + stratList + "\n\n" +
-      "Return ONLY JSON: " +
-      '{"scores":[{"strategyIndex":1,"criterionIndex":1,"strategyName":"exact name","criterionName":"exact name","score":4,"rationale":"one sentence why","confidence":"low|moderate|high","concerns":"any caveats"}],"insight":"key observation about patterns across strategies","validationFlags":[{"type":"no_rationale|inconsistent_logic|overconfidence|groupthink|missing_tradeoff|weak_differentiation|bias_risk","severity":"warning|info","message":"specific issue"}],"tradeOffInsights":["trade-off observation"],"missingCriteria":["criterion not yet in the table but important"]}',
+      "Criteria list:\n" + critList + "\n\n" +
+      "Strategies list:\n" + stratList + "\n\n" +
+      "Task: Score every strategy against every criterion. Use scores 1-5 only (1=poor, 5=excellent).\n" +
+      "Be differentiated — avoid giving everything the same score.\n" +
+      "Return a JSON object with a single key 'scores' containing an array.\n" +
+      "Each array element must have: strategyIndex (integer, 1-based), criterionIndex (integer, 1-based), score (integer 1-5), rationale (string), confidence (low or moderate or high).\n" +
+      "Also include: insight (string summarising patterns), tradeOffInsights (array of strings), missingCriteria (array of strings).\n" +
+      "Return only the JSON object with no markdown, no explanation, no code fences.",
       (r) => {
         let result = r;
-        if (r && r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); } catch(e) { setAssessing(false); return; } }
-        if (!result || result.error) { setAssessing(false); return; }
+        if (r && r._raw) {
+          try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
+          catch(e) {
+            const m = (r._raw||"").match(/\{[\s\S]*\}/);
+            if (m) { try { result = JSON.parse(m[0]); } catch(e2) { setAssessing(false); onAIMsg({role:"ai",text:"Scoring failed to parse. Please try again."}); return; } }
+            else { setAssessing(false); onAIMsg({role:"ai",text:"Scoring returned no JSON. Please try again."}); return; }
+          }
+        }
+        if (!result || result.error) { setAssessing(false); onAIMsg({role:"ai",text:"Scoring failed: "+(result?.error||"unknown")}); return; }
         const newScores = { ...scores };
         let filled = 0;
         (result.scores || []).forEach(cell => {
-          // Primary: match by index (1-based from the prompt)
           const stratIdx = typeof cell.strategyIndex === "number" ? cell.strategyIndex - 1 : -1;
           const critIdx  = typeof cell.criterionIndex === "number" ? cell.criterionIndex - 1 : -1;
           let strat = stratIdx >= 0 && stratIdx < strategies.length ? strategies[stratIdx] : null;
           let crit  = critIdx  >= 0 && critIdx  < criteria.length  ? criteria[critIdx]    : null;
-          // Fallback: fuzzy name match (contains / starts with)
           if (!strat && cell.strategyName) {
             const sn = cell.strategyName.toLowerCase().trim();
             strat = strategies.find(s => s.name.toLowerCase().trim() === sn)
@@ -5627,19 +5638,20 @@ function ModuleQualitativeAssessment({
               ...existing, score: cell.score,
               rationale: cell.rationale || existing.rationale || "",
               confidence: cell.confidence || "moderate",
-              concerns: cell.concerns || "",
             };
             filled++;
           }
         });
         onScores(newScores);
         const total = strategies.length * criteria.length;
-        const msg = filled === total
-          ? "Initial assessment complete. All " + total + " cells scored."
-          : filled > 0
-          ? "Scored " + filled + " of " + total + " cells. " + (total - filled) + " cells could not be matched -- check strategy and criterion names."
-          : "Assessment returned no matching scores. Ensure strategy names and criterion labels match what was sent to AI.";
-        onAIMsg({ role:"ai", text: (result.insight ? result.insight + " " : "") + msg });
+        onAIMsg({ role:"ai", text:
+          (result.insight ? result.insight + " " : "") +
+          (filled === total
+            ? "All " + total + " cells scored."
+            : filled > 0
+            ? "Scored " + filled + " of " + total + " cells."
+            : "No cells matched — check that strategies and criteria are defined.")
+        });
         setAssessing(false);
       }
     );
@@ -5775,7 +5787,7 @@ function ModuleQualitativeAssessment({
         <Btn variant="secondary" size="sm" icon="spark"
           onClick={aiInitialAssessment}
           disabled={aiBusy || assessing || !strategies.length || !criteria.length}>
-          {assessing ? "Assessing…" : "AI Score"}
+          {assessing ? "Assessing…" : "AI Initial Assessment"}
         </Btn>
         <Btn variant="secondary" size="sm"
           onClick={aiAnalyseQuality}
