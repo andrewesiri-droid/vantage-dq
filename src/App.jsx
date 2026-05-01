@@ -14039,16 +14039,34 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
   const [analysing, setAnalysing]     = useState(false);
   const [generating, setGenerating]   = useState(false);
   const [activePlayer, setActivePlayer] = useState(null);
-  const [showChains, setShowChains]   = useState(false);
-  const [showSignals, setShowSignals] = useState(false);
+  const [showChains, setShowChains]     = useState(false);
+  const [showSignals, setShowSignals]   = useState(false);
+  const [executionPlan, setExecutionPlan] = useState(null);
+  const [planningExec, setPlanningExec] = useState(false);
+  const [treeNodes, setTreeNodes]       = useState([]);
+  const [treeEdges, setTreeEdges]       = useState([]);
+  const [gameTypeDiagnosis, setGTDiagnosis] = useState(null);
 
   const STEPS = [
-    { id:"setup",    label:"1. Strategic Setup",    icon:"◎" },
-    { id:"players",  label:"2. Players",            icon:"◈" },
-    { id:"moves",    label:"3. Strategic Moves",    icon:"⊞" },
-    { id:"matrix",   label:"4. Payoff Matrix",      icon:"◫" },
-    { id:"analysis", label:"5. Strategic Intel",    icon:"✦" },
+    { id:"setup",     label:"1. Dynamic Frame",      icon:"◎" },
+    { id:"players",   label:"2. Players",             icon:"◈" },
+    { id:"moves",     label:"3. Strategic Moves",     icon:"⊞" },
+    { id:"matrix",    label:"4. Payoff Matrix",       icon:"◫" },
+    { id:"tree",      label:"5. Game Tree",           icon:"⊳" },
+    { id:"analysis",  label:"6. Strategic Intel",     icon:"✦" },
+    { id:"execution", label:"7. Execution Plan",      icon:"◉" },
   ];
+
+  const GAME_TYPE_CONFIG = {
+    Competitive:  { color:"#dc2626", bg:"rgba(220,38,38,.1)", desc:"Zero-sum or near-zero-sum. One player's gain is another's loss.", framework:"Find dominant strategy and Nash equilibrium. Design first-mover advantages or deterrence." },
+    Coordination: { color:"#2563eb", bg:"rgba(37,99,235,.1)", desc:"Multiple equilibria exist. Challenge is getting all players to coordinate on the better one.", framework:"Identify all equilibria. Design the focal point or commitment mechanism to get everyone to the better outcome." },
+    Collaboration:{ color:"#059669", bg:"rgba(5,150,105,.1)", desc:"Positive-sum but cooperation requires overcoming trust deficits or prisoner's dilemma dynamics.", framework:"Diagnose the cooperation barrier. Design enforcement mechanisms or side payments that make cooperation rational." },
+    Sequential:   { color:"#7c3aed", bg:"rgba(124,58,237,.1)", desc:"One player moves first; others respond. First-mover advantage depends on the game structure.", framework:"Build the game tree. Use backward induction. Identify credible commitments that alter the equilibrium path." },
+    Negotiation:  { color:"#d97706", bg:"rgba(217,119,6,.1)", desc:"Value-creation and value-capture. ZOPA and outside options (BATNA) determine outcomes.", framework:"Map BATNA for each party. Identify joint value. Design the package deal and sequence of concessions." },
+    Deterrence:   { color:"#6b7280", bg:"rgba(107,114,128,.1)", desc:"Prevent an opponent from acting by making the threatened response credible.", framework:"Assess commitment credibility. Design the trip-wire. Ensure the threatened response is rational to carry out." },
+    Coalition:    { color:"#0891b2", bg:"rgba(8,145,178,.1)", desc:"Multiple players whose alignment determines outcomes. Coalition stability and defection risks matter.", framework:"Map power indices. Identify the minimum winning coalition. Design side payments that hold it together." },
+    Bidding:      { color:"#f59e0b", bg:"rgba(245,158,11,.1)", desc:"Competing offers under asymmetric information. Winner's curse and information revelation matter.", framework:"Assess information asymmetry. Design bid strategy. Anticipate winner's curse." },
+  };
 
   // ── HELPERS ───────────────────────────────────────────────────────────────
   const addPlayer = () => setPlayers(prev => [...prev, {
@@ -14083,6 +14101,70 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
 
   const addSignal = () => setSignals(prev => [...prev, { id:uid("sig"), from:"", type:"Credible Threat", message:"", credibility:"Medium", notes:"" }]);
   const updateSignal = (id, patch) => setSignals(prev => prev.map(s => s.id===id ? {...s,...patch} : s));
+
+  // ── AI: Dynamic Framing Diagnosis (Papayoanou Step 1) ────────────────────
+  const diagnoseGameType = () => {
+    setGenerating(true);
+    aiCall(
+      "You are a Strategic Gaming expert (Papayoanou framework). Diagnose the game type. " +
+      "Decision: " + (problem?.decisionStatement || context.objective || "Not defined") + ". " +
+      "Environment: " + (context.environment || "not described") + ". Stated game type: " + context.gameType + ". " +
+      "Is this truly zero-sum (Competitive), or are there joint gains (Collaboration)? " +
+      "Is coordination to a better equilibrium the core challenge (Coordination)? " +
+      "Is sequence of moves critical (Sequential)? " +
+      "Return ONLY JSON: " +
+      '{"diagnosis":"Competitive|Coordination|Collaboration|Sequential|Negotiation|Deterrence|Coalition|Bidding",' +
+      '"confidence":"High|Medium|Low","reasoning":"why this game type — be specific",' +
+      '"correction":"if stated type is wrong, explain",' +
+      '"framingInsights":["key structural feature","second insight"],' +
+      '"criticalQuestion":"most important question before analysis",' +
+      '"reframeRisk":"what if this is actually a different game type"}',
+      (r) => {
+        let result = r;
+        if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setGenerating(false);return;}}
+        if (!result||result.error){setGenerating(false);return;}
+        setGTDiagnosis(result);
+        if (result.diagnosis) setContext(p=>({...p,gameType:result.diagnosis}));
+        onAIMsg({role:"ai",text:"Game type: " + result.diagnosis + " (" + result.confidence + " confidence). " + result.reasoning});
+        setGenerating(false);
+      }
+    );
+  };
+
+  // ── AI: Execution Planning (Papayoanou Step 3) ────────────────────────────
+  const generateExecutionPlan = () => {
+    if (!analysis) return;
+    setPlanningExec(true);
+    const gameTypeCfg = GAME_TYPE_CONFIG[context.gameType] || {};
+    const playerList = players.map(p=>p.name+"("+p.type+", risk:"+p.riskTolerance+", hidden:"+p.hiddenMotivations+")").join("; ");
+    const ourMoves = (moves["us"]||[]).map(m=>m.label+"("+m.type+")").join(", ");
+    aiCall(
+      "You are Papayoanou's Strategic Gaming execution planner. Design the execution sequence. " +
+      "Game type: " + context.gameType + ". Framework: " + (gameTypeCfg.framework||"") + ". " +
+      "Objective: " + context.objective + ". Recommended strategy: " + (analysis.robustStrategy?.recommendation||"not determined") + ". " +
+      "Our moves: " + ourMoves + ". Key players: " + playerList + ". " +
+      "Nash equilibrium: " + (analysis.nashEquilibrium?.description||"not determined") + ". " +
+      "Design: what we do first, signals before moving, how we credibly commit, move sequence, contingencies. " +
+      "Return ONLY JSON: " +
+      '{"firstMove":{"action":"what to do first","timing":"when","rationale":"why first"},' +
+      '"preGameSignals":[{"signal":"what to signal","medium":"how","purpose":"what it achieves","credibility":"why believed"}],' +
+      '"commitmentMechanism":{"mechanism":"how to credibly commit","cost":"what it costs","benefit":"strategic benefit"},' +
+      '"moveSequence":[{"step":1,"action":"action","condition":"when","expectedResponse":"how they respond","ourCounterResponse":"our next move"}],' +
+      '"triggerConditions":[{"trigger":"observable event","response":"what we do","rationale":"why"}],' +
+      '"contingencyPlans":[{"scenario":"if X","plan":"do Y","rationale":"because Z"}],' +
+      '"executionRisks":[{"risk":"what could go wrong","severity":"Low|Medium|High","mitigation":"how to reduce"}],' +
+      '"successMetrics":["observable indicator strategy is working"],' +
+      '"executiveSummary":"3-4 sentence execution summary"}',
+    (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setPlanningExec(false);return;}}
+      if (!result||result.error){setPlanningExec(false);return;}
+      setExecutionPlan(result);
+      onAIMsg({role:"ai",text:"Execution plan ready. First move: " + (result.firstMove?.action||"see plan")});
+      setPlanningExec(false);
+      setStep(6);
+    });
+  };
 
   // ── AI: Generate player profiles ─────────────────────────────────────────
   const generatePlayers = () => {
@@ -14171,7 +14253,9 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
     ).join(" | ");
 
     aiCall(
-      "You are a senior game theory strategist and strategic advisor. Perform a comprehensive strategic analysis. " +
+      "You are a senior game theory strategist trained in Papayoanou's Strategic Gaming framework. " +
+      "Perform a " + context.gameType + " game analysis. " +
+      "Framework for this game type: " + (GAME_TYPE_CONFIG[context.gameType]?.framework || "") + ". " +
       "Decision: " + (problem?.decisionStatement || context.objective) + ". " +
       "Our strategic objective: " + context.objective + ". " +
       "Game type: " + context.gameType + ". " +
@@ -14326,20 +14410,80 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
                 </div>
               ))}
 
+
+              {/* ── GAME TYPE SELECTION ── */}
               <div style={{ marginBottom:20 }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#64748b",
-                  textTransform:"uppercase", letterSpacing:.5, marginBottom:6 }}>Game Type</div>
-                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                  {["Competitive","Cooperative","Negotiation","Sequential","Repeated","Deterrence","Coalition","Bidding"].map(gt => (
-                    <button key={gt} className="gt-btn" onClick={()=>setContext(p=>({...p,gameType:gt}))}
-                      style={{ padding:"5px 12px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-                        border:"1.5px solid "+(context.gameType===gt?"#6366f1":"rgba(255,255,255,.1)"),
-                        borderRadius:5, background:context.gameType===gt?"rgba(99,102,241,.15)":"transparent",
-                        color:context.gameType===gt?"#a5b4fc":"#475569", cursor:"pointer" }}>
-                      {gt}
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#64748b",
+                    textTransform:"uppercase", letterSpacing:.5 }}>Game Type</div>
+                  <button className="gt-btn" onClick={diagnoseGameType}
+                    disabled={aiBusy||generating}
+                    style={{ padding:"3px 10px", fontSize:10, fontWeight:700, fontFamily:"inherit",
+                      border:"1px solid rgba(99,102,241,.4)", borderRadius:4,
+                      background:"rgba(99,102,241,.08)", color:"#a5b4fc", cursor:"pointer",
+                      opacity:aiBusy||generating?.6:1 }}>
+                    {generating?"Diagnosing…":"✦ AI Diagnose"}
+                  </button>
+                </div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
+                  {Object.entries(GAME_TYPE_CONFIG).map(([gtType, cfg]) => (
+                    <button key={gtType} className="gt-btn"
+                      onClick={()=>setContext(p=>({...p,gameType:gtType}))}
+                      style={{ padding:"5px 12px", fontSize:11, fontWeight:700,
+                        fontFamily:"inherit", cursor:"pointer",
+                        border:"1.5px solid "+(context.gameType===gtType?cfg.color:"rgba(255,255,255,.1)"),
+                        borderRadius:5,
+                        background:context.gameType===gtType?cfg.bg:"transparent",
+                        color:context.gameType===gtType?cfg.color:"#475569",
+                        transition:"all .12s" }}>
+                      {gtType}
                     </button>
                   ))}
                 </div>
+                {context.gameType && GAME_TYPE_CONFIG[context.gameType] && (
+                  <div style={{ padding:"10px 14px",
+                    background:GAME_TYPE_CONFIG[context.gameType].bg,
+                    border:"1px solid "+GAME_TYPE_CONFIG[context.gameType].color+"30",
+                    borderRadius:7, marginBottom:8 }}>
+                    <div style={{ fontSize:11, fontWeight:700,
+                      color:GAME_TYPE_CONFIG[context.gameType].color, marginBottom:3 }}>
+                      {context.gameType} Game
+                    </div>
+                    <div style={{ fontSize:10, color:"#94a3b8", lineHeight:1.5, marginBottom:5 }}>
+                      {GAME_TYPE_CONFIG[context.gameType].desc}
+                    </div>
+                    <div style={{ fontSize:9, color:"#6366f1", lineHeight:1.4,
+                      borderTop:"1px solid rgba(255,255,255,.06)", paddingTop:5 }}>
+                      <span style={{ fontWeight:700 }}>Framework: </span>
+                      {GAME_TYPE_CONFIG[context.gameType].framework}
+                    </div>
+                  </div>
+                )}
+                {gameTypeDiagnosis && (
+                  <div style={{ padding:"10px 14px",
+                    background:"rgba(99,102,241,.06)",
+                    border:"1px solid rgba(99,102,241,.15)", borderRadius:7 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                      <span style={{ fontSize:9, fontWeight:700, color:"#6366f1",
+                        textTransform:"uppercase", letterSpacing:.5 }}>AI Diagnosis</span>
+                      <span style={{ fontSize:8, padding:"1px 5px",
+                        background:"rgba(99,102,241,.15)", color:"#a5b4fc", borderRadius:3 }}>
+                        {gameTypeDiagnosis.confidence} confidence
+                      </span>
+                    </div>
+                    <div style={{ fontSize:11, color:"#c7d2fe", lineHeight:1.5, marginBottom:4 }}>
+                      {gameTypeDiagnosis.reasoning}
+                    </div>
+                    {gameTypeDiagnosis.correction && (
+                      <div style={{ fontSize:10, color:"#fcd34d" }}>⚠ {gameTypeDiagnosis.correction}</div>
+                    )}
+                    {gameTypeDiagnosis.criticalQuestion && (
+                      <div style={{ marginTop:4, fontSize:10, color:"#a5b4fc", fontStyle:"italic" }}>
+                        Critical question: "{gameTypeDiagnosis.criticalQuestion}"
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div style={{ marginTop:24, display:"flex", justifyContent:"flex-end" }}>
@@ -14682,8 +14826,237 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
             </div>
           )}
 
-          {/* ── STEP 4: STRATEGIC ANALYSIS ──────────────────────────── */}
+          {/* ── STEP 4: GAME TREE ──────────────────────────────────────────── */}
           {step===4 && (
+            <div>
+              <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:22,
+                fontWeight:700, marginBottom:4 }}>Game Tree</div>
+              <div style={{ fontSize:12, color:"#64748b", marginBottom:20, lineHeight:1.6 }}>
+                Map the sequential structure of the game. Who moves first? Use backward induction —
+                work from the terminal nodes back to find the equilibrium path.
+              </div>
+
+              {(moves["us"]||[]).length === 0 ? (
+                <div style={{ padding:"40px", textAlign:"center", color:"#475569",
+                  border:"1px dashed rgba(255,255,255,.08)", borderRadius:10 }}>
+                  Define moves in Step 3 first.
+                </div>
+              ) : (
+                <div>
+                  {/* First mover selection */}
+                  <div style={{ marginBottom:20, padding:"14px 16px",
+                    background:"#161b27", border:"1px solid rgba(255,255,255,.07)", borderRadius:10 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#64748b",
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
+                      Who moves first?
+                    </div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      {[{id:"us",label:"We move first",color:"#22c55e"},
+                        ...players.map(p=>({id:p.id,label:p.name+" moves first",color:"#6366f1"})),
+                        {id:"simultaneous",label:"Simultaneous (use Matrix instead)",color:"#64748b"}
+                      ].map(opt => {
+                        const root = treeNodes.find(n=>n.id==="root");
+                        const active = root?.firstMover===opt.id;
+                        return (
+                          <button key={opt.id} className="gt-btn"
+                            onClick={()=>setTreeNodes(prev=>{
+                              const ex=prev.find(n=>n.id==="root");
+                              return ex?prev.map(n=>n.id==="root"?{...n,firstMover:opt.id}:n)
+                                       :[{id:"root",firstMover:opt.id},...prev];
+                            })}
+                            style={{ padding:"5px 12px", fontSize:11, fontWeight:700,
+                              fontFamily:"inherit", cursor:"pointer",
+                              border:"1.5px solid "+(active?opt.color:"rgba(255,255,255,.08)"),
+                              borderRadius:5, background:active?opt.color+"18":"transparent",
+                              color:active?opt.color:"#64748b" }}>
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Backward induction explainer */}
+                  <div style={{ marginBottom:20, padding:"12px 16px",
+                    background:"rgba(99,102,241,.06)",
+                    border:"1px solid rgba(99,102,241,.15)", borderRadius:8 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:"#6366f1",
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>
+                      Backward Induction
+                    </div>
+                    <div style={{ fontSize:11, color:"#94a3b8", lineHeight:1.5 }}>
+                      Start from the end of the game. At each terminal node, identify which payoff each player prefers.
+                      Work backwards — at each decision node, rational players choose the branch leading to their
+                      best reachable outcome. The highlighted path is what rational players will actually do.
+                    </div>
+                  </div>
+
+                  {/* Sequential move tree visual */}
+                  <div style={{ overflowX:"auto" }}>
+                    <div style={{ minWidth:680, padding:"20px 0" }}>
+                      <div style={{ display:"flex", alignItems:"flex-start", gap:0 }}>
+
+                        {/* Root node */}
+                        <div style={{ flexShrink:0, textAlign:"center", width:90 }}>
+                          <div style={{ width:56, height:56, borderRadius:"50%",
+                            background:"rgba(34,197,94,.12)",
+                            border:"2px solid rgba(34,197,94,.4)",
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            margin:"0 auto 4px",
+                            fontSize:9, color:"#4ade80", fontWeight:700,
+                            flexDirection:"column", gap:1 }}>
+                            <div>▣</div>
+                            <div>{treeNodes.find(n=>n.id==="root")?.firstMover==="us"?"Us":"??"}</div>
+                          </div>
+                        </div>
+
+                        {/* Our move branches */}
+                        <div style={{ flex:1, display:"flex", flexDirection:"column", gap:14 }}>
+                          {(moves["us"]||[]).map((ourMove, mi) => {
+                            const mainOpp = players[0];
+                            const theirMoves = mainOpp ? (moves[mainOpp.id]||[]) : [];
+                            return (
+                              <div key={ourMove.id} style={{ display:"flex", alignItems:"flex-start" }}>
+                                {/* Branch line */}
+                                <div style={{ width:32, height:1, marginTop:20,
+                                  background:"rgba(34,197,94,.3)", flexShrink:0 }}/>
+                                {/* Move label */}
+                                <div style={{ padding:"5px 10px",
+                                  background:"rgba(34,197,94,.06)",
+                                  border:"1px solid rgba(34,197,94,.2)",
+                                  borderRadius:5, flexShrink:0, marginRight:6 }}>
+                                  <div style={{ fontSize:10, fontWeight:700,
+                                    color:"#4ade80", marginBottom:1 }}>
+                                    {ourMove.label||("Move "+( mi+1))}
+                                  </div>
+                                  <div style={{ fontSize:8, color:"#374151" }}>{ourMove.type}</div>
+                                </div>
+                                {/* Opponent response sub-tree */}
+                                {mainOpp && theirMoves.length > 0 && (
+                                  <div style={{ display:"flex", alignItems:"flex-start", gap:0 }}>
+                                    <div style={{ width:20, height:1, marginTop:20,
+                                      background:"rgba(99,102,241,.3)", flexShrink:0 }}/>
+                                    {/* Opponent node */}
+                                    <div style={{ flexShrink:0, textAlign:"center", marginRight:6 }}>
+                                      <div style={{ width:32, height:32, borderRadius:"50%",
+                                        background:"rgba(99,102,241,.1)",
+                                        border:"1.5px solid rgba(99,102,241,.3)",
+                                        display:"flex", alignItems:"center",
+                                        justifyContent:"center", fontSize:8,
+                                        color:"#a5b4fc", fontWeight:700 }}>◈</div>
+                                      <div style={{ fontSize:7, color:"#6366f1", marginTop:2 }}>
+                                        {mainOpp.name}
+                                      </div>
+                                    </div>
+                                    {/* Terminal nodes */}
+                                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                      {theirMoves.slice(0,4).map(theirMove => {
+                                        const ck = ourMove.id+"_"+theirMove.id;
+                                        const cellData = matrix[ck]||{};
+                                        const us = cellData.payoffUs;
+                                        const them = cellData.payoffThem;
+                                        // Is this the equilibrium path? (best for them given our move)
+                                        const theirBest = theirMoves.reduce((best, tm) => {
+                                          const k2 = ourMove.id+"_"+tm.id;
+                                          const v = matrix[k2]?.payoffThem || 0;
+                                          return v > (best.val||-999) ? {id:tm.id,val:v} : best;
+                                        }, {id:null,val:-999});
+                                        const isEquil = theirMove.id===theirBest.id && them!==undefined;
+                                        return (
+                                          <div key={theirMove.id} style={{ display:"flex",
+                                            alignItems:"center" }}>
+                                            <div style={{ width:20, height:1,
+                                              background:isEquil?"rgba(34,197,94,.5)":"rgba(255,255,255,.08)",
+                                              flexShrink:0 }}/>
+                                            <div style={{ padding:"4px 8px",
+                                              background:isEquil?"rgba(34,197,94,.08)":"rgba(255,255,255,.02)",
+                                              border:"1px solid "+(isEquil?"rgba(34,197,94,.3)":"rgba(255,255,255,.06)"),
+                                              borderRadius:5, minWidth:100 }}>
+                                              <div style={{ fontSize:9, color:"#a5b4fc", marginBottom:2 }}>
+                                                {theirMove.label||"Response"}
+                                              </div>
+                                              {us!==undefined&&them!==undefined ? (
+                                                <div style={{ fontSize:11, fontWeight:700 }}>
+                                                  <span style={{ color:"#4ade80" }}>{us>=0?"+":""}{us}</span>
+                                                  <span style={{ color:"#374151", margin:"0 3px" }}>/</span>
+                                                  <span style={{ color:"#a5b4fc" }}>{them>=0?"+":""}{them}</span>
+                                                </div>
+                                              ) : (
+                                                <div style={{ fontSize:8, color:"#374151" }}>enter payoffs</div>
+                                              )}
+                                              {isEquil&&(
+                                                <div style={{ fontSize:7, color:"#4ade80", fontWeight:700 }}>
+                                                  ← equilibrium
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Backward induction summary */}
+                      {Object.keys(matrix).length > 0 && players.length > 0 && (
+                        <div style={{ marginTop:20, padding:"14px 16px",
+                          background:"#161b27", border:"1px solid rgba(34,197,94,.15)",
+                          borderRadius:8 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#4ade80",
+                            textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                            Subgame-Perfect Equilibrium
+                          </div>
+                          <div style={{ fontSize:11, color:"#94a3b8", lineHeight:1.6 }}>
+                            {(()=>{
+                              const ourMovesList = moves["us"]||[];
+                              const mainOpp = players[0];
+                              if (!mainOpp||!ourMovesList.length) return "Add players and payoffs to compute equilibrium.";
+                              const theirMoves = moves[mainOpp.id]||[];
+                              const paths = ourMovesList.map(om=>{
+                                const theirBest = theirMoves.reduce((best,tm)=>{
+                                  const ck=om.id+"_"+tm.id;
+                                  const v=matrix[ck]?.payoffThem||0;
+                                  return v>(best.val||-999)?{move:tm,val:v}:best;
+                                },{move:null,val:-999});
+                                const ourPayoff = theirBest.move?
+                                  (matrix[om.id+"_"+theirBest.move.id]?.payoffUs||0):0;
+                                return {ourMove:om, theirBest:theirBest.move, ourPayoff};
+                              });
+                              const eq = paths.reduce((best,r)=>r.ourPayoff>(best?.ourPayoff||-999)?r:best,null);
+                              if (!eq?.ourMove) return "Enter payoffs in the Payoff Matrix step to compute backward induction.";
+                              return "We should play [" + (eq.ourMove.label||"our move") + "]. " +
+                                "Anticipating this, " + mainOpp.name + " will respond with [" +
+                                (eq.theirBest?.label||"their best response") + "]. " +
+                                "Our payoff on this equilibrium path: " + (eq.ourPayoff>=0?"+":"") + eq.ourPayoff + ". " +
+                                "This is the subgame-perfect equilibrium — neither player can do better by deviating, given the other plays rationally.";
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop:20, display:"flex", justifyContent:"flex-end" }}>
+                    <button className="gt-btn" onClick={()=>setStep(5)}
+                      style={{ padding:"10px 24px", fontSize:12, fontWeight:700,
+                        fontFamily:"inherit", border:"none", borderRadius:7,
+                        background:"linear-gradient(135deg,#6366f1,#2563eb)",
+                        color:"#fff", cursor:"pointer" }}>
+                      Strategic Analysis →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── STEP 5: STRATEGIC ANALYSIS ──────────────────────────── */}
+          {step===5 && (
             <div>
               <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
                 <div style={{ flex:1 }}>
@@ -14754,19 +15127,36 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
                       </div>
                     )}
 
-                    {/* Nash Equilibrium */}
+                    {/* Nash Equilibrium + Game Type Insights */}
                     {analysis.nashEquilibrium && (
                       <div style={{ padding:"16px 18px", background:"#161b27",
                         border:"1px solid rgba(99,102,241,.2)", borderRadius:10 }}>
-                        <div style={{ fontSize:9, fontWeight:700, color:"#a5b4fc",
-                          textTransform:"uppercase", letterSpacing:.5, marginBottom:6 }}>Nash Equilibrium</div>
+                        <div style={{ display:"flex", alignItems:"center",
+                          gap:8, marginBottom:6 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#a5b4fc",
+                            textTransform:"uppercase", letterSpacing:.5 }}>Equilibrium</div>
+                          {analysis.nashEquilibrium.equilibriumType && (
+                            <span style={{ fontSize:8, padding:"1px 6px",
+                              background:"rgba(99,102,241,.15)",
+                              color:"#a5b4fc", borderRadius:3, fontWeight:700 }}>
+                              {analysis.nashEquilibrium.equilibriumType}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize:12, color:"#e2e8f0", lineHeight:1.6, marginBottom:6 }}>
                           {analysis.nashEquilibrium.description}
                         </div>
                         {analysis.nashEquilibrium.warning && (
                           <div style={{ fontSize:10, color:"#fcd34d", padding:"5px 8px",
-                            background:"rgba(234,179,8,.08)", borderRadius:4 }}>
+                            background:"rgba(234,179,8,.08)", borderRadius:4, marginBottom:6 }}>
                             ⚠ {analysis.nashEquilibrium.warning}
+                          </div>
+                        )}
+                        {analysis.gameTypeInsights?.primaryInsight && (
+                          <div style={{ fontSize:10, color:"#6366f1", padding:"5px 8px",
+                            background:"rgba(99,102,241,.08)", borderRadius:4,
+                            fontStyle:"italic" }}>
+                            {analysis.gameTypeInsights.primaryInsight}
                           </div>
                         )}
                       </div>
@@ -14816,6 +15206,28 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
                       </div>
                     </div>
                   )}
+
+                  {/* Execute Plan CTA */}
+                  <div style={{ padding:"12px 16px",
+                    background:"rgba(99,102,241,.06)",
+                    border:"1px solid rgba(99,102,241,.2)",
+                    borderRadius:8, display:"flex",
+                    alignItems:"center", gap:12 }}>
+                    <div style={{ flex:1, fontSize:11, color:"#94a3b8" }}>
+                      Analysis complete. Now design how to play the game —
+                      move sequence, signals, commitments, and contingency triggers.
+                    </div>
+                    <button className="gt-btn"
+                      onClick={()=>{ generateExecutionPlan(); }}
+                      disabled={planningExec||aiBusy}
+                      style={{ padding:"8px 16px", fontSize:11, fontWeight:700,
+                        fontFamily:"inherit", border:"none", borderRadius:6,
+                        background:"linear-gradient(135deg,#6366f1,#2563eb)",
+                        color:"#fff", cursor:"pointer", whiteSpace:"nowrap",
+                        opacity:planningExec||aiBusy?.6:1, flexShrink:0 }}>
+                      {planningExec?"Planning…":"Execution Plan →"}
+                    </button>
+                  </div>
 
                   {/* Escalation Risks */}
                   {(analysis.escalationRisks||[]).length>0 && (
@@ -14949,6 +15361,279 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
             </div>
           )}
         </div>
+
+          {/* ── STEP 6: EXECUTION PLAN ──────────────────────────────────────── */}
+          {step===6 && (
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:22,
+                    fontWeight:700, marginBottom:4 }}>Execution Plan</div>
+                  <div style={{ fontSize:12, color:"#64748b", lineHeight:1.5 }}>
+                    Papayoanou Step 3: How do we play this game? First move, pre-game signals,
+                    commitment mechanism, move sequence, and contingency triggers.
+                  </div>
+                </div>
+                <button className="gt-btn" onClick={generateExecutionPlan}
+                  disabled={planningExec||aiBusy||!analysis}
+                  style={{ padding:"8px 16px", fontSize:11, fontWeight:700, fontFamily:"inherit",
+                    border:"1px solid rgba(99,102,241,.4)", borderRadius:6,
+                    background:"rgba(99,102,241,.1)", color:"#a5b4fc",
+                    cursor:"pointer", opacity:planningExec||aiBusy?.6:1 }}>
+                  {planningExec?"Planning…":executionPlan?"↺ Re-run":"✦ Generate Execution Plan"}
+                </button>
+              </div>
+
+              {!analysis && (
+                <div style={{ padding:"40px", textAlign:"center", color:"#475569",
+                  border:"1px dashed rgba(255,255,255,.08)", borderRadius:10 }}>
+                  Run Strategic Analysis (Step 5) first to generate the execution plan.
+                </div>
+              )}
+
+              {planningExec && (
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
+                  padding:"48px", gap:12 }}>
+                  <div style={{ display:"flex", gap:6 }}>
+                    {[0,1,2].map(i=>(
+                      <div key={i} style={{ width:8,height:8,borderRadius:"50%",
+                        background:"#6366f1",animation:`pulse 1.2s ${i*.2}s infinite ease-in-out`}}/>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:12, color:"#475569" }}>Designing execution sequence…</div>
+                </div>
+              )}
+
+              {executionPlan && !planningExec && (() => {
+                const ep = executionPlan;
+                const SEV_COL = { High:"#dc2626", Medium:"#d97706", Low:"#22c55e" };
+                return (
+                  <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+
+                    {/* Executive summary */}
+                    {ep.executiveSummary && (
+                      <div style={{ padding:"16px 18px",
+                        background:"rgba(99,102,241,.08)",
+                        border:"1px solid rgba(99,102,241,.2)", borderRadius:10 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#6366f1",
+                          textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                          Execution Summary
+                        </div>
+                        <div style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.7 }}>
+                          {ep.executiveSummary}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* First move */}
+                    {ep.firstMove && (
+                      <div style={{ padding:"14px 16px",
+                        background:"rgba(34,197,94,.08)",
+                        border:"2px solid rgba(34,197,94,.3)", borderRadius:10 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#4ade80",
+                          textTransform:"uppercase", letterSpacing:.5, marginBottom:6 }}>
+                          ▶ First Move
+                        </div>
+                        <div style={{ fontSize:14, fontWeight:700, color:"#e2e8f0",
+                          fontFamily:"'Libre Baskerville',serif", marginBottom:4 }}>
+                          {ep.firstMove.action}
+                        </div>
+                        <div style={{ display:"flex", gap:12, fontSize:11, color:"#94a3b8" }}>
+                          <span>Timing: {ep.firstMove.timing}</span>
+                        </div>
+                        <div style={{ fontSize:11, color:"#94a3b8",
+                          lineHeight:1.5, marginTop:6 }}>
+                          {ep.firstMove.rationale}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+
+                      {/* Pre-game signals */}
+                      {(ep.preGameSignals||[]).length > 0 && (
+                        <div style={{ padding:"14px 16px",
+                          background:"#161b27",
+                          border:"1px solid rgba(255,255,255,.07)", borderRadius:10 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#a5b4fc",
+                            textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
+                            📡 Pre-Game Signals
+                          </div>
+                          {ep.preGameSignals.map((sig,i)=>(
+                            <div key={i} style={{ marginBottom:10, paddingBottom:10,
+                              borderBottom:"1px solid rgba(255,255,255,.04)" }}>
+                              <div style={{ fontSize:11, fontWeight:700, color:"#e2e8f0",
+                                marginBottom:3 }}>{sig.signal}</div>
+                              <div style={{ fontSize:10, color:"#64748b",
+                                lineHeight:1.4, marginBottom:2 }}>
+                                Via {sig.medium} — {sig.purpose}
+                              </div>
+                              <div style={{ fontSize:9, color:"#6366f1",
+                                fontStyle:"italic" }}>
+                                Credible because: {sig.credibility}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Commitment mechanism */}
+                      {ep.commitmentMechanism && (
+                        <div style={{ padding:"14px 16px",
+                          background:"#161b27",
+                          border:"1px solid rgba(234,179,8,.15)", borderRadius:10 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#fcd34d",
+                            textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                            ⚓ Commitment Mechanism
+                          </div>
+                          <div style={{ fontSize:12, fontWeight:700, color:"#e2e8f0",
+                            marginBottom:6 }}>
+                            {ep.commitmentMechanism.mechanism}
+                          </div>
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                            <div>
+                              <div style={{ fontSize:8, color:"#dc2626", fontWeight:700,
+                                marginBottom:2 }}>Cost</div>
+                              <div style={{ fontSize:10, color:"#94a3b8" }}>
+                                {ep.commitmentMechanism.cost}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:8, color:"#4ade80", fontWeight:700,
+                                marginBottom:2 }}>Benefit</div>
+                              <div style={{ fontSize:10, color:"#94a3b8" }}>
+                                {ep.commitmentMechanism.benefit}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Move sequence */}
+                    {(ep.moveSequence||[]).length > 0 && (
+                      <div style={{ padding:"14px 16px",
+                        background:"#161b27",
+                        border:"1px solid rgba(255,255,255,.07)", borderRadius:10 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#a5b4fc",
+                          textTransform:"uppercase", letterSpacing:.5, marginBottom:12 }}>
+                          Move Sequence
+                        </div>
+                        {ep.moveSequence.map((step,i)=>(
+                          <div key={i} style={{ display:"flex", gap:12,
+                            marginBottom:12, paddingBottom:12,
+                            borderBottom:i<ep.moveSequence.length-1?"1px solid rgba(255,255,255,.04)":"none" }}>
+                            <div style={{ width:28, height:28, borderRadius:"50%",
+                              background:"rgba(99,102,241,.15)",
+                              border:"1px solid rgba(99,102,241,.3)",
+                              display:"flex", alignItems:"center", justifyContent:"center",
+                              fontSize:12, fontWeight:700, color:"#a5b4fc", flexShrink:0 }}>
+                              {step.step||i+1}
+                            </div>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontSize:12, fontWeight:700, color:"#e2e8f0",
+                                marginBottom:3 }}>{step.action}</div>
+                              {step.condition && (
+                                <div style={{ fontSize:10, color:"#fcd34d", marginBottom:2 }}>
+                                  When: {step.condition}
+                                </div>
+                              )}
+                              {step.expectedResponse && (
+                                <div style={{ fontSize:10, color:"#64748b" }}>
+                                  Expect: {step.expectedResponse}
+                                </div>
+                              )}
+                              {step.ourCounterResponse && (
+                                <div style={{ fontSize:10, color:"#4ade80", marginTop:2 }}>
+                                  → We then: {step.ourCounterResponse}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+
+                      {/* Trigger conditions */}
+                      {(ep.triggerConditions||[]).length > 0 && (
+                        <div style={{ padding:"14px 16px",
+                          background:"#161b27",
+                          border:"1px solid rgba(220,38,38,.15)", borderRadius:10 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#f87171",
+                            textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
+                            ⚡ Trigger Conditions
+                          </div>
+                          {ep.triggerConditions.map((t,i)=>(
+                            <div key={i} style={{ marginBottom:8 }}>
+                              <div style={{ fontSize:10, color:"#fcd34d", marginBottom:2 }}>
+                                If: {t.trigger}
+                              </div>
+                              <div style={{ fontSize:10, color:"#4ade80" }}>
+                                → {t.response}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Execution risks */}
+                      {(ep.executionRisks||[]).length > 0 && (
+                        <div style={{ padding:"14px 16px",
+                          background:"#161b27",
+                          border:"1px solid rgba(255,255,255,.07)", borderRadius:10 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#f87171",
+                            textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
+                            Execution Risks
+                          </div>
+                          {ep.executionRisks.map((r,i)=>(
+                            <div key={i} style={{ marginBottom:8 }}>
+                              <div style={{ display:"flex", alignItems:"center",
+                                gap:6, marginBottom:2 }}>
+                                <span style={{ fontSize:9, fontWeight:700,
+                                  color:SEV_COL[r.severity]||"#94a3b8",
+                                  padding:"1px 5px",
+                                  background:(SEV_COL[r.severity]||"#94a3b8")+"15",
+                                  borderRadius:3 }}>{r.severity}</span>
+                                <span style={{ fontSize:10, color:"#e2e8f0" }}>
+                                  {r.risk}
+                                </span>
+                              </div>
+                              <div style={{ fontSize:9, color:"#475569" }}>
+                                → {r.mitigation}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Success metrics */}
+                    {(ep.successMetrics||[]).length > 0 && (
+                      <div style={{ padding:"14px 16px",
+                        background:"#161b27",
+                        border:"1px solid rgba(34,197,94,.15)", borderRadius:10 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#4ade80",
+                          textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                          Success Metrics
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                          {ep.successMetrics.map((m,i)=>(
+                            <div key={i} style={{ fontSize:11, color:"#94a3b8",
+                              padding:"4px 8px",
+                              background:"rgba(34,197,94,.04)", borderRadius:4 }}>
+                              ✓ {typeof m==="string"?m:JSON.stringify(m)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
         {/* ── REACTION CHAINS PANEL ────────────────────────────────── */}
         {showChains && (
