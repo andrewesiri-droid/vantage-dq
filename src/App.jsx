@@ -7974,30 +7974,80 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
     const nt = NODE_TYPES[node.type] || NODE_TYPES.uncertainty;
     const isSel = selected === node.id;
     const isSrc = linkSource === node.id;
-    const W = 190, H = 60;
-    const cx = W / 2, cy = H / 2;
+    const W = 190;
 
     const shapeStyle = {
       position: "absolute", left: node.x * zoom, top: node.y * zoom,
-      width: W, minHeight: H,
+      width: W,
       cursor: linkMode ? "crosshair" : "grab",
       userSelect: "none", zIndex: isSel || isSrc ? 10 : 1,
     };
+
+    // Visual border radius by type
+    const borderRadius =
+      node.type === "uncertainty" ? 50 :
+      node.type === "objective"   ? 24 :
+      node.type === "constraint"  ? 4  : 8;
 
     const boxStyle = {
       padding: "10px 14px",
       background: isSrc ? nt.color : nt.bg,
       border: "2px solid " + (isSel ? nt.color : isSrc ? nt.color : nt.border),
-      borderRadius:
-        node.type === "uncertainty" ? 50 :
-        node.type === "value" ? 4 :
-        node.type === "hex" ? 8 : 8,
-      transform: node.type === "value" ? "rotate(-1deg)" : "none",
+      borderRadius,
       boxShadow: isSel
         ? "0 0 0 3px " + nt.border + "80, 0 4px 16px rgba(0,0,0,.12)"
         : "0 2px 8px rgba(0,0,0,.07)",
       transition: "box-shadow .12s",
     };
+
+    return (
+      <div style={shapeStyle}
+        onMouseDown={e => onMouseDown(e, node.id)}
+        onClick={e => { if (linkMode) { e.stopPropagation(); handleLink(node.id); } }}>
+        <div style={boxStyle}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
+            <span style={{ fontSize: 12, color: isSrc ? "#fff" : nt.color, flexShrink: 0, marginTop: 1 }}>
+              {nt.icon}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700,
+                color: isSrc ? "#fff" : nt.color,
+                lineHeight: 1.3, wordBreak: "break-word" }}>
+                {node.label}
+              </div>
+              <div style={{ fontSize: 9, color: isSrc ? "rgba(255,255,255,.65)" : "#9ca3af",
+                textTransform: "uppercase", letterSpacing: .5, marginTop: 3 }}>
+                {nt.label}
+                {node.type === "uncertainty" ? " · " + (node.impact || "?") + " impact" : ""}
+                {node.criticality === "critical" ? " · ⚡ critical" : ""}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons when selected */}
+        {isSel && !linkMode && (
+          <div style={{ position: "absolute", top: -30, right: 0,
+            display: "flex", gap: 4 }}>
+            <button onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); setMetaNode(node.id); }}
+              style={{ padding: "2px 8px", fontSize: 9, fontWeight: 700,
+                background: nt.color, border: "none", borderRadius: 4,
+                cursor: "pointer", color: "#fff", fontFamily: "inherit" }}>
+              Edit
+            </button>
+            <button onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); removeNode(node.id); }}
+              style={{ padding: "2px 8px", fontSize: 9, fontWeight: 700,
+                background: "#dc2626", border: "none", borderRadius: 4,
+                cursor: "pointer", color: "#fff", fontFamily: "inherit" }}>
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   
   // Sync nodes/edges to parent for Scenario Planning and VoI
@@ -8067,54 +8117,6 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       setShowModelModal(false);
       onAIMsg({role:"ai",text:"Model built. Base NPV: "+p.currency+npv.base+"M | IRR: "+irr.base+"% | Payback: "+(payback.base||">"+(p.horizon||5))+" yrs. Numbers are deterministic."});
     });
-  };
-
-  return (
-      <div style={shapeStyle}
-        onMouseDown={e => onMouseDown(e, node.id)}
-        onClick={e => { if (linkMode) { e.stopPropagation(); handleLink(node.id); } }}>
-        <div style={boxStyle}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
-            <span style={{ fontSize: 12, color: isSrc ? "#fff" : nt.color, flexShrink: 0, marginTop: 1 }}>
-              {nt.icon}
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 700,
-                color: isSrc ? "#fff" : nt.color,
-                lineHeight: 1.3, wordBreak: "break-word" }}>
-                {node.label}
-              </div>
-              <div style={{ fontSize: 9, color: isSrc ? "rgba(255,255,255,.65)" : "#9ca3af",
-                textTransform: "uppercase", letterSpacing: .5, marginTop: 3 }}>
-                {nt.label}
-                {node.type === "uncertainty" ? " · " + (node.impact || "?") + " impact" : ""}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Action row when selected */}
-        {isSel && !linkMode && (
-          <div style={{ position: "absolute", top: -30, right: 0,
-            display: "flex", gap: 4 }}>
-            <button onMouseDown={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); setMetaNode(node.id); }}
-              style={{ padding: "2px 8px", fontSize: 9, fontWeight: 700,
-                background: nt.color, border: "none", borderRadius: 4,
-                color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
-              ✎ Edit
-            </button>
-            <button onMouseDown={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); removeNode(node.id); }}
-              style={{ padding: "2px 8px", fontSize: 9, fontWeight: 700,
-                background: "#dc2626", border: "none", borderRadius: 4,
-                color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
-              ×
-            </button>
-          </div>
-        )}
-      </div>
-    );
   };
 
   // ── RENDER ────────────────────────────────────────────────────────────────
