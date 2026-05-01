@@ -5574,90 +5574,100 @@ function ModuleQualitativeAssessment({
       return;
     }
     setAssessing(true);
-    const critList = criteria.map((cr, i) =>
-      (i+1) + ". " + cr.label +
-      (cr.description ? " -- " + cr.description.slice(0, 60) : "") +
-      " [weight:" + getWeight(cr.id) + "]"
-    ).join("\n");
-    const stratList = strategies.map((s, i) => {
-      const choices = focusDecisions.map(d => {
-        const v = s.selections?.[d.id];
-        const idxs = Array.isArray(v) ? v : (v !== undefined ? [v] : []);
-        return d.label + "→" + (idxs.length ? idxs.map(i => d.choices[i]).join("+") : "?");
-      }).join(", ");
-      return (i+1) + ". " + s.name +
-        (s.objective ? " | Objective: " + s.objective : "") +
-        (s.description ? " | Rationale: " + s.description : "") +
-        " | Choices: " + choices;
-    }).join("\n");
 
-    aiCall(
-      "You are a Decision Quality expert scoring strategies against criteria.\n" +
-      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
-      "Criteria list:\n" + critList + "\n\n" +
-      "Strategies list:\n" + stratList + "\n\n" +
-      "Task: Score every strategy against every criterion. Use scores 1-5 only (1=poor, 5=excellent).\n" +
-      "Be differentiated — avoid giving everything the same score.\n" +
-      "Return a JSON object with a single key 'scores' containing an array.\n" +
-      "Each array element must have: strategyIndex (integer, 1-based), criterionIndex (integer, 1-based), score (integer 1-5), rationale (string), confidence (low or moderate or high).\n" +
-      "Also include: insight (string summarising patterns), tradeOffInsights (array of strings), missingCriteria (array of strings).\n" +
-      "Return only the JSON object with no markdown, no explanation, no code fences.",
-      (r) => {
-        let result = r;
-        if (r && r._raw) {
-          try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
+    // Build numbered lists so the model can use index-based matching
+    const critLines = criteria.map((cr, i) =>
+      "CRITERION_" + (i+1) + ": " + cr.label +
+      (cr.description ? " (" + cr.description.slice(0,60) + ")" : "")
+    ).join(", ");
+
+    const stratLines = strategies.map((s, i) =>
+      "STRATEGY_" + (i+1) + ": " + s.name +
+      (s.objective ? " — " + s.objective.slice(0,60) : "")
+    ).join(", ");
+
+    const totalCells = strategies.length * criteria.length;
+
+    const prompt =
+      "You are a Decision Quality expert scoring strategies against evaluation criteria.\n\n" +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n\n" +
+      "Criteria: " + critLines + "\n\n" +
+      "Strategies: " + stratLines + "\n\n" +
+      "Instructions:\n" +
+      "- Score EVERY strategy against EVERY criterion. You must return exactly " + totalCells + " score objects.\n" +
+      "- Scores are integers 1 to 5. Use the full range — be differentiated, not everything 3.\n" +
+      "- For each score use strategyIndex (1 to " + strategies.length + ") and criterionIndex (1 to " + criteria.length + ").\n" +
+      "- Also include strategyName and criterionName exactly as given above.\n\n" +
+      "Return a JSON object (no markdown, no explanation) with:\n" +
+      "scores: array of " + totalCells + " objects each with strategyIndex, criterionIndex, strategyName, criterionName, score, rationale\n" +
+      "insight: one sentence summarising the key pattern across strategies";
+
+    aiCall(prompt, (r) => {
+      console.log("[QA] callback r keys:", r ? Object.keys(r) : "null");
+      let result = r;
+      if (r && r._raw) {
+        const m = (r._raw || "").match(/\{[\s\S]*\}/);
+        if (m) {
+          try { result = JSON.parse(m[0]); }
           catch(e) {
-            const m = (r._raw||"").match(/\{[\s\S]*\}/);
-            if (m) { try { result = JSON.parse(m[0]); } catch(e2) { setAssessing(false); onAIMsg({role:"ai",text:"Scoring failed to parse. Please try again."}); return; } }
-            else { setAssessing(false); onAIMsg({role:"ai",text:"Scoring returned no JSON. Please try again."}); return; }
+            try { result = JSON.parse(m[0].replace(/[\x00-\x1f]/g," ").replace(/,(\s*[}\]])/g,"$1")); }
+            catch(e2) { setAssessing(false); onAIMsg({role:"ai",text:"Could not parse scores. Please try again."}); return; }
           }
+        } else {
+          setAssessing(false);
+          onAIMsg({role:"ai", text:"AI returned no JSON. Please try again."});
+          return;
         }
-        if (!result || result.error) { setAssessing(false); onAIMsg({role:"ai",text:"Scoring failed: "+(result?.error||"unknown")}); return; }
-        const newScores = { ...scores };
-        let filled = 0;
-        (result.scores || []).forEach(cell => {
-          const stratIdx = typeof cell.strategyIndex === "number" ? cell.strategyIndex - 1 : -1;
-          const critIdx  = typeof cell.criterionIndex === "number" ? cell.criterionIndex - 1 : -1;
-          let strat = stratIdx >= 0 && stratIdx < strategies.length ? strategies[stratIdx] : null;
-          let crit  = critIdx  >= 0 && critIdx  < criteria.length  ? criteria[critIdx]    : null;
-          if (!strat && cell.strategyName) {
-            const sn = cell.strategyName.toLowerCase().trim();
-            strat = strategies.find(s => s.name.toLowerCase().trim() === sn)
-                 || strategies.find(s => s.name.toLowerCase().includes(sn.slice(0,15)))
-                 || strategies.find(s => sn.includes(s.name.toLowerCase().slice(0,15)));
-          }
-          if (!crit && cell.criterionName) {
-            const cn = cell.criterionName.toLowerCase().trim();
-            crit = criteria.find(cr => cr.label.toLowerCase().trim() === cn)
-                || criteria.find(cr => cr.label.toLowerCase().includes(cn.slice(0,15)))
-                || criteria.find(cr => cn.includes(cr.label.toLowerCase().slice(0,15)));
-          }
-          if (strat && crit && typeof cell.score === "number" && cell.score >= 1 && cell.score <= 5) {
-            const existing = getCell(strat.id, crit.id);
-            newScores[scoreKey(strat.id, crit.id)] = {
-              ...existing, score: cell.score,
-              rationale: cell.rationale || existing.rationale || "",
-              confidence: cell.confidence || "moderate",
-            };
-            filled++;
-          }
-        });
-        onScores(newScores);
-        const total = strategies.length * criteria.length;
-        onAIMsg({ role:"ai", text:
-          (result.insight ? result.insight + " " : "") +
-          (filled === total
-            ? "All " + total + " cells scored."
-            : filled > 0
-            ? "Scored " + filled + " of " + total + " cells."
-            : "No cells matched — check that strategies and criteria are defined.")
-        });
-        setAssessing(false);
       }
-    );
+      if (!result || result.error) {
+        setAssessing(false);
+        onAIMsg({role:"ai", text:"Scoring failed: " + (result?.error||"unknown")});
+        return;
+      }
+      const newScores = { ...scores };
+      let filled = 0;
+      (result.scores || []).forEach(cell => {
+        // Primary: index match
+        const si = typeof cell.strategyIndex === "number" ? cell.strategyIndex - 1 : -1;
+        const ci = typeof cell.criterionIndex === "number" ? cell.criterionIndex - 1 : -1;
+        let strat = si >= 0 && si < strategies.length ? strategies[si] : null;
+        let crit  = ci >= 0 && ci < criteria.length  ? criteria[ci]    : null;
+        // Fallback: name match
+        if (!strat && cell.strategyName) {
+          const sn = cell.strategyName.toLowerCase().replace(/strategy_\d+:\s*/i,"").trim();
+          strat = strategies.find(s => s.name.toLowerCase().trim() === sn)
+               || strategies.find(s => s.name.toLowerCase().includes(sn.slice(0,12)))
+               || strategies.find(s => sn.includes(s.name.toLowerCase().slice(0,12)));
+        }
+        if (!crit && cell.criterionName) {
+          const cn = cell.criterionName.toLowerCase().replace(/criterion_\d+:\s*/i,"").trim();
+          crit = criteria.find(cr => cr.label.toLowerCase().trim() === cn)
+              || criteria.find(cr => cr.label.toLowerCase().includes(cn.slice(0,12)))
+              || criteria.find(cr => cn.includes(cr.label.toLowerCase().slice(0,12)));
+        }
+        if (strat && crit && typeof cell.score === "number" && cell.score >= 1 && cell.score <= 5) {
+          newScores[scoreKey(strat.id, crit.id)] = {
+            ...getCell(strat.id, crit.id),
+            score: cell.score,
+            rationale: cell.rationale || "",
+            confidence: cell.confidence || "moderate",
+          };
+          filled++;
+        }
+      });
+      onScores(newScores);
+      const total = strategies.length * criteria.length;
+      console.log("[QA] filled", filled, "of", total, "cells");
+      onAIMsg({ role:"ai", text:
+        (result.insight ? result.insight + " " : "") +
+        (filled === total ? "All " + total + " cells scored."
+          : filled > 0 ? "Scored " + filled + " of " + total + " cells."
+          : "No cells matched. Please try again.")
+      });
+      setAssessing(false);
+    });
   };
 
-  // ── AI ANALYSE QUALITY ────────────────────────────────────────────────────────
   const aiAnalyseQuality = () => {
     setAnalysing(true);
     const cellSummary = strategies.map(s =>
