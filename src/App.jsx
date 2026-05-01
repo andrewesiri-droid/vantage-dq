@@ -13127,26 +13127,37 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
     const uncNodes = (nodes||[]).filter(n=>n.type==="uncertainty").map(n=>n.label).join(", ");
     const critIssues = issues.filter(i=>i.category?.includes("uncertainty")||i.severity==="Critical")
       .slice(0,5).map(i=>i.text.slice(0,60)).join("; ");
-    aiCall(
-      "You are a DQ scenario planning expert. Identify the 4-6 most decision-relevant external uncertainties for this decision. " +
-      "Uncertainties must be external (not controllable), distinct, and directly relevant to the decision outcome. " +
-      "Do NOT include issues, risks, constraints or decisions -- only genuine uncertainties about the external environment. " +
-      "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
-      "Known uncertainties from influence diagram: " + (uncNodes||"none") + ". " +
-      "Critical issues: " + (critIssues||"none") + ". " +
-      "Return ONLY JSON: " +
-      '{"uncertainties":[{"label":"uncertainty name","theme":"Market|Technical|Regulatory|Competitive|Geopolitical|Stakeholder|Operational","impact":"High|Medium|Low","uncertainty":"High|Medium|Low","control":"Low|Medium|High","rationale":"why this is decision-critical"}],"insight":"observation"}',
-    (r) => {
+
+    const prompt =
+      "Identify the 4 to 6 most decision-relevant external uncertainties for this decision.\n" +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + "\n" +
+      "Known uncertainty signals: " + (uncNodes||"none") + "\n" +
+      "Critical issues: " + (critIssues||"none") + "\n\n" +
+      "Rules: uncertainties must be external (not controllable by the decision maker), distinct from each other, " +
+      "and directly affect the decision outcome. Do not include risks, constraints, or decisions.\n\n" +
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "One key: uncertainties. An array of objects each with:\n" +
+      "label (short name, under 8 words), theme (one of Market, Technical, Regulatory, Competitive, Geopolitical, Stakeholder, Operational), " +
+      "impact (High or Medium or Low), uncertainty (High or Medium or Low), rationale (one sentence why decision-critical).\n" +
+      "Also include a top-level insight key with one sentence about the uncertainty landscape.";
+
+    aiCall(prompt, (r) => {
       let result = r;
-      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setGenerating(false);return;}}
-      if (!result||result.error){setGenerating(false);return;}
+      if (r&&r._raw) {
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (!m) { setGenerating(false); onAIMsg({role:"ai",text:"No JSON returned. Try again."}); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setGenerating(false); onAIMsg({role:"ai",text:"Could not parse. Try again."}); return; }
+      }
+      if (!result||result.error) { setGenerating(false); return; }
       const newU = (result.uncertainties||[]).map(u=>({
         id:uid("u"), label:u.label||"", theme:u.theme||"Market",
-        impact:u.impact||"Medium", uncertainty:u.uncertainty||"High", control:u.control||"Low",
+        impact:u.impact||"High", uncertainty:u.uncertainty||"High", control:"Low",
         urgency:"Medium", rationale:u.rationale||"", score:0,
       }));
+      if (!newU.length) { setGenerating(false); onAIMsg({role:"ai",text:"No uncertainties returned. Try again."}); return; }
       setUncs(prev=>[...prev,...newU]);
-      onAIMsg({role:"ai",text:result.insight||("Added "+newU.length+" uncertainties.")});
+      onAIMsg({role:"ai", text: result.insight || ("Added "+newU.length+" uncertainties.")});
       setGenerating(false);
     });
   };
@@ -13157,34 +13168,54 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
     setFillingScenarios(true);
     const u1 = uncertainties.find(u=>u.id===axis1);
     const u2 = uncertainties.find(u=>u.id===axis2);
-    aiCall(
-      "You are a scenario planning expert. Write compelling, internally coherent scenario narratives for a 2x2 scenario matrix. " +
-      "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
-      "Axis 1: " + (u1?.label||"Uncertainty 1") + " (Low vs High). " +
-      "Axis 2: " + (u2?.label||"Uncertainty 2") + " (Low vs High). " +
-      "The 4 quadrants are: Q1=Low/High, Q2=High/High, Q3=Low/Low, Q4=High/Low. " +
-      "For each quadrant, write: a vivid scenario name (3-5 words), a narrative (2-3 sentences describing the world), key assumptions, early warning indicators that signal this scenario is emerging. " +
-      "Scenarios must be plausible, distinct, and decision-relevant -- NOT best/base/worst case. " +
-      "Return ONLY JSON: " +
-      '{"scenarios":[{"pos":"TL","name":"Scenario name","narrative":"2-3 sentence story","assumptions":"key assumptions","earlyWarningIndicators":"2-3 signposts","risks":"strategic risks","opportunities":"strategic opportunities"}],"insight":"observation"}',
-    (r) => {
+    const q_desc = [
+      "TL: " + (u1?.label||"Axis1") + "=Low, " + (u2?.label||"Axis2") + "=High",
+      "TR: " + (u1?.label||"Axis1") + "=High, " + (u2?.label||"Axis2") + "=High",
+      "BL: " + (u1?.label||"Axis1") + "=Low, " + (u2?.label||"Axis2") + "=Low",
+      "BR: " + (u1?.label||"Axis1") + "=High, " + (u2?.label||"Axis2") + "=Low",
+    ].join("; ");
+
+    const prompt =
+      "You are a scenario planning expert. Write four scenario narratives for a 2x2 matrix.\n" +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + "\n" +
+      "Axis 1 (horizontal): " + (u1?.label||"Uncertainty 1") + " — Low to High\n" +
+      "Axis 2 (vertical): " + (u2?.label||"Uncertainty 2") + " — Low to High\n" +
+      "Quadrants: " + q_desc + "\n\n" +
+      "For each quadrant write a vivid, internally consistent scenario that is:\n" +
+      "- Plausible but stretching — not best/base/worst case\n" +
+      "- Distinct from the other three\n" +
+      "- Decision-relevant\n\n" +
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "The object has one key: scenarios. It is an array of exactly 4 items.\n" +
+      "Each item has: pos (TL, TR, BL, or BR), name (3-5 word title), narrative (2-3 sentences), assumptions (string), earlyWarningIndicators (string with 2-3 signals), risks (string), opportunities (string).\n" +
+      "Also include a top-level insight key with one observation about the scenario space.";
+
+    aiCall(prompt, (r) => {
       let result = r;
-      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setFillingScenarios(false);return;}}
-      if (!result||result.error){setFillingScenarios(false);return;}
-      const aiScens = result.scenarios||[];
-      setScenarios(prev=>prev.map(s=>{
-        const match = aiScens.find(a=>a.pos===s.pos);
+      if (r&&r._raw) {
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (!m) { setFillingScenarios(false); onAIMsg({role:"ai",text:"No JSON returned. Try again."}); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setFillingScenarios(false); onAIMsg({role:"ai",text:"Could not parse narratives. Try again."}); return; }
+      }
+      if (!result||result.error) { setFillingScenarios(false); return; }
+
+      const aiScens = result.scenarios || result.Scenarios || [];
+      if (!aiScens.length) { setFillingScenarios(false); onAIMsg({role:"ai",text:"No scenarios in response. Try again."}); return; }
+
+      setScenarios(prev => prev.map(s => {
+        const match = aiScens.find(a => a.pos === s.pos);
         if (!match) return s;
-        return {...s,
-          name:match.name||s.name,
-          narrative:match.narrative||s.narrative,
-          assumptions:match.assumptions||s.assumptions,
-          earlyWarningIndicators:match.earlyWarningIndicators||s.earlyWarningIndicators,
-          risks:match.risks||s.risks,
-          opportunities:match.opportunities||s.opportunities,
+        return { ...s,
+          name: match.name || s.name,
+          narrative: match.narrative || s.narrative,
+          assumptions: match.assumptions || s.assumptions,
+          earlyWarningIndicators: match.earlyWarningIndicators || match.early_warning_indicators || s.earlyWarningIndicators,
+          risks: match.risks || s.risks,
+          opportunities: match.opportunities || s.opportunities,
         };
       }));
-      onAIMsg({role:"ai",text:result.insight||"Scenario narratives filled."});
+      onAIMsg({role:"ai", text: result.insight || "Scenario narratives filled."});
       setFillingScenarios(false);
     });
   };
@@ -13488,22 +13519,46 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
             <div style={{fontSize:12,color:DS.inkSub,marginBottom:16}}>
               Your 2×2 matrix axes. Select two uncertainties from Step 1 to define the dimensions.
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
-              {[{label:"Axis 1 (Horizontal)",state:axis1,set:setAxis1,color:DS.accent},
-                {label:"Axis 2 (Vertical)",state:axis2,set:setAxis2,color:"#7c3aed"}].map(ax=>(
-                <div key={ax.label} style={{padding:"14px 16px",background:DS.canvas,
-                  border:"2px solid "+ax.color,borderRadius:8}}>
-                  <div style={{fontSize:10,fontWeight:700,color:ax.color,marginBottom:8}}>{ax.label}</div>
-                  <select value={ax.state||""} onChange={e=>ax.set(e.target.value||null)}
-                    style={{width:"100%",padding:"7px 9px",fontSize:12,fontFamily:"inherit",
-                      background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,
-                      borderRadius:5,color:DS.ink,outline:"none"}}>
-                    <option value="">Select uncertainty…</option>
-                    {uncertainties.map(u=><option key={u.id} value={u.id}>{u.label}</option>)}
-                  </select>
+            {uncertainties.length===0&&(
+              <div style={{padding:"12px 16px",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,marginBottom:16,fontSize:12,color:"#92400e"}}>
+                ⚠ No uncertainties yet. Go to <button onClick={()=>setView("uncertainties")} style={{background:"none",border:"none",color:DS.accent,cursor:"pointer",fontWeight:700,fontFamily:"inherit",fontSize:12,padding:0}}>Step 1: Uncertainties</button> to add them first, then return here to select your axes.
+              </div>
+            )}
+            {uncertainties.length===0 ? (
+              <div style={{padding:"20px 24px",background:"#fffbeb",border:"1.5px solid #fde68a",
+                borderRadius:10,marginBottom:20,textAlign:"center"}}>
+                <div style={{fontSize:20,marginBottom:8}}>⚠</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:6}}>
+                  No uncertainties defined yet
                 </div>
-              ))}
-            </div>
+                <div style={{fontSize:12,color:"#78350f",marginBottom:14,lineHeight:1.6}}>
+                  Go to Step 1 to add uncertainties — either manually or using AI Generate.
+                  You need at least 2 to select axes.
+                </div>
+                <button onClick={()=>setView("uncertainties")}
+                  style={{padding:"8px 20px",fontSize:12,fontWeight:700,fontFamily:"inherit",
+                    border:"none",borderRadius:6,background:DS.accent,color:"#fff",cursor:"pointer"}}>
+                  ← Go to Step 1: Uncertainties
+                </button>
+              </div>
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+                {[{label:"Axis 1 (Horizontal)",state:axis1,set:setAxis1,color:DS.accent},
+                  {label:"Axis 2 (Vertical)",state:axis2,set:setAxis2,color:"#7c3aed"}].map(ax=>(
+                  <div key={ax.label} style={{padding:"14px 16px",background:DS.canvas,
+                    border:"2px solid "+ax.color,borderRadius:8}}>
+                    <div style={{fontSize:10,fontWeight:700,color:ax.color,marginBottom:8}}>{ax.label}</div>
+                    <select value={ax.state||""} onChange={e=>ax.set(e.target.value||null)}
+                      style={{width:"100%",padding:"7px 9px",fontSize:12,fontFamily:"inherit",
+                        background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,
+                        borderRadius:5,color:DS.ink,outline:"none"}}>
+                      <option value="">Select uncertainty…</option>
+                      {uncertainties.map(u=><option key={u.id} value={u.id}>{u.label}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
             {axis1&&axis2&&(
               <div style={{border:"1px solid "+DS.canvasBdr,borderRadius:10,overflow:"hidden"}}>
                 {/* Axis labels */}
