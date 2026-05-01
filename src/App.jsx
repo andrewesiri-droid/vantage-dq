@@ -13262,51 +13262,101 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
       "Each scenario should specify how each uncertainty resolves in a coherent future world. "+
       "Scenarios must be meaningfully different -- not simply optimistic/pessimistic. "+
       "Decision: "+(problem?.decisionStatement||"Not defined")+".\nUncertainties:\n"+uncList+"\n\n"+
-      "Return ONLY JSON: "+
-      '{"scenarios":[{"id":"s1","name":"Scenario name","narrative":"2-3 sentence story","uncertaintyResolutions":{"uncertainty label":"how it resolves"},"assumptions":"key assumptions","earlyWarningIndicators":"2-3 signposts","risks":"strategic risks","opportunities":"strategic opportunities"}],"insight":"observation"}',
-    (r)=>{
-      let result=r;
-      if(r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setFillingScenarios(false);return;}}
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "One key: scenarios. An array of 3 to 6 objects each with:\n" +
+      "id (string like s1 s2 s3), name (short title), narrative (2-3 sentences), " +
+      "uncertaintyResolutions (object mapping uncertainty label to how it resolves), " +
+      "assumptions (string), earlyWarningIndicators (string), risks (string), opportunities (string).\n" +
+      "Also include: insight (one sentence about the scenario space).",
+    (r) => {
+      let result = r;
+      if (r&&r._raw){
+        const m=(r._raw||"").match(/\{[\s\S]*\}/);
+        if(m){try{result=JSON.parse(m[0]);}catch(e){setFillingScenarios(false);return;}}
+        else{setFillingScenarios(false);return;}
+      }
       if(!result||result.error){setFillingScenarios(false);return;}
-      const newScens=(result.scenarios||[]).map((s,i)=>({id:uid("sc"),name:s.name||"Scenario "+(i+1),narrative:s.narrative||"",assumptions:s.assumptions||"",earlyWarningIndicators:s.earlyWarningIndicators||"",risks:s.risks||"",opportunities:s.opportunities||"",uncertaintyResolutions:s.uncertaintyResolutions||{},pos:null}));
+      const newScens=(result.scenarios||[]).map((s,i)=>({
+        id:uid("ms"),name:s.name||"Scenario "+(i+1),
+        narrative:s.narrative||"",
+        uncertaintyResolutions:s.uncertaintyResolutions||{},
+        assumptions:s.assumptions||"",
+        earlyWarningIndicators:s.earlyWarningIndicators||"",
+        risks:s.risks||"",opportunities:s.opportunities||"",
+      }));
       setMultiScenarios(newScens);
-      setScenarios(newScens);
-      onAIMsg({role:"ai",text:result.insight||("Generated "+newScens.length+" scenarios from all "+sortedUncs.length+" uncertainties.")});
+      onAIMsg({role:"ai",text:result.insight||("Generated "+newScens.length+" scenarios.")});
       setFillingScenarios(false);
     });
   };
-
 
   // ── AI: fill performance matrix ───────────────────────────────────────────
   const fillMatrix = () => {
     if (!scenarios.length||!strategies.length) return;
     setFilling(true);
-    const stratList = strategies.map((s,i)=>
-      (i+1)+". "+s.name+(s.objective?" -- objective: "+s.objective:"")
-    ).join("\n");
-    const scenList = scenarios.map(s=>
-      s.pos+": "+s.name+" -- "+s.narrative
-    ).join("\n");
-    aiCall(
-      "You are a DQ strategist evaluating how alternatives perform across future scenarios. " +
-      "Decision: " + (problem?.decisionStatement||"") + ".\n" +
-      "STRATEGIES:\n"+stratList+"\n\nSCENARIOS:\n"+scenList+"\n\n" +
-      "Classify each strategy-scenario combination as thrives/survives/struggles and give a one-line reason. " +
-      "Also classify the overall strategy as: robust (thrives in most), fragile (struggles in some), hedge (survives everywhere), or option (high upside in one scenario). " +
-      "Return ONLY JSON: " +
-      '{"matrix":[{"strategyName":"name","scenarioPos":"TL","rating":"thrives|survives|struggles","note":"reason"}],"insight":"which strategy is most robust"}',
-    (r) => {
+
+    const stratList = strategies.map((s,i) =>
+      (i+1)+". "+s.name+(s.objective?" ("+s.objective+")":"")
+    ).join(", ");
+    const scenList = scenarios.map((s,i) =>
+      (i+1)+". pos="+s.pos+" name="+s.name+(s.narrative?" — "+s.narrative.slice(0,80):"")
+    ).join("; ");
+
+    const total = strategies.length * scenarios.length;
+
+    const prompt =
+      "Evaluate how each strategy performs across each future scenario.\n" +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + "\n" +
+      "Strategies: " + stratList + "\n" +
+      "Scenarios: " + scenList + "\n\n" +
+      "For every strategy-scenario pair classify performance and give a one-line reason.\n" +
+      "Ratings must be exactly: thrives, survives, or struggles.\n" +
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "One key: matrix. An array of exactly " + total + " objects.\n" +
+      "Each object: strategyIndex (integer 1-" + strategies.length + "), scenarioPos (TL or TR or BL or BR), rating (thrives or survives or struggles), note (one sentence reason).\n" +
+      "Also include: insight (string — which strategy is most robust and why).";
+
+    aiCall(prompt, (r) => {
       let result = r;
-      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setFilling(false);return;}}
-      if (!result||result.error){setFilling(false);return;}
+      if (r && r._raw) {
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (!m) { setFilling(false); onAIMsg({role:"ai",text:"No JSON returned. Try again."}); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setFilling(false); onAIMsg({role:"ai",text:"Could not parse. Try again."}); return; }
+      }
+      if (!result||result.error) { setFilling(false); return; }
+
+      const arr = result.matrix || result.Matrix || [];
+      if (!arr.length) { setFilling(false); onAIMsg({role:"ai",text:"No matrix data returned. Try again."}); return; }
+
       const newMatrix = {...perfMatrix};
-      (result.matrix||[]).forEach(cell=>{
-        const strat = strategies.find(s=>s.name.toLowerCase()===cell.strategyName?.toLowerCase());
-        const scen  = scenarios.find(s=>s.pos===cell.scenarioPos);
-        if (strat&&scen) newMatrix[strat.id+"_"+scen.id]={rating:cell.rating||"survives",note:cell.note||""};
+      let filled = 0;
+      arr.forEach(cell => {
+        // Primary: index match
+        const si = typeof cell.strategyIndex === "number" ? cell.strategyIndex - 1 : -1;
+        let strat = si >= 0 && si < strategies.length ? strategies[si] : null;
+        // Fallback: name match
+        if (!strat && cell.strategyName) {
+          const sn = cell.strategyName.toLowerCase().trim();
+          strat = strategies.find(s => s.name.toLowerCase().trim() === sn)
+               || strategies.find(s => s.name.toLowerCase().includes(sn.slice(0,12)))
+               || strategies.find(s => sn.includes(s.name.toLowerCase().slice(0,12)));
+        }
+        const scen = scenarios.find(s => s.pos === cell.scenarioPos);
+        if (strat && scen && cell.rating) {
+          newMatrix[strat.id+"_"+scen.id] = {
+            rating: cell.rating,
+            note: cell.note || "",
+          };
+          filled++;
+        }
       });
+
       setPerfMatrix(newMatrix);
-      onAIMsg({role:"ai",text:result.insight||"Matrix filled."});
+      onAIMsg({role:"ai", text:
+        (result.insight ? result.insight+" " : "") +
+        "Rated "+filled+" of "+total+" cells."
+      });
       setFilling(false);
     });
   };
@@ -13329,30 +13379,34 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
       "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
       "Scenarios:\n" + scenSummary + "\n\n" +
       "Strategy performance matrix:\n" + matrixSummary + "\n\n" +
-      "Return ONLY JSON: " +
-      '{"strategyProfiles":[{"name":"strategy name","robustness":"robust|conditional|fragile|niche","winsIn":["scenario name"],"failsIn":["scenario name"],"failureCondition":"specific conditions","hedgeValue":"what it protects against"}],' +
-      '"correlatedFailures":[{"strategies":["A","B"],"sharedFailScenario":"scenario name","implication":"why this matters"}],' +
-      '"mostDangerousScenario":{"name":"scenario","reason":"why most strategies struggle","earlyWarnings":["observable signal"]},' +
-      '"recommendation":{"strategy":"name","rationale":"2-3 sentences","conditions":"when to switch","hedgeAction":"action reducing exposure regardless of strategy"},' +
-      '"keyInsight":"single most important takeaway"}',
-      (r) => {
-        let result = r;
-        if (r && r._raw) {
-          try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
-          catch(e) { setStressing(false); return; }
-        }
-        if (!result || result.error) { setStressing(false); return; }
-        setStressAnalysis(result);
-        onAIMsg({ role:"ai", text:
-          "Stress analysis complete. " + (result.keyInsight || "") +
-          (result.mostDangerousScenario ? " Most dangerous scenario: " + result.mostDangerousScenario.name : "")
-        });
-        setStressing(false);
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "Keys required:\n" +
+      "strategyProfiles: array of objects each with name (string), robustness (robust or conditional or fragile or niche), winsIn (array of scenario names), failsIn (array of scenario names), failureCondition (string), hedgeValue (string)\n" +
+      "correlatedFailures: array of objects each with strategies (array of names), scenario (string), risk (string)\n" +
+      "robustChoice: string naming the most robust strategy\n" +
+      "robustChoiceReason: string explaining why\n" +
+      "facilitation: array of questions to ask the team\n" +
+      "insight: string summary of the robustness landscape",
+    (r) => {
+      let result = r;
+      if (r && r._raw) {
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (!m) { setStressing(false); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setStressing(false); return; }
       }
-    );
+      if (!result || result.error) { setStressing(false); return; }
+      setStressAnalysis(result);
+      onAIMsg({role:"ai", text:
+        (result.robustChoice ? "Most robust: " + result.robustChoice + ". " : "") +
+        (result.insight || "Stress analysis complete.")
+      });
+      setStressing(false);
+      setView("insights");
+    });
   };
 
-    const robustness = strategies.map(s=>{
+  const robustness = strategies.map(s=>{
     const counts={thrives:0,survives:0,struggles:0};
     scenarios.forEach(sc=>{
       const cell=perfMatrix[s.id+"_"+sc.id];
