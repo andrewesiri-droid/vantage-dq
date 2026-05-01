@@ -4319,6 +4319,16 @@ Return ONLY JSON:
                                       {!s.objective&&!s.description?"no info":"partial"}
                                     </span>
                                   )}
+                                  {/* Distinctiveness warning on card */}
+                                  {distinctResult && (distinctResult.pairs||[]).some(p =>
+                                    (p.stratA===s.name||p.stratB===s.name) && p.similarityScore>=60
+                                  ) && (
+                                    <span style={{ fontSize:8, color:"#dc2626", padding:"1px 5px",
+                                      background:"#fef2f2", borderRadius:3,
+                                      border:"1px solid #fecaca", flexShrink:0 }}>
+                                      ≈ similar
+                                    </span>
+                                  )}
                                   <button onClick={()=>onChange(strategies.filter(x=>x.id!==s.id))}
                                     style={{ background:"none",border:"none",cursor:"pointer",
                                       color:DS.inkTer,fontSize:13,flexShrink:0 }}>×</button>
