@@ -5257,21 +5257,41 @@ function ModuleQualitativeAssessment({
     }).join("\n");
 
     aiCall(
-      "You are a Decision Quality expert. Score each strategy against each criterion (1=poor, 2=below average, 3=adequate, 4=good, 5=excellent). " +
-      "Be rigorous and differentiated -- avoid scoring everything the same. " +
+      "You are a Decision Quality expert. Score EVERY strategy against EVERY criterion. " +
+      "You MUST return one score entry for every strategy-criterion combination. " +
+      "Scores: 1=poor, 2=below average, 3=adequate, 4=good, 5=excellent. " +
+      "Be rigorous and differentiated -- avoid scoring everything 3. " +
+      "IMPORTANT: Use the EXACT strategyIndex and criterionIndex numbers provided. Do not change the names. " +
       "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
-      "CRITERIA (score each of these):\n" + critList + "\n\n" +
-      "STRATEGIES (score each of these):\n" + stratList + "\n\n" +
+      "CRITERIA:\n" + critList + "\n\n" +
+      "STRATEGIES:\n" + stratList + "\n\n" +
       "Return ONLY JSON: " +
-      '{"scores":[{"strategyName":"name","criterionName":"name","score":4,"rationale":"one sentence why this rating","confidence":"low|moderate|high","concerns":"any caveats"}],"insight":"key observation","validationFlags":[{"type":"no_rationale|inconsistent_logic|overconfidence|groupthink|missing_tradeoff|weak_differentiation|bias_risk","severity":"warning|info","message":"specific issue"}],"tradeOffInsights":["trade-off observation"],"missingCriteria":["criterion not yet in the table but important"]}',
+      '{"scores":[{"strategyIndex":1,"criterionIndex":1,"strategyName":"exact name","criterionName":"exact name","score":4,"rationale":"one sentence why","confidence":"low|moderate|high","concerns":"any caveats"}],"insight":"key observation about patterns across strategies","validationFlags":[{"type":"no_rationale|inconsistent_logic|overconfidence|groupthink|missing_tradeoff|weak_differentiation|bias_risk","severity":"warning|info","message":"specific issue"}],"tradeOffInsights":["trade-off observation"],"missingCriteria":["criterion not yet in the table but important"]}',
       (r) => {
         let result = r;
         if (r && r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); } catch(e) { setAssessing(false); return; } }
         if (!result || result.error) { setAssessing(false); return; }
         const newScores = { ...scores };
+        let filled = 0;
         (result.scores || []).forEach(cell => {
-          const strat = strategies.find(s => s.name.toLowerCase() === cell.strategyName?.toLowerCase());
-          const crit  = criteria.find(cr => cr.label.toLowerCase() === cell.criterionName?.toLowerCase());
+          // Primary: match by index (1-based from the prompt)
+          const stratIdx = typeof cell.strategyIndex === "number" ? cell.strategyIndex - 1 : -1;
+          const critIdx  = typeof cell.criterionIndex === "number" ? cell.criterionIndex - 1 : -1;
+          let strat = stratIdx >= 0 && stratIdx < strategies.length ? strategies[stratIdx] : null;
+          let crit  = critIdx  >= 0 && critIdx  < criteria.length  ? criteria[critIdx]    : null;
+          // Fallback: fuzzy name match (contains / starts with)
+          if (!strat && cell.strategyName) {
+            const sn = cell.strategyName.toLowerCase().trim();
+            strat = strategies.find(s => s.name.toLowerCase().trim() === sn)
+                 || strategies.find(s => s.name.toLowerCase().includes(sn.slice(0,15)))
+                 || strategies.find(s => sn.includes(s.name.toLowerCase().slice(0,15)));
+          }
+          if (!crit && cell.criterionName) {
+            const cn = cell.criterionName.toLowerCase().trim();
+            crit = criteria.find(cr => cr.label.toLowerCase().trim() === cn)
+                || criteria.find(cr => cr.label.toLowerCase().includes(cn.slice(0,15)))
+                || criteria.find(cr => cn.includes(cr.label.toLowerCase().slice(0,15)));
+          }
           if (strat && crit && typeof cell.score === "number" && cell.score >= 1 && cell.score <= 5) {
             const existing = getCell(strat.id, crit.id);
             newScores[scoreKey(strat.id, crit.id)] = {
@@ -5280,10 +5300,17 @@ function ModuleQualitativeAssessment({
               confidence: cell.confidence || "moderate",
               concerns: cell.concerns || "",
             };
+            filled++;
           }
         });
         onScores(newScores);
-        onAIMsg({ role:"ai", text: result.insight || ("Initial assessment complete. " + (result.scores||[]).length + " cells scored.") });
+        const total = strategies.length * criteria.length;
+        const msg = filled === total
+          ? "Initial assessment complete. All " + total + " cells scored."
+          : filled > 0
+          ? "Scored " + filled + " of " + total + " cells. " + (total - filled) + " cells could not be matched -- check strategy and criterion names."
+          : "Assessment returned no matching scores. Ensure strategy names and criterion labels match what was sent to AI.";
+        onAIMsg({ role:"ai", text: (result.insight ? result.insight + " " : "") + msg });
         setAssessing(false);
       }
     );
