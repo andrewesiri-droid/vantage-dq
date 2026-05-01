@@ -15814,43 +15814,65 @@ export default function App() {
           </div>
         )}
 
-        {/* Sync status + Share */}
-        {!navCollapsed && _SB_URL && (
-          <div style={{ padding:"6px 14px", borderBottom:`1px solid ${DS.border}`,
-            display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:5, flex:1 }}>
+        {/* Sync status + Share + Open */}
+        {!navCollapsed && (
+          <div style={{ padding:"8px 14px", borderBottom:`1px solid ${DS.border}`,
+            display:"flex", flexDirection:"column", gap:6 }}>
+
+            {/* Sync status */}
+            <div style={{ display:"flex", alignItems:"center", gap:5 }}>
               <div style={{ width:6,height:6,borderRadius:"50%",flexShrink:0,
-                background:syncStatus==="saved"?"#22c55e":syncStatus==="saving"?"#f59e0b":syncStatus==="error"?"#dc2626":"#6b7280" }}/>
-              <span style={{ fontSize:9, color:DS.textTer }}>
-                {syncStatus==="saved"?"Synced to cloud":syncStatus==="saving"?"Saving…":syncStatus==="error"?"Sync error":"Local only"}
+                background:_SB_URL
+                  ? (syncStatus==="saved"?"#22c55e":syncStatus==="saving"?"#f59e0b":syncStatus==="error"?"#dc2626":"#6b7280")
+                  : "#6b7280" }}/>
+              <span style={{ fontSize:9, color:DS.textTer, flex:1 }}>
+                {_SB_URL
+                  ? (syncStatus==="saved"?"Synced to cloud":syncStatus==="saving"?"Saving…":syncStatus==="error"?"Sync error":"Local only")
+                  : "Saved locally"}
               </span>
             </div>
-            {decisionId && (
-              <button onClick={()=>{
-                  const url = window.location.origin + window.location.pathname + "?d=" + decisionId;
-                  navigator.clipboard.writeText(url).then(()=>onAIMsg({role:"ai",text:"Share link copied! Anyone with this link can open this decision."}));
+
+            {/* Share + Open */}
+            <div style={{ display:"flex", gap:6 }}>
+              <button
+                onClick={()=>{
+                  const url = window.location.origin + window.location.pathname +
+                    (decisionId ? "?d=" + decisionId : "");
+                  navigator.clipboard.writeText(url)
+                    .then(()=>showToast("Link copied — share with your team"))
+                    .catch(()=>showToast("Copy failed — copy the URL from your browser"));
                 }}
-                style={{ fontSize:9, fontWeight:700, fontFamily:"inherit",
-                  padding:"2px 7px", border:`1px solid ${DS.border}`,
-                  borderRadius:4, background:DS.chromeMid,
-                  color:DS.textSec, cursor:"pointer", flexShrink:0 }}>
+                style={{ flex:1, fontSize:10, fontWeight:700, fontFamily:"inherit",
+                  padding:"6px 8px", border:`1px solid ${DS.border}`,
+                  borderRadius:6, background:DS.chromeSub, color:DS.textSec,
+                  cursor:"pointer", display:"flex", alignItems:"center",
+                  justifyContent:"center", gap:4, transition:"all .12s" }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=DS.accent;e.currentTarget.style.color="#93c5fd";}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.border;e.currentTarget.style.color=DS.textSec;}}>
                 🔗 Share
               </button>
-            )}
-            <button onClick={async ()=>{
-                const list = await sbList();
-                setDecisionList(list||[]);
-                setShowDecisions(d=>!d);
-              }}
-              style={{ fontSize:9, fontWeight:700, fontFamily:"inherit",
-                padding:"2px 7px", border:`1px solid ${DS.border}`,
-                borderRadius:4, background:DS.chromeMid,
-                color:DS.textSec, cursor:"pointer", flexShrink:0 }}>
-              📂 Open
-            </button>
+              <button
+                onClick={async ()=>{
+                  if (_SB_URL) {
+                    const list = await sbList();
+                    setDecisionList(list||[]);
+                  } else {
+                    setDecisionList([]);
+                  }
+                  setShowDecisions(d=>!d);
+                }}
+                style={{ flex:1, fontSize:10, fontWeight:700, fontFamily:"inherit",
+                  padding:"6px 8px", border:`1px solid ${DS.border}`,
+                  borderRadius:6, background:DS.chromeSub, color:DS.textSec,
+                  cursor:"pointer", display:"flex", alignItems:"center",
+                  justifyContent:"center", gap:4, transition:"all .12s" }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor="#7c3aed";e.currentTarget.style.color="#a78bfa";}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=DS.border;e.currentTarget.style.color=DS.textSec;}}>
+                📂 Open
+              </button>
+            </div>
           </div>
         )}
-
         {/* Project card */}
         {!navCollapsed && (
           <button onClick={()=>setProjectSetupOpen(true)}
@@ -16202,8 +16224,11 @@ export default function App() {
             </div>
             <div style={{ overflow:"auto", padding:"8px 0" }}>
               {decisionList.length===0?(
-                <div style={{ padding:"32px", textAlign:"center", color:DS.inkTer, fontSize:13 }}>
-                  No saved decisions yet. Start working and your decision will auto-save.
+                <div style={{ padding:"32px", textAlign:"center", color:DS.inkTer, fontSize:13, lineHeight:1.7 }}>
+                  {_SB_URL
+                    ? "No saved decisions yet. Start working and your decision will auto-save."
+                    : <><strong style={{color:DS.ink,display:"block",marginBottom:8}}>Cloud sync not configured</strong>Decisions save to this browser session only. To enable cross-device sharing, configure Supabase in your Vercel environment variables.</>
+                  }
                 </div>
               ):(
                 decisionList.map(row=>(
