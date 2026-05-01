@@ -850,18 +850,22 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
       "Score each of 10 dimensions 0-10. Be strict — an empty or vague field scores 0-2. " +
       "Flag ALL DQ issues found including: no_clear_decision, solution_locking, too_broad, too_narrow, " +
       "missing_owner, missing_timeframe, no_value_measure, no_uncertainty, assumptions_as_facts, scope_confusion. " +
-      "For the improved statement do NOT invent specific facts like dates or budgets — use [placeholders] instead. " +
-      "Return ONLY valid JSON:\n" +
+      "\n\nCRITICAL RULE for improvedStatement: Write ONE concise decision statement sentence only. " +
+      "It must be a well-formed open question that names who decides, what is being decided, and the core objective. " +
+      "Maximum 40 words. Do NOT write a template, document, list, or structured output. " +
+      "Do NOT invent specific numbers, dates or budgets — use [placeholder] only where a real fact belongs. " +
+      "Example of correct format: 'What market entry strategy should [Owner] pursue to achieve [objective] by [date] within [constraint]?' " +
+      "\nReturn ONLY valid JSON:\n" +
       "{\"overallScore\":72,\"status\":\"strong|adequate|weak\"," +
       "\"dimensions\":{\"decisionClarity\":7,\"ownership\":5,\"objectives\":6,\"timeframe\":4,\"scopeDefinition\":6,\"constraints\":5,\"uncertaintyAwareness\":3,\"alternativeOpenness\":7,\"stakeholderAwareness\":4,\"overallFraming\":6}," +
-      "\"flags\":[{\"id\":\"missing_owner\",\"severity\":\"critical|warning|info\",\"field\":\"fieldName\",\"title\":\"Short flag title\",\"message\":\"Specific issue found\",\"why\":\"Why this matters for decision quality\",\"suggestion\":\"Specific improvement advice\",\"before\":\"original text or EMPTY\",\"after\":\"improved version using [placeholders] if facts unknown\"}]," +
+      "\"flags\":[{\"id\":\"missing_owner\",\"severity\":\"critical|warning|info\",\"field\":\"fieldName\",\"title\":\"Short flag title\",\"message\":\"Specific issue found\",\"why\":\"Why this matters for decision quality\",\"suggestion\":\"Specific improvement advice\",\"before\":\"original text or EMPTY\",\"after\":\"improved version using [placeholders] only where real facts are unknown — never a full template\"}]," +
       "\"hiddenAssumptions\":[\"assumption stated as fact\"]," +
       "\"missingElements\":[\"what is missing\"]," +
-      "\"diagnosticSummary\":\"2-3 sentence expert diagnosis of the frame quality\"," +
-      "\"improvedStatement\":\"Better decision statement using [placeholders] if needed\"," +
+      "\"diagnosticSummary\":\"2-3 sentence expert diagnosis of frame quality — be specific, reference the actual content\"," +
+      "\"improvedStatement\":\"One concise decision question, max 40 words, using [placeholder] only where a real fact belongs — NOT a template or document\"," +
       "\"downstreamRecommendations\":[{\"module\":\"Issue Raising\",\"reason\":\"why this module should come next\"}]," +
-      "\"facilitatorQuestions\":[\"follow-up question to improve the frame\",\"another question\"]," +
-      "\"executiveSummary\":\"1-2 sentence summary\"}";
+      "\"facilitatorQuestions\":[\"probing question about the actual frame content\",\"another specific question\"]," +
+      "\"executiveSummary\":\"1-2 sentence summary of the frame quality and the single most important thing to fix\"}";
 
     aiCall(validatePrompt, (r) => {
       let result = r;
@@ -918,9 +922,10 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
       "(1) Do NOT invent specific facts — use [placeholders] for unknown dates, budgets, names. " +
       "(2) Do NOT change any field not listed. " +
       "(3) Preserve the user's strategic intent and domain context. " +
-      "(4) Decision statement must be an open question ending in ?. " +
-      "(5) Success criteria must include measurable thresholds. " +
+      "(4) Decision statement must be a single open question ending in ?, maximum 40 words — not a document, list or template. " +
+      "(5) Success criteria must include measurable thresholds with [placeholder] for unknown numbers. " +
       "(6) Never solution-lock the frame. " +
+      "(7) Every rewritten field must be concise prose matching the field type — decisionStatement is ONE sentence, owner is a role name, deadline is a date/timeframe. " +
       "\n\nCURRENT VALUES:\n" +
       "context: " + (data.context||"EMPTY") + "\n" +
       "decisionStatement: " + (data.decisionStatement||"EMPTY") + "\n" +
