@@ -7236,8 +7236,483 @@ Return ONLY valid JSON:
    MODULE 07 — EXPORT & REPORT
 ───────────────────────────────────────────────────────────────────────────── */
 
+function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholders, onChange, aiCall, aiBusy, onAIMsg }) {
+
+  const [view, setView]         = useState("map");
+  const [generating, setGenerating] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [analysing, setAnalysing] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
+
+  const INFLUENCE = ["High","Medium","Low"];
+  const ALIGNMENT = [
+    { id:"champion",  label:"Champion",  color:"#059669", bg:"#ecfdf5", desc:"Actively supports and advocates" },
+    { id:"supporter", label:"Supporter", color:"#2563eb", bg:"#eff6ff", desc:"Supportive, likely to approve" },
+    { id:"neutral",   label:"Neutral",   color:"#6b7280", bg:"#f9fafb", desc:"No strong position yet" },
+    { id:"skeptic",   label:"Skeptic",   color:"#d97706", bg:"#fffbeb", desc:"Doubtful, needs convincing" },
+    { id:"blocker",   label:"Blocker",   color:"#dc2626", bg:"#fef2f2", desc:"Likely to oppose or veto" },
+  ];
+  const ROLES = ["Decision Owner","Decision Maker","Key Influencer","Implementer","Impacted Party","Subject Expert","Governance / Approver"];
+
+  const addStakeholder = () => {
+    const ns = {
+      id: uid("sh"), name:"", role:"Key Influencer",
+      influence:"Medium", alignment:"neutral",
+      concerns:"", engagementAction:"", mustAlign:false,
+      notes:"",
+    };
+    onChange([...stakeholders, ns]);
+    setSelected(ns.id);
+  };
+
+  const update = (id, patch) => onChange(stakeholders.map(s => s.id===id ? {...s,...patch} : s));
+  const remove = (id) => { onChange(stakeholders.filter(s => s.id!==id)); if(selected===id) setSelected(null); };
+
+  const aiGenerate = () => {
+    setGenerating(true);
+    const issuesSummary = issues.filter(i=>i.category==="stakeholder"||i.severity==="Critical")
+      .slice(0,6).map(i=>i.text.slice(0,80)).join("; ");
+    const strats = strategies.map(s=>s.name+(s.objective?" — "+s.objective:"")).join("; ");
+    aiCall(
+      "You are a Decision Quality expert mapping stakeholders for a decision. " +
+      "Identify 5-8 key stakeholders who matter for this decision's outcome and implementation. " +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
+      "Strategies under consideration: " + (strats||"none") + ". " +
+      "Known stakeholder issues: " + (issuesSummary||"none") + ". " +
+      "For each stakeholder: identify their likely alignment, influence level, primary concern, and the one engagement action most likely to move them. " +
+      "Return ONLY JSON: " +
+      '{"stakeholders":[{"name":"name or role title","role":"Decision Maker|Key Influencer|Implementer|Impacted Party|Subject Expert|Governance / Approver",' +
+      '"influence":"High|Medium|Low","alignment":"champion|supporter|neutral|skeptic|blocker",' +
+      '"concerns":"their primary concern in one sentence","engagementAction":"specific action to engage or align them","mustAlign":true}],' +
+      '"insight":"key observation about alignment risk","criticalGap":"most important missing voice in the room"}',
+      (r) => {
+        let result = r;
+        if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setGenerating(false);return;}}
+        if (!result||result.error){setGenerating(false);return;}
+        const newSH = (result.stakeholders||[]).map(s=>({
+          id:uid("sh"), name:s.name||"", role:s.role||"Key Influencer",
+          influence:s.influence||"Medium", alignment:s.alignment||"neutral",
+          concerns:s.concerns||"", engagementAction:s.engagementAction||"",
+          mustAlign:s.mustAlign||false, notes:"",
+        }));
+        onChange([...stakeholders, ...newSH]);
+        onAIMsg({role:"ai", text: (result.insight||"Stakeholders generated.") + (result.criticalGap?" Critical gap: "+result.criticalGap:"")});
+        setGenerating(false);
+      }
+    );
+  };
+
+  const aiAnalyse = () => {
+    if (!stakeholders.length) return;
+    setAnalysing(true);
+    const shSummary = stakeholders.map(s =>
+      s.name + " [" + s.role + ", " + s.influence + " influence, " + s.alignment + "]: " +
+      (s.concerns||"no concerns noted")
+    ).join("\n");
+    aiCall(
+      "You are a Decision Quality expert assessing stakeholder alignment risk. " +
+      "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
+      "Stakeholder map:\n" + shSummary + "\n\n" +
+      "Assess: (1) overall alignment risk, (2) who must move before commitment, " +
+      "(3) hidden tensions between stakeholder groups, (4) missing voices, (5) DQ commitment score. " +
+      "Return ONLY JSON: " +
+      '{"alignmentScore":72,"alignmentVerdict":"ready|at_risk|blocked",' +
+      '"criticalUnaligned":["name or role"],' +
+      '"hiddenTensions":[{"between":["A","B"],"tension":"what they disagree on","severity":"critical|warning"}],' +
+      '"missingVoices":["who is not represented"],' +
+      '"engagementPriority":[{"name":"stakeholder","action":"specific action","urgency":"immediate|soon|monitor"}],' +
+      '"commitmentReadiness":"2-sentence verdict on whether the team can commit"}',
+      (r) => {
+        let result = r;
+        if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
+        if (!result||result.error){setAnalysing(false);return;}
+        setAnalysis(result);
+        onAIMsg({role:"ai", text: "Alignment score: " + (result.alignmentScore||"?") + "/100. " + (result.commitmentReadiness||"")});
+        setAnalysing(false);
+        setView("analysis");
+      }
+    );
+  };
+
+  // Computed
+  const blockers   = stakeholders.filter(s=>s.alignment==="blocker");
+  const skeptics   = stakeholders.filter(s=>s.alignment==="skeptic");
+  const champions  = stakeholders.filter(s=>s.alignment==="champion"||s.alignment==="supporter");
+  const highInfluenceUnaligned = stakeholders.filter(s=>s.influence==="High"&&(s.alignment==="skeptic"||s.alignment==="blocker"));
+
+  const sel = stakeholders.find(s=>s.id===selected);
+
+  const TABS = [
+    {id:"map", label:"Alignment Map"},
+    {id:"actions", label:"Engagement Actions"},
+    {id:"analysis", label:"AI Analysis", highlight:!!analysis},
+  ];
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
+
+      {/* Header */}
+      <div style={{padding:"14px 24px",background:DS.canvas,borderBottom:`1px solid ${DS.canvasBdr}`,
+        display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1,marginBottom:2}}>Module 07</div>
+          <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:20,fontWeight:700,color:DS.ink}}>Stakeholder Alignment</div>
+        </div>
+        {stakeholders.length>0&&(
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {blockers.length>0&&<span style={{fontSize:10,fontWeight:700,color:"#dc2626",padding:"2px 8px",background:"#fef2f2",borderRadius:4,border:"1px solid #fecaca"}}>{blockers.length} blocker{blockers.length!==1?"s":""}</span>}
+            {highInfluenceUnaligned.length>0&&<span style={{fontSize:10,fontWeight:700,color:"#d97706",padding:"2px 8px",background:"#fffbeb",borderRadius:4,border:"1px solid #fde68a"}}>{highInfluenceUnaligned.length} high-influence unaligned</span>}
+            {blockers.length===0&&highInfluenceUnaligned.length===0&&<span style={{fontSize:10,fontWeight:700,color:DS.success,padding:"2px 8px",background:DS.successSoft,borderRadius:4,border:`1px solid ${DS.successLine}`}}>No critical blockers</span>}
+          </div>
+        )}
+        <Btn variant="secondary" size="sm" onClick={addStakeholder}>+ Add Stakeholder</Btn>
+        <Btn variant="secondary" size="sm" icon="spark" onClick={aiGenerate} disabled={aiBusy||generating}>
+          {generating?"Generating…":"AI Generate"}
+        </Btn>
+        <Btn variant="primary" size="sm" onClick={aiAnalyse} disabled={aiBusy||analysing||!stakeholders.length}>
+          {analysing?"Analysing…":"✦ Analyse Alignment"}
+        </Btn>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{display:"flex",background:DS.canvasAlt,borderBottom:`1px solid ${DS.canvasBdr}`,flexShrink:0}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setView(t.id)}
+            style={{padding:"9px 20px",fontSize:11,fontWeight:700,fontFamily:"inherit",
+              cursor:"pointer",border:"none",background:"transparent",
+              borderBottom:`2px solid ${view===t.id?DS.accent:"transparent"}`,
+              color:view===t.id?DS.accent:DS.inkTer,
+              display:"flex",alignItems:"center",gap:6,transition:"all .12s"}}>
+            {t.label}
+            {t.highlight&&<span style={{width:6,height:6,borderRadius:"50%",background:DS.accent,display:"inline-block"}}/>}
+          </button>
+        ))}
+      </div>
+
+      {/* ── ALIGNMENT MAP VIEW ── */}
+      {view==="map"&&(
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+
+          {/* Left: stakeholder list */}
+          <div style={{flex:1,overflowY:"auto",padding:20}}>
+            {stakeholders.length===0?(
+              <div style={{textAlign:"center",padding:"60px 32px",border:`1.5px dashed ${DS.canvasMid}`,borderRadius:10,color:DS.inkTer}}>
+                <div style={{fontSize:24,marginBottom:12,opacity:.3}}>◉</div>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>No stakeholders mapped yet</div>
+                <div style={{fontSize:12,lineHeight:1.6,marginBottom:16,maxWidth:360,margin:"0 auto 16px"}}>
+                  Map who has a stake in this decision — who must approve it, who must implement it, and who could block it.
+                </div>
+                <Btn variant="secondary" onClick={aiGenerate} disabled={aiBusy||generating}>
+                  {generating?"Generating…":"AI Generate Stakeholders"}
+                </Btn>
+              </div>
+            ):(
+              <div>
+                {/* Grid by alignment */}
+                {ALIGNMENT.map(al=>{
+                  const group = stakeholders.filter(s=>s.alignment===al.id);
+                  if (!group.length) return null;
+                  return (
+                    <div key={al.id} style={{marginBottom:16}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:al.color}}/>
+                        <span style={{fontSize:10,fontWeight:700,color:al.color,textTransform:"uppercase",letterSpacing:.5}}>
+                          {al.label} ({group.length})
+                        </span>
+                        <span style={{fontSize:10,color:DS.inkTer}}>— {al.desc}</span>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>
+                        {group.map(sh=>(
+                          <div key={sh.id}
+                            onClick={()=>setSelected(selected===sh.id?null:sh.id)}
+                            style={{padding:"12px 14px",borderRadius:8,cursor:"pointer",
+                              background:selected===sh.id?al.bg:DS.canvas,
+                              border:`1.5px solid ${selected===sh.id?al.color:DS.canvasBdr}`,
+                              transition:"all .12s"}}>
+                            <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:4}}>
+                              <div style={{flex:1}}>
+                                <div style={{fontSize:12,fontWeight:700,color:DS.ink}}>{sh.name||"(unnamed)"}</div>
+                                <div style={{fontSize:10,color:DS.inkTer,marginTop:1}}>{sh.role}</div>
+                              </div>
+                              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+                                <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,
+                                  background:sh.influence==="High"?"#fef2f2":sh.influence==="Medium"?"#fffbeb":"#f9fafb",
+                                  color:sh.influence==="High"?"#dc2626":sh.influence==="Medium"?"#d97706":"#6b7280"}}>
+                                  {sh.influence} influence
+                                </span>
+                                {sh.mustAlign&&<span style={{fontSize:8,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",padding:"1px 5px",borderRadius:3,border:"1px solid #ddd6fe"}}>Must align</span>}
+                              </div>
+                            </div>
+                            {sh.concerns&&<div style={{fontSize:10,color:DS.inkSub,lineHeight:1.4}}>{sh.concerns.slice(0,80)}{sh.concerns.length>80?"…":""}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right: detail panel */}
+          <div style={{width:300,borderLeft:`1px solid ${DS.canvasBdr}`,overflowY:"auto",flexShrink:0}}>
+            {sel?(
+              <div style={{padding:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:DS.ink}}>Stakeholder Detail</div>
+                  <button onClick={()=>remove(sel.id)} style={{background:"none",border:"none",cursor:"pointer",color:DS.inkTer,fontSize:16}}>×</button>
+                </div>
+                {[
+                  {label:"Name / Title",field:"name",type:"text",placeholder:"e.g. CFO, Head of Operations…"},
+                ].map(f=>(
+                  <div key={f.field} style={{marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>{f.label}</div>
+                    <input value={sel[f.field]||""} onChange={e=>update(sel.id,{[f.field]:e.target.value})}
+                      placeholder={f.placeholder}
+                      style={{width:"100%",fontSize:12,padding:"7px 9px",fontFamily:"inherit",
+                        background:DS.canvasAlt,border:`1px solid ${DS.canvasBdr}`,
+                        borderRadius:5,color:DS.ink,outline:"none",boxSizing:"border-box"}}/>
+                  </div>
+                ))}
+                {/* Role */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Role</div>
+                  <select value={sel.role} onChange={e=>update(sel.id,{role:e.target.value})}
+                    style={{width:"100%",fontSize:11,padding:"6px 8px",fontFamily:"inherit",
+                      background:DS.canvasAlt,border:`1px solid ${DS.canvasBdr}`,borderRadius:5,color:DS.ink}}>
+                    {ROLES.map(r=><option key={r}>{r}</option>)}
+                  </select>
+                </div>
+                {/* Influence */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Influence Level</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {INFLUENCE.map(inf=>(
+                      <button key={inf} onClick={()=>update(sel.id,{influence:inf})}
+                        style={{flex:1,padding:"5px 4px",fontSize:10,fontWeight:700,fontFamily:"inherit",
+                          borderRadius:5,cursor:"pointer",transition:"all .1s",
+                          border:`1px solid ${sel.influence===inf?(inf==="High"?"#dc2626":inf==="Medium"?"#d97706":"#6b7280"):DS.canvasBdr}`,
+                          background:sel.influence===inf?(inf==="High"?"#fef2f2":inf==="Medium"?"#fffbeb":"#f9fafb"):"transparent",
+                          color:sel.influence===inf?(inf==="High"?"#dc2626":inf==="Medium"?"#d97706":"#6b7280"):DS.inkTer}}>
+                        {inf}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Alignment */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Alignment</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                    {ALIGNMENT.map(al=>(
+                      <button key={al.id} onClick={()=>update(sel.id,{alignment:al.id})}
+                        style={{padding:"6px 10px",fontSize:11,fontWeight:sel.alignment===al.id?700:400,
+                          fontFamily:"inherit",borderRadius:5,cursor:"pointer",textAlign:"left",
+                          border:`1px solid ${sel.alignment===al.id?al.color:DS.canvasBdr}`,
+                          background:sel.alignment===al.id?al.bg:"transparent",
+                          color:sel.alignment===al.id?al.color:DS.inkTer,transition:"all .1s"}}>
+                        {al.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Concerns */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Primary concern</div>
+                  <textarea value={sel.concerns||""} onChange={e=>update(sel.id,{concerns:e.target.value})}
+                    placeholder="What is this stakeholder most worried about or hoping for?"
+                    rows={3} style={{width:"100%",fontSize:11,padding:"7px 9px",fontFamily:"inherit",
+                      background:DS.canvasAlt,border:`1px solid ${DS.canvasBdr}`,borderRadius:5,
+                      color:DS.ink,outline:"none",resize:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
+                </div>
+                {/* Engagement action */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Engagement action</div>
+                  <textarea value={sel.engagementAction||""} onChange={e=>update(sel.id,{engagementAction:e.target.value})}
+                    placeholder="What specific action would move this stakeholder toward alignment?"
+                    rows={2} style={{width:"100%",fontSize:11,padding:"7px 9px",fontFamily:"inherit",
+                      background:DS.canvasAlt,border:`1px solid ${DS.canvasBdr}`,borderRadius:5,
+                      color:DS.ink,outline:"none",resize:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
+                </div>
+                {/* Must align toggle */}
+                <button onClick={()=>update(sel.id,{mustAlign:!sel.mustAlign})}
+                  style={{width:"100%",padding:"7px 10px",borderRadius:5,cursor:"pointer",
+                    fontFamily:"inherit",fontSize:11,fontWeight:700,
+                    border:`1px solid ${sel.mustAlign?"#7c3aed":DS.canvasBdr}`,
+                    background:sel.mustAlign?"#f5f3ff":"transparent",
+                    color:sel.mustAlign?"#7c3aed":DS.inkTer,transition:"all .12s"}}>
+                  {sel.mustAlign?"✓ Must align before commitment":"Mark as must-align"}
+                </button>
+              </div>
+            ):(
+              <div style={{padding:24,textAlign:"center",color:DS.inkTer}}>
+                <div style={{fontSize:24,marginBottom:8,opacity:.3}}>◉</div>
+                <div style={{fontSize:12}}>Click any stakeholder card to edit their details</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── ENGAGEMENT ACTIONS VIEW ── */}
+      {view==="actions"&&(
+        <div style={{flex:1,overflowY:"auto",padding:20}}>
+          {stakeholders.length===0?(
+            <div style={{textAlign:"center",padding:48,color:DS.inkTer}}>Add stakeholders first</div>
+          ):(
+            <div>
+              <div style={{fontSize:12,color:DS.inkTer,marginBottom:16,lineHeight:1.6}}>
+                Prioritised actions to achieve alignment before commitment. Focus on high-influence skeptics and blockers first.
+              </div>
+              {[...stakeholders]
+                .sort((a,b)=>{
+                  const ap = {blocker:0,skeptic:1,neutral:2,supporter:3,champion:4}[a.alignment]??5;
+                  const bp = {blocker:0,skeptic:1,neutral:2,supporter:3,champion:4}[b.alignment]??5;
+                  const ai = {High:0,Medium:1,Low:2}[a.influence]??3;
+                  const bi = {High:0,Medium:1,Low:2}[b.influence]??3;
+                  return (ap*10+ai) - (bp*10+bi);
+                })
+                .map((sh,i)=>{
+                  const al = ALIGNMENT.find(a=>a.id===sh.alignment)||ALIGNMENT[2];
+                  return (
+                    <div key={sh.id} style={{marginBottom:10,padding:"12px 16px",borderRadius:8,
+                      background:DS.canvas,border:`1px solid ${al.color}30`,
+                      borderLeft:`4px solid ${al.color}`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:sh.engagementAction?8:0}}>
+                        <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:16,fontWeight:700,color:DS.inkTer,width:22}}>{i+1}</div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,fontWeight:700,color:DS.ink}}>{sh.name||"(unnamed)"}</div>
+                          <div style={{fontSize:10,color:DS.inkTer}}>{sh.role} · {sh.influence} influence</div>
+                        </div>
+                        <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,
+                          background:al.bg,color:al.color,border:`1px solid ${al.color}40`}}>
+                          {al.label}
+                        </span>
+                        {sh.mustAlign&&<span style={{fontSize:9,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",padding:"1px 5px",borderRadius:3}}>Must align</span>}
+                      </div>
+                      {sh.engagementAction&&(
+                        <div style={{padding:"7px 10px",background:al.bg,borderRadius:5,
+                          fontSize:11,color:DS.ink,lineHeight:1.5}}>
+                          <span style={{fontWeight:700,color:al.color}}>→ </span>{sh.engagementAction}
+                        </div>
+                      )}
+                      {!sh.engagementAction&&(
+                        <div style={{fontSize:10,color:DS.inkDis,fontStyle:"italic"}}>No engagement action defined — click to edit</div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── AI ANALYSIS VIEW ── */}
+      {view==="analysis"&&(
+        <div style={{flex:1,overflowY:"auto",padding:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:700,color:DS.ink,marginBottom:2}}>Alignment Risk Assessment</div>
+              <div style={{fontSize:11,color:DS.inkTer}}>AI analysis of stakeholder alignment, hidden tensions, and commitment readiness.</div>
+            </div>
+            <Btn variant="primary" size="sm" onClick={aiAnalyse} disabled={aiBusy||analysing||!stakeholders.length}>
+              {analysing?"Analysing…":analysis?"Re-run":"Run Analysis"}
+            </Btn>
+          </div>
+          {!analysis&&!analysing&&(
+            <div style={{padding:"48px 32px",textAlign:"center",border:`1.5px dashed ${DS.canvasBdr}`,borderRadius:10,color:DS.inkTer}}>
+              <div style={{fontSize:24,marginBottom:12,opacity:.3}}>◉</div>
+              <div style={{fontSize:14,fontWeight:700,marginBottom:8}}>Analysis not yet run</div>
+              <div style={{fontSize:12,lineHeight:1.6,maxWidth:400,margin:"0 auto"}}>Map your stakeholders then run analysis to get alignment score, hidden tension detection, and a commitment readiness verdict.</div>
+            </div>
+          )}
+          {analysing&&<div style={{textAlign:"center",padding:48,color:DS.inkTer,fontSize:12}}>Analysing alignment…</div>}
+          {analysis&&!analysing&&(()=>{
+            const scoreCol = analysis.alignmentScore>=70?DS.success:analysis.alignmentScore>=50?DS.warning:DS.danger;
+            const verdictConfig = {ready:{col:DS.success,bg:DS.successSoft,border:DS.successLine,label:"Ready to Commit"},at_risk:{col:DS.warning,bg:DS.warnSoft,border:DS.warnLine,label:"At Risk — alignment work needed"},blocked:{col:DS.danger,bg:DS.dangerSoft,border:DS.dangerLine,label:"Blocked — resolve before committing"}}[analysis.alignmentVerdict]||{col:DS.inkTer,bg:DS.canvasAlt,border:DS.canvasBdr,label:"Unknown"};
+            return (
+              <div>
+                {/* Score card */}
+                <div style={{display:"flex",gap:14,padding:"16px 18px",borderRadius:10,marginBottom:16,
+                  background:verdictConfig.bg,border:`2px solid ${verdictConfig.border}`}}>
+                  <div style={{textAlign:"center",flexShrink:0}}>
+                    <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:48,fontWeight:700,lineHeight:1,color:scoreCol}}>{analysis.alignmentScore}</div>
+                    <div style={{fontSize:9,color:DS.inkTer,marginTop:4}}>/100</div>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:verdictConfig.col,marginBottom:6}}>{verdictConfig.label}</div>
+                    <div style={{height:6,background:"rgba(0,0,0,.06)",borderRadius:3,overflow:"hidden",marginBottom:8}}>
+                      <div style={{height:"100%",width:(analysis.alignmentScore||0)+"%",background:scoreCol,borderRadius:3,transition:"width .6s"}}/>
+                    </div>
+                    {analysis.commitmentReadiness&&<div style={{fontSize:11,color:DS.inkSub,lineHeight:1.5}}>{analysis.commitmentReadiness}</div>}
+                  </div>
+                </div>
+                {/* Critical unaligned */}
+                {(analysis.criticalUnaligned||[]).length>0&&(
+                  <div style={{marginBottom:14,padding:"10px 14px",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#dc2626",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>⛔ Must Align Before Commitment</div>
+                    {analysis.criticalUnaligned.map((n,i)=>(
+                      <div key={i} style={{fontSize:11,color:DS.ink,marginBottom:3,paddingLeft:10,borderLeft:"2px solid #fecaca"}}>{n}</div>
+                    ))}
+                  </div>
+                )}
+                {/* Hidden tensions */}
+                {(analysis.hiddenTensions||[]).length>0&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:10,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>⚠ Hidden Tensions</div>
+                    {analysis.hiddenTensions.map((t,i)=>(
+                      <div key={i} style={{marginBottom:8,padding:"10px 12px",borderRadius:7,
+                        background:t.severity==="critical"?"#fef2f2":"#fffbeb",
+                        border:`1px solid ${t.severity==="critical"?"#fecaca":"#fde68a"}`}}>
+                        <div style={{fontSize:11,fontWeight:700,color:DS.ink,marginBottom:3}}>
+                          {(t.between||[]).join(" ↔ ")}
+                        </div>
+                        <div style={{fontSize:11,color:DS.inkSub,lineHeight:1.5}}>{t.tension}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Missing voices */}
+                {(analysis.missingVoices||[]).length>0&&(
+                  <div style={{marginBottom:14,padding:"10px 14px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:7}}>
+                    <div style={{fontSize:10,fontWeight:700,color:DS.accent,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Missing Voices</div>
+                    {analysis.missingVoices.map((v,i)=>(
+                      <div key={i} style={{fontSize:11,color:DS.ink,marginBottom:3}}>+ {v}</div>
+                    ))}
+                  </div>
+                )}
+                {/* Engagement priority */}
+                {(analysis.engagementPriority||[]).length>0&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:10,fontWeight:700,color:DS.inkTer,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Engagement Priority</div>
+                    {analysis.engagementPriority.map((ep,i)=>(
+                      <div key={i} style={{marginBottom:8,padding:"10px 12px",borderRadius:7,
+                        background:ep.urgency==="immediate"?"#fef2f2":ep.urgency==="soon"?"#fffbeb":DS.canvas,
+                        border:`1px solid ${ep.urgency==="immediate"?"#fecaca":ep.urgency==="soon"?"#fde68a":DS.canvasBdr}`}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                          <span style={{fontSize:11,fontWeight:700,color:DS.ink}}>{ep.name}</span>
+                          <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,
+                            background:ep.urgency==="immediate"?"#fef2f2":ep.urgency==="soon"?"#fffbeb":"#f9fafb",
+                            color:ep.urgency==="immediate"?"#dc2626":ep.urgency==="soon"?"#d97706":"#6b7280"}}>
+                            {ep.urgency}
+                          </span>
+                        </div>
+                        <div style={{fontSize:11,color:DS.inkSub,lineHeight:1.5}}>{ep.action}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function ModuleExport({ problem, issues, decisions, criteria, strategies, assessmentScores,
-  dqScores, brief, narrative, aiCall, aiBusy, onAIMsg }) {
+  dqScores, brief, narrative, stakeholders, scenarioData, voiItems, timelineEvents, aiCall, aiBusy, onAIMsg }) {
 
   const [generating, setGenerating]     = useState(false);
   const [executivePack, setExecutivePack] = useState(null);
@@ -7263,6 +7738,45 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
       `${e.label}: ${dqScores[e.key]||0}/100`
     ).join(" | ");
 
+    // Phase 2 enrichment
+    const scenarioSummary = (() => {
+      const scenarios = scenarioData?.scenarios || [];
+      const perfMatrix = scenarioData?.perfMatrix || {};
+      if (!scenarios.length) return "Not completed";
+      return strategies.map(s => {
+        const ratings = scenarios.map(sc => {
+          const cell = perfMatrix[s.id+"_"+sc.id] || {};
+          return sc.name + ": " + (cell.rating||"unrated");
+        }).join(", ");
+        return (DS.sNames[s.colorIdx]||s.name) + " — " + ratings;
+      }).join("; ");
+    })();
+
+    const voiSummary = (() => {
+      const doNow = (voiItems||[]).filter(x=>x.classification==="do_now");
+      const doNot = (voiItems||[]).filter(x=>x.classification==="do_not");
+      if (!voiItems?.length) return "Not completed";
+      return "Resolve before committing: " + (doNow.map(x=>x.label).join(", ")||"none") +
+             ". Do not study: " + (doNot.map(x=>x.label).join(", ")||"none");
+    })();
+
+    const stakeholderSummary = (() => {
+      if (!(stakeholders||[]).length) return "Not mapped";
+      const blockers = stakeholders.filter(s=>s.alignment==="blocker");
+      const mustAlign = stakeholders.filter(s=>s.mustAlign);
+      return stakeholders.length + " stakeholders mapped. " +
+        (blockers.length ? blockers.length + " blocker(s): " + blockers.map(s=>s.name).join(", ") + ". " : "No blockers. ") +
+        (mustAlign.length ? "Must align: " + mustAlign.map(s=>s.name).join(", ") : "");
+    })();
+
+    const timelineSummary = (() => {
+      if (!(timelineEvents||[]).length) return "Not mapped";
+      const gates = timelineEvents.filter(e=>e.type==="decision_gate");
+      return timelineEvents.length + " events. Decision gates: " + (gates.map(e=>e.title).join(", ")||"none");
+    })();
+
+    const stressSummary = scenarioData?.stressAnalysis?.keyInsight || "";
+
     aiCall(`You are a senior Decision Quality consultant preparing a complete executive decision package.
 
 Decision: "${problem.decisionStatement}"
@@ -7278,6 +7792,12 @@ ${strategyPaths}
 Criteria: ${criteria.map(c=>c.label).join(", ")}
 DQ Scores: ${dqSummary}
 ${brief?.recommendedStrategyName ? `Recommended strategy: ${brief.recommendedStrategyName}` : ""}
+
+SCENARIO STRESS TEST: ${scenarioSummary}
+${stressSummary ? "Stress-test insight: " + stressSummary : ""}
+VALUE OF INFORMATION: ${voiSummary}
+STAKEHOLDER ALIGNMENT: ${stakeholderSummary}
+TIMELINE / RISK GATES: ${timelineSummary}
 
 Produce a complete executive decision package. Be specific, direct, and authoritative.
 
@@ -9440,6 +9960,18 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
     });
   };
 
+  const commitToIssues = () => {
+    const issueItems = canvasItems.filter(x => ["issue","uncertainty","assumption"].includes(x.tag));
+    if (!issueItems.length) { onAIMsg({role:"ai",text:"No issue/uncertainty/assumption items on canvas to commit."}); return; }
+    const newIssues = issueItems.map(x => ({
+      id: x.id, text: x.text,
+      category: x.tag==="assumption" ? "assumption" : x.tag==="uncertainty" ? "information-gap" : "context",
+      severity: "Medium", status: "open",
+    }));
+    onIssues(prev => { const ids = new Set(prev.map(i=>i.id)); return [...prev, ...newIssues.filter(i=>!ids.has(i.id))]; });
+    onAIMsg({role:"ai", text: newIssues.length + " workshop items committed to Issue Raising."});
+  };
+
   const currentPhase = PHASES[phase];
   const currentInsight = aiInsight[currentPhase?.id];
   const completedPhases = Object.values(phaseComplete).filter(Boolean).length;
@@ -10093,6 +10625,14 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
             {summaryText&&(
               <div style={{ padding:"18px 20px", background:"rgba(99,102,241,.06)",
                 border:"1px solid rgba(99,102,241,.2)", borderRadius:10 }}>
+                <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+                  <button onClick={commitToIssues}
+                    style={{fontSize:10,fontWeight:700,fontFamily:"inherit",padding:"4px 10px",
+                      border:"1px solid rgba(99,102,241,.4)",borderRadius:5,cursor:"pointer",
+                      background:"rgba(99,102,241,.1)",color:"#818cf8"}}>
+                    ↑ Commit canvas items to Issue Raising
+                  </button>
+                </div>
                 <div style={{ fontSize:10, fontWeight:700, color:"#818cf8",
                   textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>✦ AI Executive Summary</div>
                 <div style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.8, whiteSpace:"pre-wrap" }}>
@@ -10335,7 +10875,7 @@ function VersionPanel({ currentData, onRestore, onClose }) {
 
 
 
-function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy, onAIMsg, nodes: influenceNodes }) {
+function ModuleTimeline({ decisions, strategies, issues, problem, timelineEvents, onTimelineEvents, aiCall, aiBusy, onAIMsg, nodes: influenceNodes }) {
 
   // ── CONSTANTS ─────────────────────────────────────────────────────────────
   const EVENT_TYPES = {
@@ -10357,7 +10897,9 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
 
   // ── STATE ─────────────────────────────────────────────────────────────────
   const [view,         setView]         = useState("timeline"); // timeline | readiness | risks
-  const [events,       setEvents]       = useState([]);
+  // events lifted: const events = timelineEvents; const setEvents = onTimelineEvents;
+  const events    = (timelineEvents||[]);
+  const setEvents = onTimelineEvents;
   const [selected,     setSelected]     = useState(null);
   const [generating,   setGenerating]   = useState(false);
   const [analysing,    setAnalysing]    = useState(false);
@@ -11201,7 +11743,7 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
   );
 }
 
-function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges, aiCall, aiBusy, onAIMsg }) {
+function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges, scenarioData, onScenarioData, aiCall, aiBusy, onAIMsg }) {
 
   // ── Constants ─────────────────────────────────────────────────────────────
   const THEMES = ["Market","Technical","Regulatory","Competitive","Geopolitical","Stakeholder","Operational","Environmental","Commercial","Technology"];
@@ -11213,18 +11755,31 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [view, setView]               = useState("uncertainties"); // uncertainties | matrix2x2 | scenarios | test | insights
-  const [uncertainties, setUncs]      = useState([]);
-  const [axis1, setAxis1]             = useState(null); // selected uncertainty id for axis 1
-  const [axis2, setAxis2]             = useState(null); // selected uncertainty id for axis 2
-  const [scenarios, setScenarios]     = useState([]); // 4 quadrant scenarios
-  const [perfMatrix, setPerfMatrix]   = useState({}); // {stratId_scenId: {rating, note}}
-  const [generating, setGenerating]   = useState(false);
-  const [filling, setFilling]         = useState(false);
+  // Lifted state — from scenarioData prop
+  const uncertainties   = scenarioData.uncertainties  || [];
+  const axis1           = scenarioData.axis1;
+  const axis2           = scenarioData.axis2;
+  const scenarios       = scenarioData.scenarios      || [];
+  const perfMatrix      = scenarioData.perfMatrix     || {};
+  const scenarioMode    = scenarioData.scenarioMode;
+  const multiScenarios  = scenarioData.multiScenarios || [];
+  const stressAnalysis  = scenarioData.stressAnalysis || null;
+
+  const upSD = (patch) => onScenarioData(prev => ({ ...prev, ...patch }));
+  const setUncs         = (v) => upSD({ uncertainties: typeof v==="function" ? v(uncertainties) : v });
+  const setAxis1        = (v) => upSD({ axis1: v });
+  const setAxis2        = (v) => upSD({ axis2: v });
+  const setScenarios    = (v) => upSD({ scenarios: typeof v==="function" ? v(scenarios) : v });
+  const setPerfMatrix   = (v) => upSD({ perfMatrix: typeof v==="function" ? v(perfMatrix) : v });
+  const setScenarioMode = (v) => upSD({ scenarioMode: v });
+  const setMultiScenarios=(v) => upSD({ multiScenarios: typeof v==="function" ? v(multiScenarios) : v });
+  const setStressAnalysis=(v) => upSD({ stressAnalysis: v });
+
+  // Local-only UI state (no need to persist)
+  const [generating, setGenerating]           = useState(false);
+  const [filling, setFilling]                 = useState(false);
   const [fillingScenarios, setFillingScenarios] = useState(false);
-  const [scenarioMode, setScenarioMode] = useState(null);
-  const [multiScenarios, setMultiScenarios] = useState([]);
-  const [stressAnalysis, setStressAnalysis] = useState(null);
-  const [stressing, setStressing]           = useState(false);
+  const [stressing, setStressing]             = useState(false);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const addUnc = () => setUncs(prev => [...prev, {
@@ -12135,7 +12690,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
 
 
 
-function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCall, aiBusy, onAIMsg }) {
+function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, voiItems, onVoiItems, aiCall, aiBusy, onAIMsg }) {
 
   const RESOLVABILITY = ["Easy","Moderate","Hard","Not possible"];
   const DECISION_IMPACT = ["High","Medium","Low"];
@@ -12147,10 +12702,12 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
     {id:"bundle",   label:"Bundle With Other", color:"#7c3aed", bg:"#f5f3ff"},
   ];
 
-  const [view, setView]         = useState("screening"); // screening | options | recommendation
-  const [items, setItems]       = useState([]);
+  const [view, setView]           = useState("screening");
   const [analysing, setAnalysing] = useState(false);
   const [showPrimer, setShowPrimer] = useState(true);
+  // items lifted to App level via voiItems/onVoiItems props
+  const items    = voiItems.length > 0 ? voiItems : [];
+  const setItems = onVoiItems;
 
   // Seed from influence diagram
   useEffect(() => {
@@ -13704,7 +14261,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
   );
 }
 function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
-  assessmentScores, dqScores, nodes, edges, aiCall, aiBusy, onAIMsg }) {
+  assessmentScores, dqScores, nodes, edges, stakeholders, scenarioData, voiItems, timelineEvents, aiCall, aiBusy, onAIMsg }) {
 
   const [insights, setInsights]     = useState(null);
   const [running, setRunning]       = useState(false);
@@ -13717,13 +14274,10 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
   useEffect(() => {
     const hash = [
       problem?.decisionStatement?.slice(0,30),
-      issues.length,
-      decisions.length,
-      strategies.length,
-      criteria.length,
-      Object.keys(assessmentScores).length,
-      Object.keys(dqScores).length,
-      (nodes||[]).length,
+      issues.length, decisions.length, strategies.length, criteria.length,
+      Object.keys(assessmentScores).length, Object.keys(dqScores).length,
+      (nodes||[]).length, (stakeholders||[]).length,
+      (scenarioData?.scenarios||[]).length, (voiItems||[]).length, (timelineEvents||[]).length,
     ].join("|");
     setDataHash(hash);
   }, [problem, issues, decisions, strategies, criteria, assessmentScores, dqScores, nodes]);
@@ -13795,6 +14349,20 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
       "CRITERIA: " + (criteria.map(c=>c.label).join(", ") || "none") + "\n\n" +
       "STRATEGIES:\n" + (stratSummary || "none") + "\n\n" +
       "INFLUENCE MAP: " + influenceSummary + "\n\n" +
+      "STAKEHOLDERS (" + (stakeholders||[]).length + "): " +
+        ((stakeholders||[]).length ? ((stakeholders||[]).filter(s=>s.alignment==="blocker").length + " blockers, " +
+        (stakeholders||[]).filter(s=>s.alignment==="skeptic").length + " skeptics, " +
+        (stakeholders||[]).filter(s=>s.mustAlign).length + " must-align") : "not mapped") + "\n" +
+      "SCENARIO PLANNING: " + ((scenarioData?.scenarios||[]).length>0 ?
+        (scenarioData.scenarios.length + " scenarios, " + Object.keys(scenarioData.perfMatrix||{}).length + " strategy-scenario ratings") :
+        "not completed") + "\n" +
+      "VALUE OF INFORMATION: " + ((voiItems||[]).length>0 ?
+        ((voiItems||[]).filter(x=>x.classification==="do_now").length + " do-now, " +
+         (voiItems||[]).filter(x=>x.classification==="do_not").length + " do-not-study") :
+        "not completed") + "\n" +
+      "TIMELINE EVENTS: " + ((timelineEvents||[]).length>0 ?
+        timelineEvents.length + " events, " + timelineEvents.filter(e=>e.type==="decision_gate").length + " decision gates" :
+        "not mapped") + "\n\n" +
       "DQ ELEMENT SCORES: " + dqSummary + "\n\n" +
       "=== ANALYSIS REQUIRED ===\n" +
       "Detect ALL of the following where present:\n" +
@@ -15769,19 +16337,20 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
 
 /* ── MODULE REGISTRY ──────────────────────────────────────────────────────── */
 const PHASE1 = [
-  { id:"problem",    num:"01", label:"Problem Definition",     sub:"Frame the decision",        icon:"◎" },
-  { id:"issues",     num:"02", label:"Issue Raising",          sub:"Surface what matters",      icon:"◈" },
-  { id:"hierarchy",  num:"03", label:"Decision Hierarchy",     sub:"Structure & prioritise",    icon:"◧" },
-  { id:"strategy",   num:"04", label:"Strategy Table",         sub:"Build alternatives",        icon:"⊞" },
-  { id:"scenarios",  num:"05", label:"Scenario Planning",      sub:"Test across futures",       icon:"◈" },
-  { id:"assessment", num:"06", label:"Qualitative Assessment", sub:"Score & compare",           icon:"◫" },
-  { id:"scorecard",  num:"07", label:"DQ Scorecard",           sub:"Chain analysis",            icon:"◑" },
-  { id:"export",     num:"08", label:"Export & Report",        sub:"Executive package",         icon:"◉" },
+  { id:"problem",      num:"01", label:"Problem Definition",     sub:"Frame the decision",        icon:"\u25ce" },
+  { id:"issues",       num:"02", label:"Issue Raising",          sub:"Surface what matters",      icon:"\u25c8" },
+  { id:"hierarchy",    num:"03", label:"Decision Hierarchy",     sub:"Structure & prioritise",    icon:"\u25a7" },
+  { id:"strategy",     num:"04", label:"Strategy Table",         sub:"Build alternatives",        icon:"\u229e" },
+  { id:"assessment",   num:"05", label:"Qualitative Assessment", sub:"Score & compare",           icon:"\u25ab" },
+  { id:"scorecard",    num:"06", label:"DQ Scorecard",           sub:"Chain analysis",            icon:"\u25d1" },
+  { id:"stakeholders", num:"07", label:"Stakeholder Alignment",  sub:"Map & align key players",   icon:"\u25c9" },
+  { id:"export",       num:"08", label:"Export & Report",        sub:"Executive package",         icon:"\u25d0" },
 ];
 const PHASE2 = [
-  { id:"influence",  num:"09", label:"Influence Map",          sub:"Uncertainty analysis",      icon:"⊕" },
-  { id:"timeline",   num:"10", label:"Decision Risk Timeline", sub:"Time, gates & risk",       icon:"⊳" },
-  { id:"voi",        num:"11", label:"Value of Information",   sub:"What to resolve first",    icon:"◎" },
+  { id:"influence",  num:"09", label:"Influence Map",          sub:"Causal structure",           icon:"\u2295" },
+  { id:"scenarios",  num:"10", label:"Scenario Planning",      sub:"Test across futures",        icon:"\u25c8" },
+  { id:"voi",        num:"11", label:"Value of Information",   sub:"What to resolve first",      icon:"\u25ce" },
+  { id:"timeline",   num:"12", label:"Decision Risk Timeline", sub:"Time, gates & risk",         icon:"\u22b3" },
 ];
 const MODULES = [...PHASE1, ...PHASE2];
 
@@ -16332,6 +16901,14 @@ export default function App() {
   const [aiMessages, setAIMessages]       = useState([]);
   const [influenceNodes, setInfluenceNodes] = useState([]);
   const [influenceEdges, setInfluenceEdges] = useState([]);
+  // Phase 2 lifted state
+  const [scenarioData, setScenarioData]     = useState({
+    uncertainties:[], axis1:null, axis2:null,
+    scenarios:[], perfMatrix:{}, stressAnalysis:null, scenarioMode:null,
+  });
+  const [voiItems, setVoiItems]             = useState([]);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+  const [stakeholders, setStakeholders]     = useState([]);
 
   // UI state
   const [showAI, setShowAI]               = useState(true);
@@ -16479,7 +17056,12 @@ export default function App() {
       setSyncStatus("saving");
       const payload = {
         project_name: problem.projectName || problem.decisionStatement?.slice(0,60) || "Untitled",
-        data: { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores },
+        data: {
+          problem, issues, decisions, criteria, strategies,
+          assessmentScores, dqScores, brief, narrative,
+          stakeholders, scenarioData, voiItems, timelineEvents,
+          influenceNodes, influenceEdges,
+        },
         updated_at: new Date().toISOString(),
       };
       let row;
@@ -16583,14 +17165,18 @@ export default function App() {
   };
 
   const moduleCompletion = (id) => {
-    if (id==="problem")    return problem.decisionStatement?.length>20&&problem.owner?.length>2 ? 100 : 40;
-    if (id==="issues")     return Math.min(100, issues.length*12);
-    if (id==="hierarchy")  return decisions.filter(d=>d.tier==="focus").length>0&&criteria.length>0 ? 100 : decisions.filter(d=>d.tier==="focus").length>0 ? 60 : 0;
-    if (id==="strategy")   return strategies.length>0&&strategies.some(s=>Object.keys(s.selections||{}).length>0) ? 100 : 20;
-    if (id==="assessment") return Object.keys(assessmentScores).length>0 ? 100 : 0;
-    if (id==="scorecard")  return Object.values(dqScores).some(s=>s>0) ? 100 : 0;
-    if (id==="export")     return brief||narrative ? 100 : 0;
-    if (id==="influence")  return 0;
+    if (id==="problem")       return problem.decisionStatement?.length>20&&problem.owner?.length>2 ? 100 : 40;
+    if (id==="issues")        return Math.min(100, issues.length*12);
+    if (id==="hierarchy")     return decisions.filter(d=>d.tier==="focus").length>0&&criteria.length>0 ? 100 : decisions.filter(d=>d.tier==="focus").length>0 ? 60 : 0;
+    if (id==="strategy")      return strategies.length>0&&strategies.some(s=>Object.keys(s.selections||{}).length>0) ? 100 : 20;
+    if (id==="assessment")    return Object.keys(assessmentScores).length>0 ? 100 : 0;
+    if (id==="scorecard")     return Object.values(dqScores).some(s=>s>0) ? 100 : 0;
+    if (id==="stakeholders")  return stakeholders.length>=2 ? 100 : stakeholders.length>0 ? 40 : 0;
+    if (id==="export")        return brief||narrative ? 100 : 0;
+    if (id==="influence")     return influenceNodes.length>=3 ? 100 : influenceNodes.length>0 ? 50 : 0;
+    if (id==="scenarios")     return (scenarioData.scenarios||[]).length>0 ? 100 : (scenarioData.uncertainties||[]).length>0 ? 40 : 0;
+    if (id==="voi")           return voiItems.some(x=>x.classification) ? 100 : voiItems.length>0 ? 40 : 0;
+    if (id==="timeline")      return timelineEvents.length>0 ? 100 : 0;
     return 0;
   };
 
@@ -16604,17 +17190,18 @@ export default function App() {
   };
 
   const moduleProps = {
-    problem:   { data:problem, onChange:setProblem, aiCall, aiBusy, messages:aiMessages, onAIMsg:pushAIMsg, onAISend:handleAISend },
-    issues:    { issues, onChange:setIssues, decisions, onDecisions:setDecisions, criteria, onCriteria:setCriteria, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    hierarchy: { decisions, criteria, onDecisions:setDecisions, onCriteria:setCriteria, issues, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    strategy:  { decisions, strategies, onChange:setStrategies, onDecisions:setDecisions, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
-    scenarios: { strategies, decisions, issues, problem, nodes:influenceNodes, edges:influenceEdges, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    assessment:{ strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    scorecard: { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    export:    { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    influence: { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg, problem, onNodesChange:setInfluenceNodes, onEdgesChange:setInfluenceEdges },
-    timeline:  { decisions, strategies, issues, problem, nodes:influenceNodes, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    voi:       { nodes:influenceNodes, edges:influenceEdges, issues, strategies, decisions, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    problem:      { data:problem, onChange:setProblem, aiCall, aiBusy, messages:aiMessages, onAIMsg:pushAIMsg, onAISend:handleAISend },
+    issues:       { issues, onChange:setIssues, decisions, onDecisions:setDecisions, criteria, onCriteria:setCriteria, problem, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    hierarchy:    { decisions, criteria, onDecisions:setDecisions, onCriteria:setCriteria, issues, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    strategy:     { decisions, strategies, onChange:setStrategies, onDecisions:setDecisions, aiCall, aiBusy, problem, onAIMsg:pushAIMsg },
+    assessment:   { strategies, decisions, criteria, problem, scores:assessmentScores, onScores:setAssessmentScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    scorecard:    { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    stakeholders: { strategies, decisions, problem, issues, stakeholders, onChange:setStakeholders, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    export:       { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, stakeholders, scenarioData, voiItems, timelineEvents, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    influence:    { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg, problem, onNodesChange:setInfluenceNodes, onEdgesChange:setInfluenceEdges },
+    scenarios:    { strategies, decisions, issues, problem, nodes:influenceNodes, edges:influenceEdges, scenarioData, onScenarioData:setScenarioData, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    voi:          { nodes:influenceNodes, edges:influenceEdges, issues, strategies, decisions, problem, voiItems, onVoiItems:setVoiItems, aiCall, aiBusy, onAIMsg:pushAIMsg },
+    timeline:     { decisions, strategies, issues, problem, nodes:influenceNodes, timelineEvents, onTimelineEvents:setTimelineEvents, aiCall, aiBusy, onAIMsg:pushAIMsg },
   };
 
   return (
@@ -17048,6 +17635,8 @@ export default function App() {
               criteria={criteria} strategies={strategies}
               assessmentScores={assessmentScores} dqScores={dqScores}
               nodes={influenceNodes} edges={influenceEdges}
+              stakeholders={stakeholders} scenarioData={scenarioData}
+              voiItems={voiItems} timelineEvents={timelineEvents}
               aiCall={aiCall} aiBusy={aiBusy} onAIMsg={pushAIMsg}/>
 
             {/* Tools dropdown */}
@@ -17094,15 +17683,18 @@ export default function App() {
                 💬 Comments
               </button>
             )}
-            {module==="problem"    && <ModuleProblemDefinition    {...moduleProps.problem}/>}
-            {module==="issues"     && <ModuleIssueRaising         {...moduleProps.issues}/>}
-            {module==="hierarchy"  && <ModuleDecisionHierarchy    {...moduleProps.hierarchy}/>}
-            {module==="strategy"   && <ModuleStrategyTable        {...moduleProps.strategy}/>}
-            {module==="scenarios"   && <ModuleScenarios      {...moduleProps.scenarios}/>}
-            {module==="assessment" && <ModuleQualitativeAssessment {...moduleProps.assessment}/>}
-            {module==="scorecard"  && <ModuleDQScorecard          {...moduleProps.scorecard}/>}
-            {module==="export"     && <ModuleExport               {...moduleProps.export}/>}
-            {module==="timeline"   && <ModuleTimeline       {...moduleProps.timeline}/>}
+            {module==="problem"       && <ModuleProblemDefinition    {...moduleProps.problem}/>}
+            {module==="issues"        && <ModuleIssueRaising         {...moduleProps.issues}/>}
+            {module==="hierarchy"     && <ModuleDecisionHierarchy    {...moduleProps.hierarchy}/>}
+            {module==="strategy"      && <ModuleStrategyTable        {...moduleProps.strategy}/>}
+            {module==="assessment"    && <ModuleQualitativeAssessment {...moduleProps.assessment}/>}
+            {module==="scorecard"     && <ModuleDQScorecard          {...moduleProps.scorecard}/>}
+            {module==="stakeholders"  && <ModuleStakeholders         {...moduleProps.stakeholders}/>}
+            {module==="export"        && <ModuleExport               {...moduleProps.export}/>}
+            {module==="influence"     && <ModuleInfluenceMap         {...moduleProps.influence}/>}
+            {module==="scenarios"     && <ModuleScenarios            {...moduleProps.scenarios}/>}
+            {module==="voi"           && <ModuleVoI                  {...moduleProps.voi}/>}
+            {module==="timeline"      && <ModuleTimeline       {...moduleProps.timeline}/>}
             {module==="influence"  && <ModuleInfluenceMap         {...moduleProps.influence}/>}
             {module==="voi"        && <ModuleVoI           {...moduleProps.voi}/>}
           </div>
