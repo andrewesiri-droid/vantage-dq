@@ -758,7 +758,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
     return (
       <div style={{ marginTop:5, padding:"6px 10px", background:bg,
         border:`1px solid ${border}`, borderRadius:5,
-        fontSize:11, color:text, lineHeight:1.5, display:"flex", gap:6 }}>
+        fontSize:11, color:text, lineHeight:1.5, display:"flex", gap:6 , overflow:"hidden" }}>
         <span style={{ flexShrink:0 }}>{f.level==="critical"?"⚠":f.level==="warning"?"○":"ℹ"}</span>
         <span>{f.msg}</span>
       </div>
@@ -1024,7 +1024,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%",
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden",
       fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif" }}>
 
       {/* ── HEADER ─────────────────────────────────────────────── */}
@@ -2163,7 +2163,7 @@ Return ONLY JSON:
 
   // ── RENDER ───────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
 
       {/* ── MODULE HEADER ── */}
       <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
@@ -3129,7 +3129,7 @@ function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria,
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%",
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden",
       fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif" }}>
 
       {/* ── HEADER ── */}
@@ -4101,7 +4101,7 @@ Return ONLY JSON:
   const MODES = [{ id:"builder",label:"Builder" },{ id:"workshop",label:"Workshop" },{ id:"review",label:"Review" },{ id:"analysis",label:"Strategy Analysis" }];
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
       {/* Header */}
       <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
         display:"flex", alignItems:"center", gap:12, flexShrink:0, flexWrap:"wrap" }}>
@@ -5232,7 +5232,7 @@ Return ONLY valid JSON:
   const WEIGHT_COLORS = { 1:DS.inkDis, 2:DS.warning, 3:DS.danger };
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
 
       {/* ── HEADER ── */}
       <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
@@ -6487,7 +6487,7 @@ Return ONLY valid JSON:
   ];
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
 
       {/* Header */}
       <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
@@ -7260,7 +7260,7 @@ Return ONLY valid JSON:
   const completionPct = Math.round((completionItems.filter(i=>i.done).length / completionItems.length) * 100);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -8147,6 +8147,9 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
           <Btn variant="secondary" size="sm" onClick={aiAnalyseMap}
             disabled={aiBusy||analysing||nodes.length<3}>
             {analysing ? "Analysing…" : "✦ AI Analysis"}
+          </Btn>
+          <Btn variant="secondary" size="sm" onClick={() => setShowModelModal(true)}>
+            📊 Model
           </Btn>
           <Btn variant="primary" icon="spark" size="sm"
             onClick={generateNodes} disabled={aiBusy || generating}>
@@ -10442,8 +10445,6 @@ function ModuleTimeline({ decisions, strategies, issues, problem, aiCall, aiBusy
           <div style={{ flex:1 }}>
             <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
               fontWeight:700, letterSpacing:1 }}>Module 10</div>
-            <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase",
-                fontWeight:700, letterSpacing:1, marginBottom:2 }}>Module 10</div>
             <div style={{ fontFamily:"'Libre Baskerville',serif",
               fontSize:18, fontWeight:700, color:DS.ink }}>Decision Risk Timeline</div>
           </div>
@@ -15768,9 +15769,11 @@ export default function App() {
                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 {currentUser.user_metadata?.name || currentUser.email?.split("@")[0] || "Anonymous"}
               </div>
-              {currentUser.id?.startsWith("guest_") && (
-                <div style={{ fontSize:9, color:DS.textTer }}>Guest</div>
-              )}
+              <div style={{ fontSize:9, color:DS.textTer, overflow:"hidden",
+                textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {currentUser.id?.startsWith("guest_") ? "Guest" :
+                 currentUser.email ? currentUser.email : "Signed in"}
+              </div>
             </div>
             {!currentUser.id?.startsWith("guest_") && (
               <button onClick={()=>{ sbSignOut(); setCurrentUser(null); }}
@@ -15838,10 +15841,10 @@ export default function App() {
             onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
             <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.2,
               textTransform:"uppercase", marginBottom:4 }}>Active Project</div>
-            <div style={{ fontSize:11, fontWeight:700, color:DS.textPri, lineHeight:1.35,
-              fontFamily:"'Libre Baskerville',Georgia,serif", marginBottom:4 }}>
-              {(problem.projectName||problem.decisionStatement?.slice(0,40)||"Untitled").slice(0,38)}
-              {(problem.projectName||"").length>38?"…":""}
+            <div style={{ fontSize:11, fontWeight:700, color:DS.textPri, lineHeight:1.4,
+              fontFamily:"'Libre Baskerville',Georgia,serif", marginBottom:4,
+              wordBreak:"break-word", whiteSpace:"normal" }}>
+              {problem.projectName || problem.decisionStatement || "Untitled"}
             </div>
             <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
               {problem.projectCode && (
