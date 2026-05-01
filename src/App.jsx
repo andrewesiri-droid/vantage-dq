@@ -9432,7 +9432,7 @@ const IMPACT_LEVELS      = ["Critical","High","Medium","Low"];
 const CONTROL_LEVELS     = ["High Control","Some Control","Low Control","No Control"];
 const UNCERTAINTY_TYPES  = ["Market","Regulatory","Technical","Financial","Competitive","Operational","Political","Stakeholder"];
 
-function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg, problem, onNodesChange, onEdgesChange }) {
+function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onAIMsg, problem, nodes:initNodes, edges:initEdges, onNodesChange, onEdgesChange }) {
 
   // ── Node taxonomy per spec ────────────────────────────────────────────────
   const NODE_TYPES = {
@@ -9476,8 +9476,8 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [view, setView]             = useState("diagram");
-  const [nodes, setNodes]           = useState([]);
-  const [edges, setEdges]           = useState([]);
+  const [nodes, setNodes]           = useState(()=>initNodes||[]);
+  const [edges, setEdges]           = useState(()=>initEdges||[]);
   const [selected, setSelected]     = useState(null);
   const [linkMode, setLinkMode]     = useState(false);
   const [linkSource, setLinkSource] = useState(null);
@@ -9905,6 +9905,9 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   // Sync nodes/edges to parent for Scenario Planning and VoI
   useEffect(() => { if (onNodesChange) onNodesChange(nodes); }, [nodes]);
   useEffect(() => { if (onEdgesChange) onEdgesChange(edges); }, [edges]);
+  // Sync in: if parent nodes change externally (e.g. Deep Dive seeds them), update local
+  useEffect(() => { if (initNodes && initNodes.length > 0 && nodes.length === 0) setNodes(initNodes); }, [initNodes]);
+  useEffect(() => { if (initEdges && initEdges.length > 0 && edges.length === 0) setEdges(initEdges); }, [initEdges]);
 
   const showModelInApp = (modelData) => { setModelResult(modelData); setShowModelResult(true); };
 
@@ -20530,7 +20533,7 @@ function AppMain() {
     scorecard:    { problem, issues, decisions, strategies, criteria, assessmentScores, brief, scores:dqScores, onScores:setDqScores, stakeholders, scenarioData, voiItems, aiCall, aiBusy, onAIMsg:pushAIMsg },
     stakeholders: { strategies, decisions, problem, issues, stakeholders, onChange:setStakeholders, aiCall, aiBusy, onAIMsg:pushAIMsg },
     export:       { problem, issues, decisions, criteria, strategies, assessmentScores, dqScores, brief, narrative, stakeholders, scenarioData, voiItems, timelineEvents, aiCall, aiBusy, onAIMsg:pushAIMsg },
-    influence:    { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg, problem, onNodesChange:setInfluenceNodes, onEdgesChange:setInfluenceEdges },
+    influence:    { issues, decisions, strategies, aiCall, aiBusy, onAIMsg:pushAIMsg, problem, nodes:influenceNodes, edges:influenceEdges, onNodesChange:setInfluenceNodes, onEdgesChange:setInfluenceEdges },
     scenarios:    { strategies, decisions, issues, problem, nodes:influenceNodes, edges:influenceEdges, scenarioData, onScenarioData:setScenarioData, aiCall, aiBusy, onAIMsg:pushAIMsg },
     voi:          { nodes:influenceNodes, edges:influenceEdges, issues, strategies, decisions, problem, voiItems, onVoiItems:setVoiItems, aiCall, aiBusy, onAIMsg:pushAIMsg },
     timeline:     { decisions, strategies, issues, problem, nodes:influenceNodes, timelineEvents, onTimelineEvents:setTimelineEvents, aiCall, aiBusy, onAIMsg:pushAIMsg },
