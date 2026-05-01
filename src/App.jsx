@@ -16687,6 +16687,12 @@ const ANALYSIS_STEPS = [
   { id:"stakeholders",  label:"Mapping stakeholder landscape",      icon:"◉", module:"Stakeholder Alignment" },
   { id:"uncertainties", label:"Identifying key uncertainties",      icon:"◈", module:"Scenario Planning" },
   { id:"gameTheory",    label:"Scanning for game theory signals",   icon:"♟", module:"Game Theory" },
+  { id:"influence",     label:"Building influence map",             icon:"⊕", module:"Influence Map" },
+  { id:"scenarios",     label:"Structuring scenarios",              icon:"◈", module:"Scenario Planning" },
+  { id:"voi",           label:"Assessing value of information",     icon:"◎", module:"Value of Information" },
+  { id:"timeline",      label:"Mapping risk timeline & gates",      icon:"⊳", module:"Risk Timeline" },
+  { id:"scorecard",     label:"Scoring DQ readiness",               icon:"◉", module:"DQ Scorecard" },
+  { id:"crossModule",   label:"Running cross-module intelligence",  icon:"✦", module:"Cross-Module AI" },
 ];
 
 function LoginScreen({ onLogin }) {
@@ -17012,13 +17018,113 @@ function QuickStartScreen({ onComplete, onSkip }) {
   const [draft, setDraft] = useState(null);
   const [accepted, setAccepted] = useState({});
   const [dragOver, setDragOver] = useState(false);
+  const [rerunInstruction, setRerunInstruction] = useState("");
+  const [activeReviewTab, setActiveReviewTab] = useState("frame");
+  const [exportingReport, setExportingReport] = useState(false);
   const { busy, call } = useAI();
+
+  const generateDeepDiveReport = (d) => {
+    if (!d) return "<html><body>No draft available.</body></html>";
+    const section = (title, content) => content ?
+      `<div class="section"><h2>${title}</h2>${content}</div>` : "";
+    const tag = (label, col) =>
+      `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${col}20;color:${col};margin:2px">${label}</span>`;
+    const flagCol = {critical:"#dc2626",warning:"#d97706",info:"#6b7280"};
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>Deep Dive Analysis -- ${d.projectName||"Decision"}</title>
+      <style>
+        body{font-family:'Helvetica Neue',Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 24px;color:#1e293b;font-size:14px;line-height:1.6}
+        h1{font-size:28px;font-weight:800;color:#1b2a4a;border-bottom:3px solid #2563eb;padding-bottom:12px;margin-bottom:8px}
+        h2{font-size:16px;font-weight:700;color:#2563eb;margin:28px 0 10px;border-left:4px solid #2563eb;padding-left:10px}
+        h3{font-size:13px;font-weight:700;color:#334155;margin:16px 0 6px}
+        .section{margin-bottom:28px;padding:16px 20px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc}
+        .meta{font-size:12px;color:#64748b;margin-bottom:20px}
+        .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:10px 0}
+        .score-box{text-align:center;padding:10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff}
+        .score-num{font-size:28px;font-weight:800}
+        .item{padding:8px 12px;border-left:3px solid #2563eb;margin-bottom:8px;background:#fff;border-radius:0 6px 6px 0}
+        .flag{padding:8px 12px;margin-bottom:6px;border-radius:6px;background:#fff;border:1px solid #e2e8f0}
+        table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+        th{background:#1b2a4a;color:#fff;padding:6px 10px;text-align:left}
+        td{padding:6px 10px;border-bottom:1px solid #e2e8f0}
+        tr:nth-child(even) td{background:#f8fafc}
+        .verdict{display:inline-block;padding:4px 14px;border-radius:20px;font-weight:700;font-size:12px}
+        @media print{.section{break-inside:avoid}}
+      </style></head><body>
+      <h1>Deep Dive Analysis Report</h1>
+      <div class="meta">Project: <strong>${d.projectName||"Untitled"}</strong> · Generated: ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</div>
+
+      ${section("Executive Summary", d.executiveSummary ? `<p>${d.executiveSummary}</p>` : "")}
+
+      ${section("Decision Frame", d.frame ? `
+        <table><tr><th>Field</th><th>Value</th></tr>
+        ${[["Decision Statement",d.frame.decisionStatement],["Owner",d.frame.owner],["Deadline",d.frame.deadline],
+          ["Trigger",d.frame.trigger],["Scope In",d.frame.scopeIn],["Scope Out",d.frame.scopeOut],
+          ["Constraints",d.frame.constraints],["Success Criteria",d.frame.successCriteria]]
+          .filter(([,v])=>v).map(([l,v])=>`<tr><td><strong>${l}</strong></td><td>${v}</td></tr>`).join("")}
+        </table>` : "")}
+
+      ${section("DQ Scorecard", d.dqScores ? `
+        <div style="margin-bottom:10px">
+          ${d.readinessVerdict ? `<span class="verdict" style="background:${d.readinessVerdict==="ready"?"#dcfce7":d.readinessVerdict==="conditional"?"#fef9c3":"#fee2e2"};color:${d.readinessVerdict==="ready"?"#15803d":d.readinessVerdict==="conditional"?"#92400e":"#dc2626"}">${d.readinessVerdict==="ready"?"Decision Ready":d.readinessVerdict==="conditional"?"Conditionally Ready":"Not Ready"}</span>` : ""}
+        </div>
+        <div class="grid">
+          ${[["Frame",d.dqScores.frame],["Alternatives",d.dqScores.alternatives],["Information",d.dqScores.information],
+             ["Values",d.dqScores.values],["Reasoning",d.dqScores.reasoning],["Commitment",d.dqScores.commitment]].map(([l,s])=>{
+            const col = s>=70?"#059669":s>=45?"#d97706":"#dc2626";
+            return `<div class="score-box"><div style="font-size:11px;color:#64748b">${l}</div><div class="score-num" style="color:${col}">${s||0}</div></div>`;
+          }).join("")}
+        </div>
+        ${d.dqNarrative ? `<p style="font-style:italic;color:#64748b">${d.dqNarrative}</p>` : ""}` : "")}
+
+      ${section("Validation Flags", d.validationFlags?.length ? `
+        ${d.validationFlags.map(f=>`<div class="flag"><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;background:${(flagCol[f.severity]||"#6b7280")}20;color:${flagCol[f.severity]||"#6b7280"};margin-right:8px">${f.severity}</span>${f.message}${f.suggestion?`<div style="font-size:11px;color:#2563eb;margin-top:2px">→ ${f.suggestion}</div>`:""}</div>`).join("")}` : "")}
+
+      ${section("Strategies", d.strategies?.length ? `
+        <table><tr><th>Name</th><th>Description</th><th>Key Assumption</th></tr>
+        ${d.strategies.map(s=>`<tr><td><strong>${s.name}</strong></td><td>${s.description||""}</td><td><em>${s.keyAssumption||""}</em></td></tr>`).join("")}
+        </table>` : "")}
+
+      ${section("Issues", [...(d.issues||[]),...(d.brutalTruths||[]).map(b=>({...b,category:"brutal-truth"})),...(d.informationGaps||[]).map(g=>({...g,category:"information-gap"}))].length ? `
+        <table><tr><th>Issue</th><th>Category</th><th>Severity</th><th>Source</th></tr>
+        ${[...(d.issues||[]),...(d.brutalTruths||[]).map(b=>({...b,category:"brutal-truth"})),...(d.informationGaps||[]).map(g=>({...g,category:"information-gap"}))]
+          .map(i=>`<tr><td>${i.text}</td><td>${i.category||""}</td><td>${i.severity||""}</td><td><em>${i.source||""}</em></td></tr>`).join("")}
+        </table>` : "")}
+
+      ${section("Stakeholders", d.stakeholders?.length ? `
+        <table><tr><th>Name</th><th>Role</th><th>Influence</th><th>Alignment</th><th>Primary Concern</th></tr>
+        ${d.stakeholders.map(s=>`<tr><td><strong>${s.name}</strong></td><td>${s.role||""}</td><td>${s.influence||""}</td><td>${s.alignment||""}</td><td>${s.primaryConcern||""}</td></tr>`).join("")}
+        </table>` : "")}
+
+      ${section("Value of Information", d.voiItems?.length ? `
+        <table><tr><th>Uncertainty</th><th>Classification</th><th>Action</th><th>Timeline</th></tr>
+        ${d.voiItems.map(v=>`<tr><td><strong>${v.label}</strong><br><span style="font-size:11px;color:#64748b">${v.description||""}</span></td><td>${tag({do_now:"Do Now",do_later:"Do Later",conditional:"If Trigger",do_not_do:"Do Not Do"}[v.classification]||v.classification,"#6b7280")}</td><td>${v.action||""}</td><td>${v.timeToLearn||""}</td></tr>`).join("")}
+        </table>
+        ${d.voiSummary ? `<p style="font-style:italic;color:#64748b">${d.voiSummary}</p>` : ""}` : "")}
+
+      ${section("Risk Timeline", d.timelineEvents?.length ? `
+        <table><tr><th>Month</th><th>Event</th><th>Type</th><th>Severity</th><th>Mitigation</th></tr>
+        ${d.timelineEvents.sort((a,b)=>(a.timing||0)-(b.timing||0)).map(ev=>`<tr><td><strong>M${ev.timing||"?"}</strong></td><td>${ev.title}<br><span style="font-size:11px;color:#64748b">${ev.description||""}</span></td><td>${ev.type?.replace("_"," ")||""}</td><td>${ev.severity||""}</td><td>${ev.mitigation||""}</td></tr>`).join("")}
+        </table>
+        ${d.criticalPath ? `<p><strong>Critical path:</strong> ${d.criticalPath}</p>` : ""}` : "")}
+
+      ${section("Cross-Module Intelligence", d.crossModuleInsights ? `
+        ${d.crossModuleInsights.contradictions?.length ? `<h3>Contradictions</h3>${d.crossModuleInsights.contradictions.map(x=>`<div class="item">${x}</div>`).join("")}` : ""}
+        ${d.crossModuleInsights.orphanRisks?.length ? `<h3>Orphan Risks</h3>${d.crossModuleInsights.orphanRisks.map(x=>`<div class="item">${x}</div>`).join("")}` : ""}
+        ${d.crossModuleInsights.strategicTensions?.length ? `<h3>Strategic Tensions</h3>${d.crossModuleInsights.strategicTensions.map(x=>`<div class="item">${x}</div>`).join("")}` : ""}
+        ${d.crossModuleInsights.missingDownstreamAnalysis?.length ? `<h3>Missing Downstream Analysis</h3>${d.crossModuleInsights.missingDownstreamAnalysis.map(x=>`<div class="item">${x}</div>`).join("")}` : ""}` : "")}
+
+      <div style="margin-top:40px;padding-top:20px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center">
+        Vantage DQ -- Deep Dive Analysis Report · vantage-dq.vercel.app · ${new Date().toLocaleDateString()}
+      </div>
+    </body></html>`;
+  };
 
   const GUIDED_QUESTIONS = [
     {
       key: "frame",
       label: "If we walk out of this process with a great outcome, what decision will we have confidently made?",
-      placeholder: "Describe the decision as if it has already been resolved — what choice was made, by whom, and with what level of confidence?\n\nExample: \"We will have decided to enter APAC through a strategic partnership rather than a direct subsidiary — with clear partner criteria agreed, a budget ceiling set, and the board aligned on a 24-month horizon.\"",
+      placeholder: "Describe the decision as if it has already been resolved -- what choice was made, by whom, and with what level of confidence?\n\nExample: \"We will have decided to enter APAC through a strategic partnership rather than a direct subsidiary -- with clear partner criteria agreed, a budget ceiling set, and the board aligned on a 24-month horizon.\"",
     },
     {
       key: "trigger",
@@ -17027,18 +17133,18 @@ function QuickStartScreen({ onComplete, onSkip }) {
     },
     {
       key: "options",
-      label: "What are the real choices available to us — including doing nothing or delaying action?",
-      placeholder: "List every serious option on the table. Include the status quo. Don't pre-filter — even options that seem unlikely may matter.\n\nExample: \"(1) Direct subsidiary in Singapore, (2) Acquire a regional player, (3) Strategic partnership with a local firm, (4) Delay 12 months and gather more data, (5) Licence our technology to an APAC operator.\"",
+      label: "What are the real choices available to us -- including doing nothing or delaying action?",
+      placeholder: "List every serious option on the table. Include the status quo. Don't pre-filter -- even options that seem unlikely may matter.\n\nExample: \"(1) Direct subsidiary in Singapore, (2) Acquire a regional player, (3) Strategic partnership with a local firm, (4) Delay 12 months and gather more data, (5) Licence our technology to an APAC operator.\"",
     },
     {
       key: "regret",
       label: "What could make us regret this decision in the future?",
-      placeholder: "Think forward: what risks, assumptions, blind spots, or stakeholder conflicts could come back to haunt this decision? Be honest about what you don't know.\n\nExample: \"If demand doesn't materialise, we've committed $25M we can't recover. If we pick the wrong partner, we lose 2 years and our reputation. We're also assuming regulatory stability — which is uncertain. The board may lose confidence if milestones slip.\"",
+      placeholder: "Think forward: what risks, assumptions, blind spots, or stakeholder conflicts could come back to haunt this decision? Be honest about what you don't know.\n\nExample: \"If demand doesn't materialise, we've committed $25M we can't recover. If we pick the wrong partner, we lose 2 years and our reputation. We're also assuming regulatory stability -- which is uncertain. The board may lose confidence if milestones slip.\"",
     },
     {
       key: "alignment",
-      label: "Who needs to be aligned for this decision to succeed — and what constraints or realities must we respect?",
-      placeholder: "Name the key stakeholders, decision-makers, and influencers. Then list the hard constraints — budget, regulation, capability, political realities — that bound the solution space.\n\nExample: \"Board must approve >$10M. CFO needs a credible payback model. Legal must clear regulatory exposure. Hard constraints: $25M Year 1 cap, no more than 30 new hires, must comply with APAC data residency laws.\"",
+      label: "Who needs to be aligned for this decision to succeed -- and what constraints or realities must we respect?",
+      placeholder: "Name the key stakeholders, decision-makers, and influencers. Then list the hard constraints -- budget, regulation, capability, political realities -- that bound the solution space.\n\nExample: \"Board must approve >$10M. CFO needs a credible payback model. Legal must clear regulatory exposure. Hard constraints: $25M Year 1 cap, no more than 30 new hires, must comply with APAC data residency laws.\"",
     },
   ];
 
@@ -17050,7 +17156,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
     }).filter(Boolean).join("\n\n");
   };
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (instruction = "") => {
     const text = getInputText();
     if (!text.trim() || text.trim().length < 40) return;
     setPhase("analysing");
@@ -17061,7 +17167,8 @@ function QuickStartScreen({ onComplete, onSkip }) {
     // fresh each time so the model attends to the whole text, not a summary.
     // Passes run sequentially; the progress bar advances after each completes.
 
-    const docContext = `DOCUMENT:\n===\n${text}\n===\n`;
+    const docContext = `DOCUMENT:\n===\n${text}\n===\n` +
+      (instruction ? `\nANALYSIS FOCUS INSTRUCTION: ${instruction}\nApply the above instruction to every pass.\n` : "");
     const tick = (id) => setAnalysisProgress(p => [...p, id]);
     const merged = {};
 
@@ -17081,7 +17188,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
     // ── PASS 1: DECISION FRAME ────────────────────────────────────────────────
     const p1 = await runPass(
       "You are a senior DQ expert. Extract the decision frame from this document. " +
-      "Be specific — use real names, numbers, and language from the document. Never invent facts. " +
+      "Be specific -- use real names, numbers, and language from the document. Never invent facts. " +
       "If a field cannot be found, use null. Distinguish: extracted (verbatim from doc) vs inferred (reasonably implied).\n\n" +
       docContext +
       'Return ONLY JSON: {"projectName":"short name","executiveSummary":"2-3 sentence DQ-lens summary",' +
@@ -17094,10 +17201,10 @@ function QuickStartScreen({ onComplete, onSkip }) {
     Object.assign(merged, p1);
     tick("frame");
 
-    // ── PASS 2: ISSUES (general — risks, opportunities, constraints) ──────────
+    // ── PASS 2: ISSUES (general -- risks, opportunities, constraints) ──────────
     const p2 = await runPass(
       "You are a DQ expert. Extract all issues from this document: risks, opportunities, constraints, operational concerns, financial concerns, strategic concerns, regulatory concerns, dependencies. " +
-      "DO NOT include brutal truths or information gaps in this pass — those are separate. " +
+      "DO NOT include brutal truths or information gaps in this pass -- those are separate. " +
       "For each issue: cite the exact phrase or sentence that led to this inference in 'source'. " +
       "Categorise precisely. Generate 8-15 issues.\n\n" +
       docContext +
@@ -17111,10 +17218,10 @@ function QuickStartScreen({ onComplete, onSkip }) {
       "You are a DQ facilitator specialising in brutal honesty. From this document:\n" +
       "BRUTAL TRUTHS: Things that are implied but not being said directly. Uncomfortable facts the team may be avoiding. Unspoken tensions. Things everyone knows but no one has written down. Mark with isBrutalTruth:true.\n" +
       "INFORMATION GAPS: Things that are unknown, uncertain, or missing that would materially affect the decision. Missing data, unvalidated assumptions, untested market appetite, unresolved regulatory positions. Mark with isInfoGap:true.\n" +
-      "Be specific — use names and numbers from the document. Generate 4-8 brutal truths and 4-8 information gaps.\n\n" +
+      "Be specific -- use names and numbers from the document. Generate 4-8 brutal truths and 4-8 information gaps.\n\n" +
       docContext +
       'Return ONLY JSON: {"brutalTruths":[{"text":"the brutal truth stated plainly","severity":"Critical|High|Medium","source":"what in the document implies this"}],' +
-      '"informationGaps":[{"text":"the specific gap — what is unknown","severity":"Critical|High|Medium","decisionImpact":"how this affects the decision","source":"what in the document reveals this gap"}]}'
+      '"informationGaps":[{"text":"the specific gap -- what is unknown","severity":"Critical|High|Medium","decisionImpact":"how this affects the decision","source":"what in the document reveals this gap"}]}'
     );
     if (p3.brutalTruths) merged.brutalTruths = p3.brutalTruths;
     if (p3.informationGaps) merged.informationGaps = p3.informationGaps;
@@ -17138,18 +17245,18 @@ function QuickStartScreen({ onComplete, onSkip }) {
     // ── PASS 5: STRATEGIES ────────────────────────────────────────────────────
     const p5 = await runPass(
       "You are a DQ strategist. Extract or infer the strategic alternatives from this document. " +
-      "Each strategy must be genuinely distinct — different underlying logic, not just different names for the same approach. " +
+      "Each strategy must be genuinely distinct -- different underlying logic, not just different names for the same approach. " +
       "If strategies are not explicitly named, infer them from the options, alternatives, or paths described. Include a status quo / do nothing if relevant. " +
       "2-5 strategies maximum.\n\n" +
       docContext +
-      'Return ONLY JSON: {"strategies":[{"name":"Strategy name","description":"one sentence — what this strategy does and how it differs from others","objective":"what this strategy is trying to achieve","keyAssumption":"the single most important assumption this strategy depends on","confidence":"high|medium|low","isInferred":true}]}'
+      'Return ONLY JSON: {"strategies":[{"name":"Strategy name","description":"one sentence -- what this strategy does and how it differs from others","objective":"what this strategy is trying to achieve","keyAssumption":"the single most important assumption this strategy depends on","confidence":"high|medium|low","isInferred":true}]}'
     );
     if (p5.strategies) merged.strategies = p5.strategies;
     tick("strategy");
 
     // ── PASS 6: STAKEHOLDERS ──────────────────────────────────────────────────
     const p6 = await runPass(
-      "You are a DQ stakeholder analyst. Extract all stakeholders from this document — individuals, organisations, groups, regulators, partners, internal functions. " +
+      "You are a DQ stakeholder analyst. Extract all stakeholders from this document -- individuals, organisations, groups, regulators, partners, internal functions. " +
       "For each: assess their alignment based on what the document says or implies. " +
       "Distinguish: stated (document explicitly describes their position) vs inferred (implied from context).\n\n" +
       docContext +
@@ -17161,11 +17268,11 @@ function QuickStartScreen({ onComplete, onSkip }) {
     // ── PASS 7: UNCERTAINTIES + GAME THEORY SIGNALS ──────────────────────────
     const p7 = await runPass(
       "You are a DQ analyst and game theory expert. From this document:\n\n" +
-      "UNCERTAINTIES: The key unknowns that would materially affect which option is best. Different from information gaps — these are irreducible uncertainties (future states of the world, competitor behaviour, regulatory outcomes). " +
+      "UNCERTAINTIES: The key unknowns that would materially affect which option is best. Different from information gaps -- these are irreducible uncertainties (future states of the world, competitor behaviour, regulatory outcomes). " +
       "These will seed the Scenario Planning and Value of Information modules. 4-8 uncertainties.\n\n" +
       "GAME THEORY: Does this decision involve strategic interaction with other players who have their own objectives and will respond to your moves? " +
       "Identify: the game type (Competitive, Coordination, Collaboration, Sequential, Negotiation, Deterrence, Coalition, Bidding), the key players and their moves, the most important strategic dynamic. " +
-      "Only flag if there are genuine strategic interactions — not every decision is a game theory problem.\n\n" +
+      "Only flag if there are genuine strategic interactions -- not every decision is a game theory problem.\n\n" +
       docContext +
       'Return ONLY JSON: {"uncertainties":[{"label":"uncertainty label","description":"what is uncertain and why it matters","decisionImpact":"how this changes which option is best","resolvable":"yes|no|partially","resolutionPath":"how you could find out, if at all","confidence":"high|medium|low"}],' +
       '"gameTheorySignals":{"hasStrategicInteraction":true,"gameType":"Competitive|Coordination|Collaboration|Sequential|Negotiation|Deterrence|Coalition|Bidding|None",' +
@@ -17177,6 +17284,110 @@ function QuickStartScreen({ onComplete, onSkip }) {
     tick("uncertainties");
     tick("gameTheory");
 
+    // ── PASS 8: INFLUENCE MAP ────────────────────────────────────────────────
+    const p8 = await runPass(
+      "You are a systems thinker building a causal influence map. From this document, identify all key variables that influence the decision outcome. " +
+      "NODE TYPES: 'decision' (choices being made), 'uncertainty' (unknowns that affect outcomes), 'value' (what stakeholders care about), " +
+      "'constraint' (hard limits), 'external' (outside forces), 'objective' (goals). " +
+      "EDGES: directional relationships between nodes with strength (strong/moderate/weak) and direction of influence. " +
+      "Be specific -- use real names from the document. 8-16 nodes, 10-20 edges.
+
+" +
+      docContext +
+      'Return ONLY JSON: {"influenceNodes":[{"id":"n1","label":"node name","type":"decision|uncertainty|value|constraint|external|objective","description":"what this represents","confidence":"high|medium|low","source":"from document"}],' +
+      '"influenceEdges":[{"source":"n1","target":"n2","label":"how n1 influences n2","strength":"strong|moderate|weak","confidence":"high|medium|low"}]}'
+    );
+    if (p8.influenceNodes) merged.influenceNodes = p8.influenceNodes;
+    if (p8.influenceEdges) merged.influenceEdges = p8.influenceEdges;
+    tick("influence");
+
+    // ── PASS 9: SCENARIO PLANNING ─────────────────────────────────────────────
+    const p9 = await runPass(
+      "You are a scenario planning strategist. From this document, design a scenario framework. " +
+      "Identify the 2 most decision-critical uncertainties as scenario axes. " +
+      "Construct 4 coherent scenario narratives from the 2x2 matrix. " +
+      "For each scenario: name it, describe the world it depicts, and assess which strategy performs best in it. " +
+      "Also identify early warning indicators -- observable signals that would tell you which scenario is materialising.
+
+" +
+      docContext +
+      'Return ONLY JSON: {"scenarioAxes":{"axis1":{"label":"axis 1 label","low":"low end description","high":"high end description"},' +
+      '"axis2":{"label":"axis 2 label","low":"low end description","high":"high end description"}},' +
+      '"scenarios":[{"name":"scenario name","quadrant":"high-high|high-low|low-high|low-low","narrative":"3-4 sentence description of this world",' +
+      '"bestStrategy":"which strategy performs best here and why","earlyWarnings":["observable signal that this scenario is developing"]}],' +
+      '"mostDangerousScenario":"name and why it is most threatening","robustStrategy":"which strategy performs acceptably across the most scenarios"}'
+    );
+    if (p9.scenarioAxes) merged.scenarioAxes = p9.scenarioAxes;
+    if (p9.scenarios) merged.scenarioNarratives = p9.scenarios;
+    if (p9.mostDangerousScenario) merged.mostDangerousScenario = p9.mostDangerousScenario;
+    if (p9.robustStrategy) merged.robustStrategy = p9.robustStrategy;
+    tick("scenarios");
+
+    // ── PASS 10: VALUE OF INFORMATION ────────────────────────────────────────
+    const p10 = await runPass(
+      "You are a Value of Information analyst. From this document, identify which uncertainties are worth resolving before committing to a decision. " +
+      "Apply the three VoI questions to each: (1) Would knowing this change the decision? (2) Can we find out before we must decide? (3) Is the cost/delay of finding out less than the risk of not knowing? " +
+      "Classify each as: do_now (resolve before committing), do_later (useful but not blocking), conditional (only if a trigger occurs), do_not_do (not worth the cost). " +
+      "Suggest a specific information-gathering action for each do_now item.
+
+" +
+      docContext +
+      'Return ONLY JSON: {"voiItems":[{"label":"uncertainty label","description":"what is unknown","wouldChangeDecision":true,"canResolveInTime":true,"worthCost":true,' +
+      '"classification":"do_now|do_later|conditional|do_not_do","action":"specific study or action to gather this information","costEstimate":"Low|Medium|High",' +
+      '"timeToLearn":"e.g. 4-6 weeks","decisionPivot":"if resolved favourably: stay with X; if adversely: switch to Y","confidence":"high|medium|low"}],' +
+      '"voiSummary":"executive summary of VoI findings"}'
+    );
+    if (p10.voiItems) merged.voiItems = p10.voiItems;
+    if (p10.voiSummary) merged.voiSummary = p10.voiSummary;
+    tick("voi");
+
+    // ── PASS 11: RISK TIMELINE ────────────────────────────────────────────────
+    const p11 = await runPass(
+      "You are a decision risk analyst. From this document, build a risk timeline showing: " +
+      "key risk events, decision gates (points where the team must decide or pivot), milestones, and implementation checkpoints. " +
+      "For each event: estimate timing relative to now (months from today), type, severity, trigger, and mitigation. " +
+      "Decision gates are the most important -- identify the conditions that must be met to proceed at each gate.
+
+" +
+      docContext +
+      'Return ONLY JSON: {"timelineEvents":[{"title":"event title","type":"decision_gate|risk_event|milestone|implementation|review","timing":6,' +
+      '"timingLabel":"e.g. Month 6 from FID","severity":"Critical|High|Medium|Low","description":"what happens at this point",' +
+      '"trigger":"what causes this event","mitigation":"how to reduce the risk or prepare for this gate",' +
+      '"gateCondition":"for decision gates: what must be true to proceed","owner":"owner if named","confidence":"high|medium|low","source":"from document"}],' +
+      '"criticalPath":"description of the most time-sensitive sequence of events","longestLeadTime":"the constraint that takes longest to resolve"}'
+    );
+    if (p11.timelineEvents) merged.timelineEvents = p11.timelineEvents;
+    if (p11.criticalPath) merged.criticalPath = p11.criticalPath;
+    tick("timeline");
+
+    // ── PASS 12: DQ SCORECARD + VALIDATION FLAGS ──────────────────────────────
+    const p12 = await runPass(
+      "You are a DQ auditor. Evaluate this document against the six Decision Quality elements and identify all validation flags. " +
+      "DQ ELEMENTS (score 0-100 each based on what the document reveals): " +
+      "Frame (Is the right decision being addressed?), Alternatives (Are genuinely distinct options present?), " +
+      "Information (Is key data present and reliable?), Values (Are criteria and trade-offs explicit?), " +
+      "Reasoning (Is the logic connecting evidence to conclusions sound?), Commitment (Is stakeholder alignment sufficient?). " +
+      "VALIDATION FLAGS: check for all 16 flag types from the brief.
+
+" +
+      docContext +
+      'Return ONLY JSON: {"dqScores":{"frame":0,"alternatives":0,"information":0,"values":0,"reasoning":0,"commitment":0},' +
+      '"dqNarrative":"2-3 sentence assessment of overall decision quality in the document",' +
+      '"readinessVerdict":"not_ready|conditional|ready",' +
+      '"validationFlags":[{"type":"unclear_decision|missing_owner|missing_objectives|unclear_scope|weak_alternatives|no_uncertainties|unsupported_assumptions|stakeholder_gaps|missing_timelines|strategy_objective_mismatch|unresolved_risks|false_precision|insufficient_evidence|possible_bias|missing_game_theory_players|missing_scenario_drivers",' +
+      '"severity":"critical|warning|info","message":"specific observation from the document","suggestion":"what to do about it"}],' +
+      '"crossModuleInsights":{"contradictions":["contradiction found across sections"],"framingDriftRisks":["ways the framing may drift from intent"],' +
+      '"orphanRisks":["risks with no mitigation or strategy linkage"],"missingDownstreamAnalysis":["modules that should be run but are absent from the document"],' +
+      '"strategicTensions":["genuine trade-offs or tensions the document contains"]}}'
+    );
+    if (p12.dqScores) merged.dqScores = p12.dqScores;
+    if (p12.dqNarrative) merged.dqNarrative = p12.dqNarrative;
+    if (p12.readinessVerdict) merged.readinessVerdict = p12.readinessVerdict;
+    if (p12.validationFlags) merged.validationFlags = p12.validationFlags;
+    if (p12.crossModuleInsights) merged.crossModuleInsights = p12.crossModuleInsights;
+    tick("scorecard");
+    tick("crossModule");
+
     // ── DONE ──────────────────────────────────────────────────────────────────
     setAnalysisProgress(ANALYSIS_STEPS.map(s => s.id));
     setDraft(merged);
@@ -17184,7 +17395,10 @@ function QuickStartScreen({ onComplete, onSkip }) {
       frame:true, issues:true, brutalTruths:true, infoGaps:true,
       decisions:true, criteria:true, strategies:true,
       stakeholders:true, uncertainties:true, gameTheory:false,
+      influence:true, scenarios:true, voi:true, timeline:true,
+      scorecard:true, crossModule:true,
     });
+    setActiveReviewTab("frame");
     setTimeout(() => setPhase("review"), 400);
   };
 
@@ -17266,7 +17480,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
               icon:"📄",
               label:"AI Deep Dive",
               sublabel:"Fastest start",
-              desc:"Paste a brief, memo, board paper or any text — AI structures your complete decision frame in seconds.",
+              desc:"Paste a brief, memo, board paper or any text -- AI structures your complete decision frame in seconds.",
               color:"#3b82f6",
               gradient:"linear-gradient(135deg,#1e3a5f,#1e40af)",
               action:()=>{ setInputMode("paste"); setPhase("input"); },
@@ -17277,7 +17491,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
               icon:"🗂",
               label:"Guided Questions",
               sublabel:"No document needed",
-              desc:"Answer 5 DQ-specific questions about your decision — frame, trigger, options, uncertainty, and success criteria. The AI builds your complete decision structure from your answers.",
+              desc:"Answer 5 DQ-specific questions about your decision -- frame, trigger, options, uncertainty, and success criteria. The AI builds your complete decision structure from your answers.",
               color:"#7c3aed",
               gradient:"linear-gradient(135deg,#2e1065,#5b21b6)",
               action:()=>{ setInputMode("guided"); setPhase("input"); },
@@ -17416,7 +17630,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
                 <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:22,
                   fontWeight:700, color:DS.textPri, marginBottom:8 }}>Paste your problem context</div>
                 <div style={{ fontSize:13, color:DS.textSec, lineHeight:1.6 }}>
-                  Any format — board paper, strategy brief, email thread, rough notes. Min 40 characters.
+                  Any format -- board paper, strategy brief, email thread, rough notes. Min 40 characters.
                 </div>
               </div>
 
@@ -17450,7 +17664,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
 
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:14 }}>
                 <span style={{ fontSize:11, color:rawText.length<40?DS.danger:DS.textTer }}>
-                  {rawText.length} chars {rawText.length<40?"— min 40 required":"✓"}
+                  {rawText.length} chars {rawText.length<40?"-- min 40 required":"✓"}
                 </span>
                 <Btn variant="primary" icon="spark" size="lg" onClick={runAnalysis}
                   disabled={busy||rawText.trim().length<40}>
@@ -17466,7 +17680,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
                 <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:22,
                   fontWeight:700, color:DS.textPri, marginBottom:8 }}>Five DQ-focused questions</div>
                 <div style={{ fontSize:13, color:DS.textSec, lineHeight:1.6 }}>
-                  Be specific — the more concrete your answers, the sharper the AI output. Answer at least 2 questions. Rough notes are fine.
+                  Be specific -- the more concrete your answers, the sharper the AI output. Answer at least 2 questions. Rough notes are fine.
                 </div>
               </div>
 
@@ -17507,10 +17721,10 @@ function QuickStartScreen({ onComplete, onSkip }) {
             textTransform:"uppercase", marginBottom:16 }}>What Vantage extracts</div>
           {[
             { icon:"◎", label:"Decision Frame", desc:"Statement, context, scope, owner, constraints, success criteria" },
-            { icon:"◈", label:"8–12 Issues", desc:"Tagged by type and severity across stakeholder perspectives" },
-            { icon:"◧", label:"Decision Hierarchy", desc:"Decisions across all 5 tiers — Given, Focus, Tactical, Deferred, Dependencies" },
-            { icon:"◫", label:"Decision Criteria", desc:"What the organisation values — how strategies will be judged" },
-            { icon:"⊞", label:"2–4 Strategies", desc:"Initial coherent directions as a starting scaffold" },
+            { icon:"◈", label:"8-12 Issues", desc:"Tagged by type and severity across stakeholder perspectives" },
+            { icon:"◧", label:"Decision Hierarchy", desc:"Decisions across all 5 tiers -- Given, Focus, Tactical, Deferred, Dependencies" },
+            { icon:"◫", label:"Decision Criteria", desc:"What the organisation values -- how strategies will be judged" },
+            { icon:"⊞", label:"2-4 Strategies", desc:"Initial coherent directions as a starting scaffold" },
           ].map(item => (
             <div key={item.icon} style={{ marginBottom:14, display:"flex", gap:10 }}>
               <span style={{ fontSize:14, flexShrink:0 }}>{item.icon}</span>
@@ -17524,7 +17738,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
             border:`1px solid ${DS.border}`, borderRadius:7 }}>
             <div style={{ fontSize:11, fontWeight:700, color:DS.accent, marginBottom:5 }}>This is a first draft</div>
             <div style={{ fontSize:11, color:DS.textTer, lineHeight:1.55 }}>
-              Everything Vantage produces is a starting point. DQ quality comes from the team's process — not the AI output.
+              Everything Vantage produces is a starting point. DQ quality comes from the team's process -- not the AI output.
             </div>
           </div>
         </div>
@@ -17583,16 +17797,22 @@ function QuickStartScreen({ onComplete, onSkip }) {
   // ── REVIEW ──
   if (phase === "review" && draft) {
     const sections = [
-      { key:"frame",        label:"Problem Definition",  count:null,                               icon:"◎" },
-      { key:"issues",       label:"Issues",              count:draft.issues?.length,               icon:"◈" },
-      { key:"brutalTruths", label:"Brutal Truths",       count:draft.brutalTruths?.length,         icon:"⚑" },
-      { key:"infoGaps",     label:"Information Gaps",    count:draft.informationGaps?.length,      icon:"◎" },
-      { key:"decisions",    label:"Decision Hierarchy",  count:draft.decisions?.length,            icon:"◧" },
-      { key:"criteria",     label:"Criteria",            count:draft.criteria?.length,             icon:"◫" },
-      { key:"strategies",   label:"Strategies",          count:draft.strategies?.length,           icon:"⊞" },
-      { key:"stakeholders", label:"Stakeholders",        count:draft.stakeholders?.length,         icon:"◉" },
-      { key:"uncertainties",label:"Uncertainties",       count:draft.uncertainties?.length,        icon:"◈" },
+      { key:"frame",        label:"Problem Definition",  count:null,                                          icon:"◎" },
+      { key:"issues",       label:"Issues",              count:draft.issues?.length,                          icon:"◈" },
+      { key:"brutalTruths", label:"Brutal Truths",       count:draft.brutalTruths?.length,                    icon:"⚑" },
+      { key:"infoGaps",     label:"Information Gaps",    count:draft.informationGaps?.length,                 icon:"◎" },
+      { key:"decisions",    label:"Decision Hierarchy",  count:draft.decisions?.length,                       icon:"◧" },
+      { key:"criteria",     label:"Criteria",            count:draft.criteria?.length,                        icon:"◫" },
+      { key:"strategies",   label:"Strategies",          count:draft.strategies?.length,                      icon:"⊞" },
+      { key:"stakeholders", label:"Stakeholders",        count:draft.stakeholders?.length,                    icon:"◉" },
+      { key:"uncertainties",label:"Uncertainties",       count:draft.uncertainties?.length,                   icon:"◈" },
       { key:"gameTheory",   label:"Game Theory",         count:draft.gameTheorySignals?.hasStrategicInteraction?1:0, icon:"♟" },
+      { key:"influence",    label:"Influence Map",       count:draft.influenceNodes?.length,                  icon:"⊕" },
+      { key:"scenarios",    label:"Scenarios",           count:draft.scenarioNarratives?.length,              icon:"◈" },
+      { key:"voi",          label:"Value of Info",       count:draft.voiItems?.length,                        icon:"◎" },
+      { key:"timeline",     label:"Risk Timeline",       count:draft.timelineEvents?.length,                  icon:"⊳" },
+      { key:"scorecard",    label:"DQ Scorecard",        count:draft.validationFlags?.length,                 icon:"◉" },
+      { key:"crossModule",  label:"Cross-Module",        count:draft.crossModuleInsights?.contradictions?.length, icon:"✦" },
     ];
 
     return (
@@ -17607,18 +17827,49 @@ function QuickStartScreen({ onComplete, onSkip }) {
             <Svg path={ICONS.check} size={13} color="#fff" sw={2.5}/>
           </div>
           <div>
-            <div style={{ fontSize:13, fontWeight:700, color:DS.textPri }}>First Draft Ready — {draft.projectName}</div>
+            <div style={{ fontSize:13, fontWeight:700, color:DS.textPri }}>First Draft Ready -- {draft.projectName}</div>
             <div style={{ fontSize:11, color:DS.textTer }}>Review what Vantage inferred · toggle sections on/off · load when ready</div>
           </div>
-          <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
-            <Btn variant="chrome" onClick={()=>setPhase("input")} size="sm">← Re-analyse</Btn>
-            <Btn variant="primary" icon="check" onClick={applyDraft}>Load First Draft →</Btn>
+          <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <input
+                value={rerunInstruction}
+                onChange={e=>setRerunInstruction(e.target.value)}
+                placeholder="Rerun with instruction, e.g. 'focus on regulatory risks'…"
+                style={{ width:280, padding:"5px 10px", fontSize:11, fontFamily:"inherit",
+                  background:DS.chromeSub, border:`1px solid ${DS.border}`, borderRadius:6,
+                  color:DS.textPri, outline:"none" }}
+                onKeyDown={e=>{ if(e.key==="Enter" && rerunInstruction.trim()) {
+                  setPhase("analysing");
+                  setAnalysisProgress([]);
+                  setRerunInstruction("");
+                  runAnalysis(rerunInstruction);
+                }}}
+              />
+              {rerunInstruction.trim() && (
+                <Btn variant="chrome" size="sm" onClick={()=>{
+                  setPhase("analysing");
+                  setAnalysisProgress([]);
+                  const inst = rerunInstruction;
+                  setRerunInstruction("");
+                  runAnalysis(inst);
+                }}>↺ Rerun</Btn>
+              )}
+            </div>
+            <Btn variant="chrome" onClick={()=>setPhase("input")} size="sm">← Back</Btn>
+            <Btn variant="chrome" size="sm" onClick={()=>{
+              const html = generateDeepDiveReport(draft);
+              const w = window.open("","_blank");
+              w.document.write(html);
+              w.document.close();
+            }}>⬇ Export Report</Btn>
+            <Btn variant="primary" icon="check" onClick={applyDraft}>Load Draft →</Btn>
           </div>
         </div>
 
         <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
 
-          {/* Left sidebar — summary */}
+          {/* Left sidebar -- summary */}
           <div style={{ width:240, borderRight:`1px solid ${DS.border}`, overflowY:"auto",
             flexShrink:0, padding:"20px 18px" }}>
 
@@ -17722,7 +17973,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◈ Issues Raised — {draft.issues.length} identified</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◈ Issues Raised -- {draft.issues.length} identified</div>
                 </div>
                 <div style={{ maxHeight:260, overflowY:"auto" }}>
                   {draft.issues.map((issue, i) => (
@@ -17753,7 +18004,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◧ Decision Hierarchy — {draft.decisions.length} decisions</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◧ Decision Hierarchy -- {draft.decisions.length} decisions</div>
                 </div>
                 <div style={{ padding:"12px 16px", display:"flex", flexDirection:"column", gap:10 }}>
                   {["given","focus","tactical","deferred","dependency"].map(tier => {
@@ -17790,7 +18041,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◫ Decision Criteria — {draft.criteria.length} criteria</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◫ Decision Criteria -- {draft.criteria.length} criteria</div>
                 </div>
                 <div>
                   {draft.criteria.map((c,i) => (
@@ -17817,7 +18068,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
               <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
                 overflow:"hidden", background:DS.canvas }}>
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>⊞ Strategy Directions — {draft.strategies.length} directions</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>⊞ Strategy Directions -- {draft.strategies.length} directions</div>
                 </div>
                 <div style={{ padding:"12px 16px", display:"grid",
                   gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:10 }}>
@@ -17852,7 +18103,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
                   borderBottom:"1px solid #fecaca", display:"flex", alignItems:"center", gap:8 }}>
                   <span style={{ fontSize:14 }}>⚑</span>
                   <div style={{ fontSize:12, fontWeight:700, color:"#dc2626" }}>
-                    Brutal Truths — {draft.brutalTruths.length} identified
+                    Brutal Truths -- {draft.brutalTruths.length} identified
                   </div>
                   <div style={{ marginLeft:"auto", fontSize:10, color:"#b91c1c" }}>
                     Things everyone knows but no one has written down
@@ -17893,10 +18144,10 @@ function QuickStartScreen({ onComplete, onSkip }) {
                   borderBottom:"1px solid #fde68a", display:"flex", alignItems:"center", gap:8 }}>
                   <span style={{ fontSize:14 }}>◎</span>
                   <div style={{ fontSize:12, fontWeight:700, color:"#92400e" }}>
-                    Information Gaps — {draft.informationGaps.length} identified
+                    Information Gaps -- {draft.informationGaps.length} identified
                   </div>
                   <div style={{ marginLeft:"auto", fontSize:10, color:"#92400e" }}>
-                    Unknown or unvalidated — would affect the decision if resolved
+                    Unknown or unvalidated -- would affect the decision if resolved
                   </div>
                 </div>
                 <div style={{ padding:"12px 16px", display:"flex", flexDirection:"column", gap:8 }}>
@@ -17938,7 +18189,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt,
                   borderBottom:`1px solid ${DS.canvasBdr}` }}>
                   <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>
-                    ◉ Stakeholders — {draft.stakeholders.length} identified
+                    ◉ Stakeholders -- {draft.stakeholders.length} identified
                   </div>
                 </div>
                 <div style={{ padding:"12px 16px", display:"grid",
@@ -17992,7 +18243,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
                 <div style={{ padding:"10px 16px", background:DS.canvasAlt,
                   borderBottom:`1px solid ${DS.canvasBdr}`, display:"flex", alignItems:"center", gap:8 }}>
                   <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>
-                    ◈ Key Uncertainties — {draft.uncertainties.length} identified
+                    ◈ Key Uncertainties -- {draft.uncertainties.length} identified
                   </div>
                   <div style={{ marginLeft:"auto", fontSize:10, color:DS.inkTer }}>
                     Seeds Scenario Planning + Value of Information modules
@@ -18049,7 +18300,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
                       Game Theory Signals Detected
                     </div>
                     <div style={{ fontSize:10, color:"#6366f1" }}>
-                      This decision involves strategic interaction — Game Theory module recommended
+                      This decision involves strategic interaction -- Game Theory module recommended
                     </div>
                   </div>
                   <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px",
@@ -18100,6 +18351,272 @@ function QuickStartScreen({ onComplete, onSkip }) {
               </div>
             )}
 
+
+            {/* INFLUENCE MAP */}
+            {accepted.influence && (draft.influenceNodes?.length > 0) && (
+              <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8, overflow:"hidden", background:DS.canvas }}>
+                <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>⊕ Influence Map -- {draft.influenceNodes.length} nodes · {draft.influenceEdges?.length||0} edges</div>
+                  <div style={{ marginLeft:"auto", fontSize:10, color:DS.inkTer }}>Seeds Influence Map module</div>
+                </div>
+                <div style={{ padding:"12px 16px" }}>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
+                    {["decision","uncertainty","value","constraint","external","objective"].map(type => {
+                      const count = draft.influenceNodes.filter(n=>n.type===type).length;
+                      if (!count) return null;
+                      const colors = {decision:"#2563eb",uncertainty:"#d97706",value:"#059669",constraint:"#dc2626",external:"#6b7280",objective:"#7c3aed"};
+                      return <span key={type} style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:4, background:colors[type]+"18", color:colors[type] }}>{type} ×{count}</span>;
+                    })}
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:8 }}>
+                    {draft.influenceNodes.slice(0,12).map((n,i) => {
+                      const colors = {decision:"#2563eb",uncertainty:"#d97706",value:"#059669",constraint:"#dc2626",external:"#6b7280",objective:"#7c3aed"};
+                      const col = colors[n.type]||"#6b7280";
+                      return (
+                        <div key={i} style={{ padding:"8px 10px", border:`1px solid ${col}25`, borderRadius:6, background:`${col}08` }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:col, textTransform:"uppercase", letterSpacing:.5, marginBottom:3 }}>{n.type}</div>
+                          <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:2 }}>{n.label}</div>
+                          <div style={{ fontSize:10, color:DS.inkTer, lineHeight:1.4 }}>{n.description}</div>
+                          {n.confidence && <div style={{ fontSize:8, color:DS.inkDis, marginTop:3 }}>{n.confidence} confidence{n.source?" · "+n.source:""}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {draft.influenceEdges?.length > 0 && (
+                    <div style={{ marginTop:10, padding:"8px 10px", background:DS.canvasAlt, borderRadius:6, fontSize:10, color:DS.inkTer }}>
+                      <span style={{ fontWeight:700, color:DS.inkSub }}>Key relationships: </span>
+                      {draft.influenceEdges.slice(0,6).map((e,i) => (
+                        <span key={i}>{e.source} → {e.target} ({e.strength}){i<5?", ":""}</span>
+                      ))}
+                      {draft.influenceEdges.length > 6 && <span> +{draft.influenceEdges.length-6} more</span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SCENARIOS */}
+            {accepted.scenarios && (draft.scenarioNarratives?.length > 0) && (
+              <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8, overflow:"hidden", background:DS.canvas }}>
+                <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◈ Scenario Framework -- {draft.scenarioNarratives.length} scenarios</div>
+                  {draft.scenarioAxes && (
+                    <div style={{ fontSize:10, color:DS.inkTer }}>
+                      Axes: {draft.scenarioAxes.axis1?.label} × {draft.scenarioAxes.axis2?.label}
+                    </div>
+                  )}
+                </div>
+                <div style={{ padding:"12px 16px" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                    {draft.scenarioNarratives.map((sc,i) => (
+                      <div key={i} style={{ padding:"10px 14px", border:`1px solid ${DS.canvasBdr}`, borderRadius:7,
+                        background:i===0?"rgba(5,150,105,.04)":i===1?"rgba(245,158,11,.04)":i===2?"rgba(220,38,38,.04)":"rgba(107,114,128,.04)" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:4 }}>{sc.name}</div>
+                        <div style={{ fontSize:10, color:DS.inkSub, lineHeight:1.5, marginBottom:6 }}>{sc.narrative}</div>
+                        {sc.bestStrategy && (
+                          <div style={{ fontSize:9, color:"#059669", fontStyle:"italic" }}>Best strategy: {sc.bestStrategy}</div>
+                        )}
+                        {sc.earlyWarnings?.length > 0 && (
+                          <div style={{ marginTop:5, fontSize:9, color:DS.inkTer }}>⚠ {sc.earlyWarnings[0]}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {draft.mostDangerousScenario && (
+                    <div style={{ padding:"6px 10px", background:"rgba(220,38,38,.06)", border:"1px solid rgba(220,38,38,.2)", borderRadius:5, fontSize:10, color:"#dc2626" }}>
+                      ⚠ Most dangerous: {draft.mostDangerousScenario}
+                    </div>
+                  )}
+                  {draft.robustStrategy && (
+                    <div style={{ marginTop:6, padding:"6px 10px", background:"rgba(5,150,105,.06)", border:"1px solid rgba(5,150,105,.2)", borderRadius:5, fontSize:10, color:"#059669" }}>
+                      ✓ Most robust strategy: {draft.robustStrategy}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* VALUE OF INFORMATION */}
+            {accepted.voi && (draft.voiItems?.length > 0) && (
+              <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8, overflow:"hidden", background:DS.canvas }}>
+                <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◎ Value of Information -- {draft.voiItems.length} items</div>
+                  <div style={{ marginLeft:"auto", fontSize:10, color:DS.inkTer }}>Seeds VoI module</div>
+                </div>
+                <div style={{ padding:"12px 16px", display:"flex", flexDirection:"column", gap:8 }}>
+                  {draft.voiItems.map((v,i) => {
+                    const cls = v.classification;
+                    const clsCol = {do_now:"#dc2626",do_later:"#d97706",conditional:"#6b7280",do_not_do:"#94a3b8"}[cls]||"#6b7280";
+                    const clsLabel = {do_now:"Do Now",do_later:"Do Later",conditional:"If Trigger",do_not_do:"Do Not Do"}[cls]||cls;
+                    return (
+                      <div key={i} style={{ padding:"10px 14px", border:`1px solid ${clsCol}25`, borderRadius:6, background:`${clsCol}06` }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
+                          <span style={{ fontSize:9, fontWeight:700, padding:"2px 7px", borderRadius:3, background:clsCol+"20", color:clsCol }}>{clsLabel}</span>
+                          <div style={{ fontSize:11, fontWeight:700, color:DS.ink }}>{v.label}</div>
+                        </div>
+                        <div style={{ fontSize:10, color:DS.inkSub, lineHeight:1.4, marginBottom:4 }}>{v.description}</div>
+                        {v.action && <div style={{ fontSize:10, color:DS.accent }}>→ Action: {v.action}</div>}
+                        {v.decisionPivot && <div style={{ fontSize:10, color:DS.inkTer, fontStyle:"italic", marginTop:3 }}>{v.decisionPivot}</div>}
+                        <div style={{ display:"flex", gap:6, marginTop:4 }}>
+                          {v.timeToLearn && <span style={{ fontSize:8, color:DS.inkDis }}>Time: {v.timeToLearn}</span>}
+                          {v.costEstimate && <span style={{ fontSize:8, color:DS.inkDis }}>Cost: {v.costEstimate}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {draft.voiSummary && (
+                    <div style={{ padding:"8px 12px", background:DS.canvasAlt, borderRadius:6, fontSize:11, color:DS.inkSub, fontStyle:"italic" }}>
+                      {draft.voiSummary}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* RISK TIMELINE */}
+            {accepted.timeline && (draft.timelineEvents?.length > 0) && (
+              <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8, overflow:"hidden", background:DS.canvas }}>
+                <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>⊳ Risk Timeline -- {draft.timelineEvents.length} events</div>
+                  <div style={{ marginLeft:"auto", fontSize:10, color:DS.inkTer }}>Seeds Timeline module</div>
+                </div>
+                <div style={{ padding:"12px 16px" }}>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {draft.timelineEvents.sort((a,b)=>(a.timing||0)-(b.timing||0)).map((ev,i) => {
+                      const typeColors = {decision_gate:"#7c3aed",risk_event:"#dc2626",milestone:"#059669",implementation:"#2563eb",review:"#6b7280"};
+                      const col = typeColors[ev.type]||"#6b7280";
+                      const sevCol = {Critical:"#dc2626",High:"#d97706",Medium:"#6b7280",Low:"#94a3b8"}[ev.severity]||"#6b7280";
+                      return (
+                        <div key={i} style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                          <div style={{ flexShrink:0, width:48, textAlign:"center" }}>
+                            <div style={{ fontSize:9, fontWeight:700, color:col }}>M{ev.timing||"?"}</div>
+                            <div style={{ width:1, height:20, background:DS.canvasBdr, margin:"2px auto" }}/>
+                          </div>
+                          <div style={{ flex:1, padding:"8px 10px", border:`1px solid ${col}25`, borderRadius:6, background:`${col}06` }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+                              <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:3, background:col+"20", color:col }}>
+                                {ev.type?.replace("_"," ")||"event"}
+                              </span>
+                              <span style={{ fontSize:9, fontWeight:700, color:sevCol }}>{ev.severity}</span>
+                              <div style={{ fontSize:11, fontWeight:700, color:DS.ink }}>{ev.title}</div>
+                            </div>
+                            <div style={{ fontSize:10, color:DS.inkSub, lineHeight:1.4, marginBottom:ev.gateCondition?4:0 }}>{ev.description}</div>
+                            {ev.gateCondition && (
+                              <div style={{ fontSize:9, color:"#7c3aed", fontStyle:"italic" }}>Gate: {ev.gateCondition}</div>
+                            )}
+                            {ev.mitigation && (
+                              <div style={{ fontSize:9, color:"#059669", marginTop:3 }}>→ {ev.mitigation}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {draft.criticalPath && (
+                    <div style={{ marginTop:10, padding:"6px 10px", background:DS.canvasAlt, borderRadius:5, fontSize:10, color:DS.inkTer }}>
+                      <span style={{ fontWeight:700, color:DS.inkSub }}>Critical path: </span>{draft.criticalPath}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* DQ SCORECARD + VALIDATION FLAGS */}
+            {accepted.scorecard && draft.dqScores && (
+              <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8, overflow:"hidden", background:DS.canvas }}>
+                <div style={{ padding:"10px 16px", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>◉ DQ Scorecard -- Preliminary Assessment</div>
+                  {draft.readinessVerdict && (
+                    <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:4,
+                      background:draft.readinessVerdict==="ready"?"rgba(5,150,105,.15)":draft.readinessVerdict==="conditional"?"rgba(245,158,11,.15)":"rgba(220,38,38,.15)",
+                      color:draft.readinessVerdict==="ready"?"#059669":draft.readinessVerdict==="conditional"?"#d97706":"#dc2626" }}>
+                      {draft.readinessVerdict==="ready"?"Decision Ready":draft.readinessVerdict==="conditional"?"Conditionally Ready":"Not Ready"}
+                    </span>
+                  )}
+                </div>
+                <div style={{ padding:"14px 16px" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:12 }}>
+                    {[["frame","Frame"],["alternatives","Alternatives"],["information","Information"],["values","Values"],["reasoning","Reasoning"],["commitment","Commitment"]].map(([key,label]) => {
+                      const score = draft.dqScores[key]||0;
+                      const col = score>=70?"#059669":score>=45?"#d97706":"#dc2626";
+                      return (
+                        <div key={key} style={{ padding:"8px 10px", border:`1px solid ${col}25`, borderRadius:6, textAlign:"center" }}>
+                          <div style={{ fontSize:9, color:DS.inkTer, textTransform:"uppercase", letterSpacing:.5, marginBottom:3 }}>{label}</div>
+                          <div style={{ fontSize:24, fontWeight:700, color:col, fontFamily:"'Libre Baskerville',serif" }}>{score}</div>
+                          <div style={{ height:3, background:DS.canvasBdr, borderRadius:2, overflow:"hidden", marginTop:4 }}>
+                            <div style={{ height:"100%", width:score+"%", background:col, borderRadius:2 }}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {draft.dqNarrative && (
+                    <div style={{ padding:"8px 12px", background:DS.canvasAlt, borderRadius:6, fontSize:11, color:DS.inkSub, fontStyle:"italic", marginBottom:10 }}>
+                      {draft.dqNarrative}
+                    </div>
+                  )}
+                  {draft.validationFlags?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        Validation Flags ({draft.validationFlags.length})
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                        {draft.validationFlags.map((f,i) => {
+                          const sevCol = {critical:"#dc2626",warning:"#d97706",info:"#6b7280"}[f.severity]||"#6b7280";
+                          return (
+                            <div key={i} style={{ display:"flex", gap:8, padding:"7px 10px", border:`1px solid ${sevCol}25`, borderRadius:5, background:`${sevCol}06` }}>
+                              <span style={{ fontSize:9, fontWeight:700, color:sevCol, flexShrink:0, padding:"1px 5px", background:sevCol+"20", borderRadius:3, height:"fit-content" }}>
+                                {f.severity}
+                              </span>
+                              <div style={{ flex:1 }}>
+                                <div style={{ fontSize:11, color:DS.ink, marginBottom:2 }}>{f.message}</div>
+                                {f.suggestion && <div style={{ fontSize:10, color:DS.accent }}>→ {f.suggestion}</div>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* CROSS-MODULE INTELLIGENCE */}
+            {accepted.crossModule && draft.crossModuleInsights && (
+              <div style={{ marginBottom:16, border:"1.5px solid rgba(99,102,241,.25)", borderRadius:8, overflow:"hidden", background:"rgba(99,102,241,.02)" }}>
+                <div style={{ padding:"10px 16px", background:"rgba(99,102,241,.06)", borderBottom:"1px solid rgba(99,102,241,.15)", display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:14 }}>✦</span>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#4f46e5" }}>Cross-Module Intelligence</div>
+                  <div style={{ fontSize:10, color:"#6366f1", marginLeft:"auto" }}>Contradictions, orphan risks, strategic tensions</div>
+                </div>
+                <div style={{ padding:"14px 16px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                  {[
+                    { key:"contradictions",          label:"Contradictions",               col:"#dc2626" },
+                    { key:"framingDriftRisks",        label:"Framing Drift Risks",          col:"#d97706" },
+                    { key:"orphanRisks",              label:"Orphan Risks",                 col:"#7c3aed" },
+                    { key:"missingDownstreamAnalysis",label:"Missing Downstream Analysis",  col:"#6b7280" },
+                    { key:"strategicTensions",        label:"Strategic Tensions",           col:"#0891b2" },
+                  ].map(({ key, label, col }) => {
+                    const items = draft.crossModuleInsights[key];
+                    if (!items?.length) return null;
+                    return (
+                      <div key={key} style={{ padding:"10px 12px", border:`1px solid ${col}20`, borderRadius:7, background:`${col}05` }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:col, textTransform:"uppercase", letterSpacing:.5, marginBottom:7 }}>{label}</div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                          {items.map((item,i) => (
+                            <div key={i} style={{ fontSize:10, color:DS.inkSub, lineHeight:1.4, paddingLeft:8, borderLeft:`2px solid ${col}40` }}>
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Load CTA */}
             <div style={{ padding:"18px 22px", background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
               borderRadius:10, display:"flex", alignItems:"center", justifyContent:"space-between", gap:16 }}>
@@ -18124,7 +18641,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
 
 /* ─────────────────────────────────────────────────────────────────────────────
 /* ─────────────────────────────────────────────────────────────────────────────
-   ROOT APPLICATION — FINISHED BUILD
+   ROOT APPLICATION -- FINISHED BUILD
    Nav overhaul · Polish · PDF Export · Onboarding · Responsive
 ───────────────────────────────────────────────────────────────────────────── */
 
@@ -18148,12 +18665,12 @@ const PHASE2 = [
 const MODULES = [...PHASE1, ...PHASE2];
 
 const MODULE_NUDGES = {
-  problem:    "Check if this is truly a decision — or a goal in disguise",
+  problem:    "Check if this is truly a decision -- or a goal in disguise",
   issues:     "Generate issues from 5 stakeholder perspectives for this decision",
   hierarchy:  "Auto-sort the decision hierarchy across all 5 tiers",
   strategy:   "Suggest 2 genuinely distinct strategies and check coherence",
   assessment: "Score strategies and generate a decision brief",
-  scorecard:  "Generate the full DQ report — identify the weakest link",
+  scorecard:  "Generate the full DQ report -- identify the weakest link",
   export:     "Generate the executive package ready for the board",
   influence:  "Identify key drivers and deal-breaker scenarios",
 };
@@ -18181,7 +18698,7 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>${problem.projectName||"Decision Package"} — Vantage DQ</title>
+<title>${problem.projectName||"Decision Package"} -- Vantage DQ</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,700;1,400&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
@@ -18305,9 +18822,9 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
           const cat = (typeof ISSUE_CATEGORIES!=="undefined" ? ISSUE_CATEGORIES : []).find(c=>c.key===i.category);
           return `<tr>
             <td style="max-width:240px">${i.text}</td>
-            <td><span class="badge badge-grey">${cat?cat.label:i.category||"—"}</span></td>
+            <td><span class="badge badge-grey">${cat?cat.label:i.category||"--"}</span></td>
             <td><span class="badge ${i.severity==="Critical"?"badge-danger":i.severity==="High"?"badge-warn":"badge-grey"}">${i.severity}</span></td>
-            <td style="color:#7b82a0">${i.owner||"—"}</td>
+            <td style="color:#7b82a0">${i.owner||"--"}</td>
           </tr>`;
         }).join("")}
         ${issues.length>12?`<tr><td colspan="4" style="color:#9ca3af;font-style:italic">+ ${issues.length-12} more issues raised</td></tr>`:""}
@@ -18354,7 +18871,7 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
           ${strategies.map(s=>{
             const idx=s.selections?.[d.id];
             const col=DS.s[s.colorIdx];
-            return `<td ${idx!==undefined?`style="background:${col?.soft};color:${col?.fill};font-weight:600"`:""}>${idx!==undefined?d.choices[idx]:"—"}</td>`;
+            return `<td ${idx!==undefined?`style="background:${col?.soft};color:${col?.fill};font-weight:600"`:""}>${idx!==undefined?d.choices[idx]:"--"}</td>`;
           }).join("")}
         </tr>`).join("")}
     </tbody>
@@ -18392,7 +18909,7 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
               const col=DS.s[s.colorIdx];
               const best=Math.max(...strategies.map(st=>assessmentScores[`${st.id}__${c.id}`]||0));
               return `<td style="text-align:center${sc===best&&sc>0?`;background:${col?.soft};color:${col?.fill};font-weight:700`:""}">
-                ${sc>0?`${sc}/5`:"—"}
+                ${sc>0?`${sc}/5`:"--"}
               </td>`;
             }).join("")}
           </tr>`).join("")}
@@ -18401,7 +18918,7 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
           ${strategies.map(s=>{
             const p=pct(s);
             const col=DS.s[s.colorIdx];
-            return `<td style="text-align:center;color:${col?.fill}">${p>0?`${p}%`:"—"}</td>`;
+            return `<td style="text-align:center;color:${col?.fill}">${p>0?`${p}%`:"--"}</td>`;
           }).join("")}
         </tr>
       </tbody>
@@ -18414,7 +18931,7 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
   <h2 style="margin-bottom:12px">6. Decision Quality Scorecard</h2>
   <div class="grid2" style="margin-bottom:14px">
     <div class="box ${overall>=70?"box-green":overall>=45?"box-warn":"box-danger"}" style="text-align:center">
-      <div class="score-big" style="color:${scoreColor(overall)}">${overall>0?overall:"—"}</div>
+      <div class="score-big" style="color:${scoreColor(overall)}">${overall>0?overall:"--"}</div>
       <div style="font-size:9px;color:${scoreColor(overall)};margin-top:3px;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Overall DQ Score</div>
       ${overall>0?`<div class="bar-track" style="margin-top:8px"><div class="bar-fill" style="width:${overall}%;background:${scoreColor(overall)}"></div></div>`:""}
     </div>
@@ -18425,7 +18942,7 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
           <span style="font-size:11px;width:16px">${el.icon}</span>
           <span style="font-size:9px;font-weight:600;color:#3d4260;flex:1">${el.label}</span>
           <div class="bar-track" style="width:80px;flex-shrink:0"><div class="bar-fill" style="width:${s}%;background:${scoreColor(s)}"></div></div>
-          <span style="font-size:10px;font-weight:700;color:${scoreColor(s)};width:24px;text-align:right">${s>0?s:"—"}</span>
+          <span style="font-size:10px;font-weight:700;color:${scoreColor(s)};width:24px;text-align:right">${s>0?s:"--"}</span>
         </div>`;
       }).join("")}
     </div>
@@ -18466,7 +18983,7 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
           <tr>
             <td style="font-weight:700;color:#2563eb">${i+1}</td>
             <td>${a.action}</td>
-            <td>${a.element||"—"}</td>
+            <td>${a.element||"--"}</td>
             <td><span class="badge ${a.urgency==="immediate"?"badge-danger":a.urgency==="before-deciding"?"badge-warn":"badge-green"}">${a.urgency}</span></td>
           </tr>`).join("")}
       </tbody>
@@ -18475,7 +18992,7 @@ function buildPDFContent(problem, issues, decisions, strategies, criteria,
 
   <!-- FOOTER -->
   <div class="footer">
-    <span>Vantage DQ — Decision Quality Platform</span>
+    <span>Vantage DQ -- Decision Quality Platform</span>
     <span>${problem.projectCode||""} ${problem.projectName||""} ${problem.confidentiality?`· ${problem.confidentiality}`:""}</span>
     <span>Generated ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</span>
   </div>
@@ -18510,7 +19027,7 @@ const ONBOARDING_STEPS = [
     id:"nav",
     target:"nav",
     title:"The Eight Modules",
-    body:"Work through Phase 1 left to right — from framing the problem to building strategies to scoring them and producing a report. Phase 2 adds uncertainty analysis.",
+    body:"Work through Phase 1 left to right -- from framing the problem to building strategies to scoring them and producing a report. Phase 2 adds uncertainty analysis.",
     action:"Got it →",
   },
   {
@@ -18524,14 +19041,14 @@ const ONBOARDING_STEPS = [
     id:"workshop",
     target:"workshop",
     title:"Workshop Mode",
-    body:"Running a live session? Workshop Mode gives you a full-screen facilitation view — brainstorm, vote, and present strategies to the room.",
+    body:"Running a live session? Workshop Mode gives you a full-screen facilitation view -- brainstorm, vote, and present strategies to the room.",
     action:"Got it →",
   },
   {
     id:"done",
     target:null,
     title:"You're ready",
-    body:"Start by clicking AI Deep Dive to paste your decision context — or work through the modules manually. The platform auto-saves as you go.",
+    body:"Start by clicking AI Deep Dive to paste your decision context -- or work through the modules manually. The platform auto-saves as you go.",
     action:"Let's go →",
   },
 ];
@@ -18996,7 +19513,7 @@ export default function App() {
         primaryConcern:sh.primaryConcern||"",
         mustAlign:sh.mustAlign||false,
         engagementActions:"",
-        notes:sh.isInferred?"[AI inferred — verify with team]":"",
+        notes:sh.isInferred?"[AI inferred -- verify with team]":"",
       })));
     }
 
@@ -19017,6 +19534,74 @@ export default function App() {
       }));
     }
 
+    // ── Influence Map ────────────────────────────────────────────────────────
+    if (accepted.influence && draft.influenceNodes?.length) {
+      setInfluenceNodes(draft.influenceNodes.map((n,i) => ({
+        id: n.id || ("n"+i),
+        label: n.label||"",
+        type: n.type||"uncertainty",
+        description: n.description||"",
+        x: 120 + (i%4)*180,
+        y: 80 + Math.floor(i/4)*140,
+        notes: n.source ? "[Source: "+n.source+"]" : "",
+      })));
+      if (draft.influenceEdges?.length) {
+        setInfluenceEdges(draft.influenceEdges.map((e,i) => ({
+          id: "e"+i,
+          source: e.source,
+          target: e.target,
+          label: e.label||"",
+          strength: e.strength||"moderate",
+        })));
+      }
+    }
+
+    // ── Timeline events ──────────────────────────────────────────────────────
+    if (accepted.timeline && draft.timelineEvents?.length) {
+      setTimelineEvents(draft.timelineEvents.map((ev,i) => ({
+        id: uid("ev"),
+        title: ev.title||"",
+        type: ev.type||"risk_event",
+        timing: ev.timing||i+1,
+        timingEnd: (ev.timing||i+1)+1,
+        severity: ev.severity||"Medium",
+        description: ev.description||"",
+        trigger: ev.trigger||"",
+        mitigation: ev.mitigation||"",
+        gateCondition: ev.gateCondition||"",
+        owner: ev.owner||"",
+        status: "pending",
+      })));
+    }
+
+    // ── VoI items ────────────────────────────────────────────────────────────
+    if (accepted.voi && draft.voiItems?.length) {
+      setVoiItems(draft.voiItems.map(v => ({
+        id: uid("voi"),
+        label: v.label||"",
+        description: v.description||"",
+        classification: v.classification||"do_later",
+        action: v.action||"",
+        timeToLearn: v.timeToLearn||"",
+        costEstimate: v.costEstimate||"Medium",
+        decisionPivot: v.decisionPivot||"",
+        wouldChangeDecision: v.wouldChangeDecision||false,
+        confidence: v.confidence||"medium",
+      })));
+    }
+
+    // ── DQ Scorecard preliminary ─────────────────────────────────────────────
+    if (accepted.scorecard && draft.dqScores) {
+      const hasAnyScore = Object.values(draft.dqScores).some(s => s > 0);
+      if (hasAnyScore) {
+        setDqScores(prev => {
+          const allZero = Object.values(prev).every(s => s===0);
+          if (allZero) return draft.dqScores;
+          return prev; // don't overwrite existing scores
+        });
+      }
+    }
+
     setShowQuickStart(false);
     setModule("problem");
 
@@ -19028,11 +19613,14 @@ export default function App() {
       accepted.strategies && "strategies",
       accepted.stakeholders && `${draft.stakeholders?.length||0} stakeholders`,
       accepted.uncertainties && `${draft.uncertainties?.length||0} uncertainties`,
+      accepted.influence && `${draft.influenceNodes?.length||0} influence nodes`,
+      accepted.timeline && `${draft.timelineEvents?.length||0} timeline events`,
+      accepted.voi && `${draft.voiItems?.length||0} VoI items`,
       draft.gameTheorySignals?.hasStrategicInteraction && "game theory signals",
     ].filter(Boolean);
 
-    pushAIMsg({ role:"ai", text:`Deep dive complete. Loaded: ${loadedSections.join(", ")}. ${draft.gameTheorySignals?.hasStrategicInteraction ? "Game Theory module is recommended for this decision — strategic interaction detected." : ""} Review each module and refine with your team.` });
-    // Show onboarding after first draft load if not seen before
+    const flagCount = draft.validationFlags?.length||0;
+    pushAIMsg({ role:"ai", text:`Deep dive complete. Loaded: ${loadedSections.join(", ")}. ${flagCount > 0 ? flagCount+" validation flags -- review the DQ Scorecard section. " : ""}${draft.gameTheorySignals?.hasStrategicInteraction ? "Game Theory module recommended -- strategic interaction detected. " : ""}Review each module and refine with your team.` });
     try { if (!localStorage.getItem("vantage_onboarded")) setOnboardingStep(0); } catch {}
   };
 
@@ -19256,8 +19844,8 @@ export default function App() {
                   const url = window.location.origin + window.location.pathname +
                     (decisionId ? "?d=" + decisionId : "");
                   navigator.clipboard.writeText(url)
-                    .then(()=>showToast("Link copied — share with your team"))
-                    .catch(()=>showToast("Copy failed — copy the URL from your browser"));
+                    .then(()=>showToast("Link copied -- share with your team"))
+                    .catch(()=>showToast("Copy failed -- copy the URL from your browser"));
                 }}
                 style={{ flex:1, fontSize:10, fontWeight:700, fontFamily:"inherit",
                   padding:"6px 8px", border:`1px solid ${DS.border}`,
@@ -19339,7 +19927,7 @@ export default function App() {
           {!navCollapsed && (
             <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.5,
               textTransform:"uppercase", padding:"6px 16px 3px", fontWeight:700 }}>
-              Phase 1 — Framing
+              Phase 1 -- Framing
             </div>
           )}
           {PHASE1.map((m) => {
@@ -19384,7 +19972,7 @@ export default function App() {
             <div style={{ fontSize:8, color:DS.textTer, letterSpacing:1.5,
               textTransform:"uppercase", padding:"10px 16px 3px", fontWeight:700,
               borderTop:`1px solid ${DS.border}`, marginTop:4 }}>
-              Phase 2 — Analysis
+              Phase 2 -- Analysis
             </div>
           )}
           {PHASE2.map((m) => {
