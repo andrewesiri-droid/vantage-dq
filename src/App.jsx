@@ -1859,14 +1859,14 @@ function ProblemDefChat({ data, v, aiCall, aiBusy, onAIMsg }) {
 
     const fp =
       "You are an elite Decision Quality facilitator coaching a team on their problem definition. " +
-      "The user says: "" + text + "". " +
-      "Current frame — Decision Statement: "" + (data.decisionStatement||"not yet defined") + "". " +
-      "Context: "" + (data.context||"not yet defined") + "". " +
-      "Owner: "" + (data.owner||"not defined") + "". " +
-      "Objectives: "" + (data.objectives||"not defined") + "". " +
-      "Key Uncertainties: "" + (data.keyUncertainties||"not defined") + "". " +
-      "Scope In: "" + (data.scopeIn||"not defined") + "". " +
-      "Success Criteria: "" + (data.successCriteria||"not defined") + "". " +
+      "The user says: " + text + ". " +
+      "Current frame — Decision Statement: " + (data.decisionStatement||"not yet defined") + ". " +
+      "Context: " + (data.context||"not yet defined") + ". " +
+      "Owner: " + (data.owner||"not defined") + ". " +
+      "Objectives: " + (data.objectives||"not defined") + ". " +
+      "Key Uncertainties: " + (data.keyUncertainties||"not defined") + ". " +
+      "Scope In: " + (data.scopeIn||"not defined") + ". " +
+      "Success Criteria: " + (data.successCriteria||"not defined") + ". " +
       "DQ Score: " + (v?.overallScore||"not run") + "/100. " +
       "Open flags: " + ((v?.flags||[]).filter(f=>f.severity==="critical"||f.severity==="warning").map(f=>f.title||f.message).join("; ")||"none") + ". " +
       "Respond as a senior DQ facilitator — specific, direct, constructive, referencing their actual frame. " +
@@ -2024,10 +2024,10 @@ Return ONLY JSON:
     const allTitles = issues.filter(i=>i.id!==issue.id).map(i=>i.text).join(" | ");
     aiCall(
       "You are an elite DQ facilitator evaluating a single issue for quality and DQ-readiness. " +
-      "Decision context: "" + (problem?.decisionStatement||"Not defined") + "". " +
-      "Issue to evaluate: "" + issue.text + "". " +
-      "Description: "" + (issue.description||"") + "". " +
-      "Decision Impact: "" + (issue.decisionImpact||"") + "". " +
+      "Decision context: " + (problem?.decisionStatement||"Not defined") + ". " +
+      "Issue to evaluate: " + issue.text + ". " +
+      "Description: " + (issue.description||"") + ". " +
+      "Decision Impact: " + (issue.decisionImpact||"") + ". " +
       "Category: " + (issue.category||"unassigned") + ". " +
       "Severity: " + (issue.severity||"Medium") + ". " +
       "Other issues already raised: " + (allTitles.slice(0,300)||"none") + ". " +
@@ -2071,8 +2071,8 @@ Return ONLY JSON:
 ");
     aiCall(
       "You are a senior DQ facilitator. Review this issue list and identify what is MISSING. " +
-      "Decision: "" + (problem?.decisionStatement||"") + "". " +
-      "Context: "" + (problem?.context||"") + "". " +
+      "Decision: " + (problem?.decisionStatement||"") + ". " +
+      "Context: " + (problem?.context||"") + ". " +
       "Issues raised so far:
 " + (existing||"none") + "
 
