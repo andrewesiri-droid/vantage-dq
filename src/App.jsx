@@ -5003,94 +5003,118 @@ function ModuleQualitativeAssessment({
   strategies, decisions, criteria, problem,
   scores, onScores, aiCall, aiBusy, onAIMsg,
 }) {
-  const [view, setView]           = useState("matrix");  // matrix | radar | brief
+  const [view, setView]             = useState("matrix");
   const [generating, setGenerating] = useState(false);
-  const [brief, setBrief]         = useState(null);
-  const [activeStrat, setActiveStrat] = useState(null);
+  const [brief, setBrief]           = useState(null);
   const [weightsOpen, setWeightsOpen] = useState(false);
-  const [weights, setWeights]     = useState({});       // criterionId → 1|2|3
-  const [assessing, setAssessing] = useState(false);
+  const [weights, setWeights]       = useState({});
+  const [assessing, setAssessing]   = useState(false);
   const [qaAnalysis, setQaAnalysis] = useState(null);
-  const [selectedCell, setSelectedCell] = useState(null);
-  const [analysing, setAnalysing] = useState(false);
+  const [selectedCell, setSelectedCell] = useState(null); // {stratId, critId}
+  const [analysing, setAnalysing]   = useState(false);
+  const [showGuide, setShowGuide]   = useState(false);
 
   const focusDecisions = decisions.filter(d => d.tier === "focus");
 
-  // ── SCORE HELPERS ────────────────────────────────────────────────────────────
-  const scoreKey    = (stratId, critId) => stratId+"__"+critId;
-  // Support both old (integer) and new (object) score formats
-  const getCell     = (stratId, critId) => {
+  // ── SCORE HELPERS ─────────────────────────────────────────────────────────────
+  const scoreKey = (stratId, critId) => stratId + "__" + critId;
+  const getCell  = (stratId, critId) => {
     const raw = scores[scoreKey(stratId, critId)];
     if (!raw) return { score:0, rationale:"", confidence:"moderate", assumptions:"", concerns:"", disagreement:false };
     if (typeof raw === "number") return { score:raw, rationale:"", confidence:"moderate", assumptions:"", concerns:"", disagreement:false };
     return raw;
   };
-  const getScore    = (stratId, critId) => getCell(stratId, critId).score || 0;
-  const setScore    = (stratId, critId, val) => {
+  const getScore = (stratId, critId) => getCell(stratId, critId).score || 0;
+  const setScore = (stratId, critId, val) => {
     const existing = getCell(stratId, critId);
     onScores({ ...scores, [scoreKey(stratId, critId)]: { ...existing, score: val } });
   };
-  const setCell     = (stratId, critId, field, val) => {
+  const setCell  = (stratId, critId, field, val) => {
     const existing = getCell(stratId, critId);
     onScores({ ...scores, [scoreKey(stratId, critId)]: { ...existing, [field]: val } });
   };
-  const getWeight   = (critId) => weights[critId] ?? 2;
-  const setWeight   = (critId, val) => setWeights(w => ({ ...w, [critId]: val }));
+  const getWeight  = (critId) => weights[critId] ?? 2;
+  const setWeight  = (critId, val) => setWeights(w => ({ ...w, [critId]: val }));
 
-  // ── AI INITIAL ASSESSMENT ────────────────────────────────────────────────────
+  // ── COMPUTED ──────────────────────────────────────────────────────────────────
+  const weightedTotal = (stratId) =>
+    criteria.reduce((sum, c) => sum + getScore(stratId, c.id) * getWeight(c.id), 0);
+  const maxPossible = criteria.reduce((sum, c) => sum + 5 * getWeight(c.id), 0);
+  const pct = (stratId) =>
+    maxPossible > 0 ? Math.round((weightedTotal(stratId) / maxPossible) * 100) : 0;
+  const ranked = [...strategies].sort((a, b) => weightedTotal(b.id) - weightedTotal(a.id));
+  const scoredCount = strategies.reduce((sum, s) =>
+    sum + criteria.filter(c => getScore(s.id, c.id) > 0).length, 0);
+  const totalCells = strategies.length * criteria.length;
+  const completionPct = totalCells > 0 ? Math.round((scoredCount / totalCells) * 100) : 0;
 
+  // Score label helpers
+  const SCORE_LABELS = ["", "Poor", "Weak", "Adequate", "Good", "Excellent"];
+  const SCORE_COLORS = ["", "#dc2626", "#d97706", "#6b7280", "#2563eb", "#059669"];
+  const SCORE_BG     = ["", "#fef2f2", "#fffbeb", "#f8fafc", "#eff6ff", "#ecfdf5"];
+
+  // Weight labels
+  const WEIGHT_LABELS = { 1: "Low", 2: "Medium", 3: "High" };
+  const WEIGHT_COLORS = { 1: DS.inkDis, 2: DS.warning, 3: DS.danger };
+
+  // ── AI INITIAL ASSESSMENT ─────────────────────────────────────────────────────
   const aiInitialAssessment = () => {
     if (!strategies.length || !criteria.length) {
-      onAIMsg({role:"ai",text:"Add strategies and criteria first."});
+      onAIMsg({ role:"ai", text:"Add strategies and criteria first." });
       return;
     }
     setAssessing(true);
-
-    const critList = criteria.map((cr,i) =>
-      (i+1)+". "+cr.label+(cr.description?" — "+cr.description.slice(0,60):"")+" [weight:"+getWeight(cr.id)+"]"
+    const critList = criteria.map((cr, i) =>
+      (i+1) + ". " + cr.label +
+      (cr.description ? " — " + cr.description.slice(0, 60) : "") +
+      " [weight:" + getWeight(cr.id) + "]"
     ).join("\n");
-
-    const stratList = strategies.map((s,i) => {
+    const stratList = strategies.map((s, i) => {
       const choices = focusDecisions.map(d => {
         const v = s.selections?.[d.id];
-        const idxs = Array.isArray(v)?v:(v!==undefined?[v]:[]);
-        return d.label+"→"+(idxs.length?idxs.map(i=>d.choices[i]).join("+"):"?");
+        const idxs = Array.isArray(v) ? v : (v !== undefined ? [v] : []);
+        return d.label + "→" + (idxs.length ? idxs.map(i => d.choices[i]).join("+") : "?");
       }).join(", ");
-      return (i+1)+". "+s.name+
-        (s.objective?" | Objective: "+s.objective:"")+
-        (s.description?" | Rationale: "+s.description:"")+
-        " | Choices: "+choices;
+      return (i+1) + ". " + s.name +
+        (s.objective ? " | Objective: " + s.objective : "") +
+        (s.description ? " | Rationale: " + s.description : "") +
+        " | Choices: " + choices;
     }).join("\n");
 
     aiCall(
       "You are a Decision Quality expert. Score each strategy against each criterion (1=poor, 2=below average, 3=adequate, 4=good, 5=excellent). " +
       "Be rigorous and differentiated — avoid scoring everything the same. " +
-      "Decision: "+(problem?.decisionStatement||"Not defined")+"\n" +
-      "CRITERIA (score each of these):\n"+critList+"\n\n" +
-      "STRATEGIES (score each of these):\n"+stratList+"\n\n" +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
+      "CRITERIA (score each of these):\n" + critList + "\n\n" +
+      "STRATEGIES (score each of these):\n" + stratList + "\n\n" +
       "Return ONLY JSON: " +
       '{"scores":[{"strategyName":"name","criterionName":"name","score":4,"rationale":"one sentence why this rating","confidence":"low|moderate|high","concerns":"any caveats"}],"insight":"key observation","validationFlags":[{"type":"no_rationale|inconsistent_logic|overconfidence|groupthink|missing_tradeoff|weak_differentiation|bias_risk","severity":"warning|info","message":"specific issue"}],"tradeOffInsights":["trade-off observation"],"missingCriteria":["criterion not yet in the table but important"]}',
-    (r) => {
-      let result = r;
-      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAssessing(false);return;}}
-      if (!result||result.error){setAssessing(false);return;}
-
-      const newScores = {...scores};
-      (result.scores||[]).forEach(cell => {
-        const strat = strategies.find(s=>s.name.toLowerCase()===cell.strategyName?.toLowerCase());
-        const crit  = criteria.find(cr=>cr.label.toLowerCase()===cell.criterionName?.toLowerCase());
-        if (strat&&crit&&typeof cell.score==="number"&&cell.score>=1&&cell.score<=5) {
-          const existing = getCell(strat.id,crit.id);
-          newScores[scoreKey(strat.id,crit.id)] = { ...existing, score:cell.score, rationale:cell.rationale||existing.rationale||"" };
-        }
-      });
-      onScores(newScores);
-      onAIMsg({role:"ai",text:result.insight||("Initial assessment complete. "+((result.scores||[]).length)+" cells scored. Review and adjust as needed.")});
-      setAssessing(false);
-    });
+      (r) => {
+        let result = r;
+        if (r && r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); } catch(e) { setAssessing(false); return; } }
+        if (!result || result.error) { setAssessing(false); return; }
+        const newScores = { ...scores };
+        (result.scores || []).forEach(cell => {
+          const strat = strategies.find(s => s.name.toLowerCase() === cell.strategyName?.toLowerCase());
+          const crit  = criteria.find(cr => cr.label.toLowerCase() === cell.criterionName?.toLowerCase());
+          if (strat && crit && typeof cell.score === "number" && cell.score >= 1 && cell.score <= 5) {
+            const existing = getCell(strat.id, crit.id);
+            newScores[scoreKey(strat.id, crit.id)] = {
+              ...existing, score: cell.score,
+              rationale: cell.rationale || existing.rationale || "",
+              confidence: cell.confidence || "moderate",
+              concerns: cell.concerns || "",
+            };
+          }
+        });
+        onScores(newScores);
+        onAIMsg({ role:"ai", text: result.insight || ("Initial assessment complete. " + (result.scores||[]).length + " cells scored.") });
+        setAssessing(false);
+      }
+    );
   };
 
-  // ── AI ANALYSE QUALITY ───────────────────────────────────────────────────────
+  // ── AI ANALYSE QUALITY ────────────────────────────────────────────────────────
   const aiAnalyseQuality = () => {
     setAnalysing(true);
     const cellSummary = strategies.map(s =>
@@ -5102,56 +5126,34 @@ function ModuleQualitativeAssessment({
       }).join(", ")
     ).join("\n");
     const prompt =
-      "You are an elite DQ facilitator evaluating the quality of a qualitative assessment matrix. " +
-      "Decision: " + (problem?.decisionStatement||"not defined") + ". " +
-      "Strategies: " + strategies.map(s=>s.name).join(", ") + ". " +
-      "Criteria: " + criteria.map(c=>c.label).join(", ") + ". " +
-      "Assessments:\n" + (cellSummary||"none") + "\n\n" +
-      "Evaluate for: missing rationale, inconsistent logic, overconfidence, groupthink, " +
-      "weak differentiation, bias risk, missing trade-offs, assumption confusion. " +
+      "You are an elite DQ facilitator evaluating a qualitative assessment matrix. " +
+      "Decision: " + (problem?.decisionStatement || "not defined") + ". " +
+      "Strategies: " + strategies.map(s => s.name).join(", ") + ". " +
+      "Criteria: " + criteria.map(c => c.label).join(", ") + ". " +
+      "Assessments:\n" + (cellSummary || "none") + "\n\n" +
       "Return ONLY JSON: " +
       '{"qualityScore":72,"flags":[{"type":"no_rationale|inconsistent_logic|overconfidence|groupthink|missing_tradeoff|weak_differentiation|missing_criteria|assumption_confusion|bias_risk|low_decision_value","severity":"critical|warning|info","strategy":"name or null","criterion":"name or null","message":"specific issue","suggestion":"how to fix"}],"tradeOffInsights":["cross-strategy trade-off"],"missingCriteria":["important criterion not yet in table"],"disagreementRisks":["area where stakeholders likely disagree"],"facilitatorQuestions":["probing question for the team"],"diagnosticSummary":"2-3 sentence assessment of overall quality","downstreamRecommendations":[{"module":"Scenario Planning","reason":"why"}]}';
     aiCall(prompt, (r) => {
       let result = r;
-      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
-      if (!result||result.error){setAnalysing(false);return;}
+      if (r && r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); } catch(e) { setAnalysing(false); return; } }
+      if (!result || result.error) { setAnalysing(false); return; }
       setQaAnalysis(result);
-      onAIMsg({role:"ai", text:"Assessment quality: " + (result.qualityScore||"?") + "/100 — " + (result.diagnosticSummary||"")});
+      onAIMsg({ role:"ai", text: "Assessment quality: " + (result.qualityScore||"?") + "/100 — " + (result.diagnosticSummary||"") });
       setAnalysing(false);
       setView("analysis");
     });
   };
 
-  // ── COMPUTED TOTALS ──────────────────────────────────────────────────────────
-  const weightedTotal = (stratId) =>
-    criteria.reduce((sum, c) => sum + getScore(stratId, c.id) * getWeight(c.id), 0);
-
-  const maxPossible = criteria.reduce((sum, c) => sum + 5 * getWeight(c.id), 0);
-
-  const pct = (stratId) =>
-    maxPossible > 0 ? Math.round((weightedTotal(stratId) / maxPossible) * 100) : 0;
-
-  const ranked = [...strategies].sort((a, b) => weightedTotal(b.id) - weightedTotal(a.id));
-
-  const scoredCount = strategies.reduce((sum, s) =>
-    sum + criteria.filter(c => getScore(s.id, c.id) > 0).length, 0);
-  const totalCells  = strategies.length * criteria.length;
-
-  // ── AI GENERATE BRIEF ────────────────────────────────────────────────────────
+  // ── GENERATE BRIEF ────────────────────────────────────────────────────────────
   const generateBrief = () => {
     setGenerating(true);
-
     const tableRows = criteria.map(c => {
-      const row = strategies.map(s =>
-        `${DS.sNames[s.colorIdx]||s.name}: ${getScore(s.id,c.id)||"—"}/5`
-      ).join(" | ");
+      const row = strategies.map(s => `${DS.sNames[s.colorIdx]||s.name}: ${getScore(s.id,c.id)||"—"}/5`).join(" | ");
       return `${c.label} [wt:${getWeight(c.id)}]: ${row}`;
     }).join("\n");
-
     const totals = strategies.map(s =>
       `${DS.sNames[s.colorIdx]||s.name}: ${pct(s.id)}% (${weightedTotal(s.id)}/${maxPossible} weighted)`
     ).join(", ");
-
     const stratDescs = strategies.map(s =>
       `${DS.sNames[s.colorIdx]||s.name} — ${s.description||"No description"}: ${
         focusDecisions.map(d => {
@@ -5160,508 +5162,629 @@ function ModuleQualitativeAssessment({
         }).join(", ")
       }`
     ).join("\n");
-
-    aiCall(`You are a senior Decision Quality expert writing a decision brief for an executive audience.
-
-Decision: "${problem.decisionStatement}"
-Owner: "${problem.owner}" | Deadline: "${problem.deadline}"
-Context: "${problem.context}"
-
-Strategies being compared:
-${stratDescs}
-
-Qualitative Assessment scores (weighted):
-${tableRows}
-
-Overall weighted totals: ${totals}
-
-Write a structured executive decision brief. Be specific, direct, and commercially sharp. No hedging.
-
-Return ONLY valid JSON:
-{
-  "headline": "One sentence decision brief headline — decisive, specific",
-  "situationSummary": "2-3 sentences: the decision, why it matters now, key constraint",
-  "recommendedStrategy": "${strategies[0]?.name||'Strategy name'}",
-  "recommendedStrategyName": "exact strategy name from the list above",
-  "recommendationRationale": "3-4 sentences: why this strategy wins on the criteria that matter most. Be specific about which criteria drove the recommendation.",
-  "keyTradeoff": "The single most important trade-off the decision maker is accepting",
-  "criticalAssumption": "The one assumption that, if wrong, would change the recommendation",
-  "strategyComparisons": [
-    {
-      "name": "strategy name",
-      "verdict": "one sentence verdict",
-      "bestFor": "what conditions make this strategy optimal",
-      "mainRisk": "primary downside or risk",
-      "score": 0
-    }
-  ],
-  "conditionsToRevisit": ["Condition 1 that would require revisiting this decision"],
-  "recommendedNextStep": "The single most important immediate action",
-  "dqReadiness": {
-    "score": 0,
-    "note": "one sentence on decision readiness — is the team ready to commit?"
-  }
-}`,
-    (r) => {
-      if (!r.error) {
-        setBrief(r);
-        setView("brief");
-        onAIMsg({ role:"ai", text:`Brief generated. Recommended strategy: ${r.recommendedStrategyName}. ${r.keyTradeoff}` });
-      } else {
-        onAIMsg({ role:"ai", text:"Brief generation failed — try again." });
+    aiCall(
+      `You are a senior Decision Quality expert writing a decision brief for an executive audience.\n\nDecision: "${problem.decisionStatement}"\nOwner: "${problem.owner}" | Deadline: "${problem.deadline}"\nContext: "${problem.context}"\n\nStrategies:\n${stratDescs}\n\nScores (weighted):\n${tableRows}\n\nTotals: ${totals}\n\nReturn ONLY valid JSON:\n{"headline":"One sentence decision brief","situationSummary":"2-3 sentences","recommendedStrategy":"name","recommendedStrategyName":"exact name","recommendationRationale":"3-4 sentences why","keyTradeoff":"The single most important trade-off","criticalAssumption":"The one assumption that if wrong changes the recommendation","strategyComparisons":[{"name":"name","verdict":"one sentence","bestFor":"what conditions","mainRisk":"primary downside","score":0}],"conditionsToRevisit":["Condition"],"recommendedNextStep":"Single most important action","dqReadiness":{"score":0,"note":"one sentence readiness"}}`,
+      (r) => {
+        if (!r.error) {
+          setBrief(r);
+          setView("brief");
+          onAIMsg({ role:"ai", text:`Brief ready: ${r.recommendedStrategyName}. ${r.keyTradeoff}` });
+        }
+        setGenerating(false);
       }
-      setGenerating(false);
-    });
+    );
   };
 
   // ── RADAR DATA ────────────────────────────────────────────────────────────────
   const radarDatasets = strategies.map(s => ({
     color: DS.s[s.colorIdx]?.fill || DS.accent,
-    name:  DS.sNames[s.colorIdx] || s.name,
-    values: criteria.map(c => getScore(s.id, c.id) || 0),
+    label: DS.sNames[s.colorIdx] || s.name,
+    values: criteria.map(c => getScore(s.id, c.id)),
   }));
+
+  // Selected cell data
+  const selCell = selectedCell ? getCell(selectedCell.stratId, selectedCell.critId) : null;
+  const selStrat = selectedCell ? strategies.find(s => s.id === selectedCell.stratId) : null;
+  const selCrit  = selectedCell ? criteria.find(c => c.id === selectedCell.critId) : null;
+  const selCol   = selStrat ? DS.s[selStrat.colorIdx] : null;
 
   const TABS = [
     { id:"matrix",   label:"Scoring Matrix" },
-    { id:"radar",    label:"Radar Comparison" },
+    { id:"radar",    label:"Radar" },
     { id:"brief",    label:"Decision Brief",  highlight: !!brief },
     { id:"analysis", label:"AI Analysis",     highlight: !!qaAnalysis },
   ];
 
-  const WEIGHT_LABELS = { 1:"Low", 2:"Medium", 3:"High" };
-  const WEIGHT_COLORS = { 1:DS.inkDis, 2:DS.warning, 3:DS.danger };
-
+  // ── RENDER ────────────────────────────────────────────────────────────────────
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
 
       {/* ── HEADER ── */}
-      <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
-        display:"flex", alignItems:"center", gap:12, flexShrink:0, flexWrap:"wrap" }}>
+      <div style={{ padding:"14px 24px", background:DS.canvas,
+        borderBottom:`1px solid ${DS.canvasBdr}`,
+        display:"flex", alignItems:"center", gap:10, flexShrink:0, flexWrap:"wrap" }}>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:11, color:DS.inkTer, letterSpacing:1, textTransform:"uppercase", fontWeight:700, marginBottom:3 }}>Module 05</div>
-          <div style={{ fontFamily:"'Libre Baskerville', Georgia, serif", fontSize:22, fontWeight:700, color:DS.ink, letterSpacing:-.3 }}>Qualitative Assessment</div>
+          <div style={{ fontSize:9, color:DS.inkTer, letterSpacing:1, textTransform:"uppercase",
+            fontWeight:700, marginBottom:2 }}>Module 06</div>
+          <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif",
+            fontSize:20, fontWeight:700, color:DS.ink }}>Qualitative Assessment</div>
         </div>
-        <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-          {strategies.length > 0 && criteria.length > 0 && (
-            <Badge variant={scoredCount===totalCells?"green":scoredCount>0?"warn":"default"}>
-              {scoredCount}/{totalCells} cells scored
-            </Badge>
-          )}
-          {ranked[0] && scoredCount > 0 && (
-            <Badge variant="blue">
-              Leading: {DS.sNames[ranked[0].colorIdx]||ranked[0].name} ({pct(ranked[0].id)}%)
-            </Badge>
-          )}
-        </div>
+
+        {/* Progress indicator */}
+        {totalCells > 0 && (
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ width:80, height:5, background:DS.canvasBdr, borderRadius:3, overflow:"hidden" }}>
+              <div style={{ height:"100%", borderRadius:3, transition:"width .4s",
+                background: completionPct===100 ? DS.success : DS.accent,
+                width: completionPct + "%" }}/>
+            </div>
+            <span style={{ fontSize:10, fontWeight:700,
+              color: completionPct===100 ? DS.success : DS.inkTer }}>
+              {scoredCount}/{totalCells}
+            </span>
+          </div>
+        )}
+
+        {ranked[0] && scoredCount > 0 && (
+          <div style={{ padding:"4px 10px", borderRadius:5, fontSize:10, fontWeight:700,
+            background: DS.s[ranked[0].colorIdx]?.soft || DS.accentSoft,
+            color: DS.s[ranked[0].colorIdx]?.fill || DS.accent,
+            border:`1px solid ${DS.s[ranked[0].colorIdx]?.line || DS.accentLine}` }}>
+            Leading: {DS.sNames[ranked[0].colorIdx]||ranked[0].name} · {pct(ranked[0].id)}%
+          </div>
+        )}
+
+        <Btn variant="secondary" size="sm" onClick={() => setShowGuide(g => !g)}>
+          {showGuide ? "Hide Guide" : "Score Guide"}
+        </Btn>
         <Btn variant="secondary" size="sm" icon="filter"
           onClick={() => setWeightsOpen(w => !w)}>
-          {weightsOpen ? "Hide Weights" : "Edit Weights"}
+          Weights
         </Btn>
         <Btn variant="secondary" size="sm" icon="spark"
           onClick={aiInitialAssessment}
           disabled={aiBusy || assessing || !strategies.length || !criteria.length}>
-          {assessing ? "Assessing…" : "AI Initial Assessment"}
+          {assessing ? "Assessing…" : "AI Score"}
         </Btn>
-        <Btn variant="secondary" size="sm" onClick={aiAnalyseQuality}
-          disabled={aiBusy || analysing || !strategies.length || !criteria.length}>
+        <Btn variant="secondary" size="sm"
+          onClick={aiAnalyseQuality}
+          disabled={aiBusy || analysing || scoredCount < 2}>
           {analysing ? "Analysing…" : "✦ AI Analysis"}
         </Btn>
         <Btn variant="primary" size="sm" icon="spark"
           onClick={generateBrief}
-          disabled={aiBusy || generating || scoredCount < strategies.length}>
-          {generating ? "Writing Brief…" : "Generate Decision Brief"}
+          disabled={aiBusy || generating || scoredCount < totalCells * 0.5}>
+          {generating ? "Generating…" : "Decision Brief"}
         </Btn>
       </div>
 
+      {/* ── SCORE GUIDE PANEL ── */}
+      {showGuide && (
+        <div style={{ background:"#1e2433", borderBottom:`1px solid #3d4d6b`,
+          padding:"14px 24px", flexShrink:0 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#6e7d9e",
+            letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
+            DQ Scoring Guide — What Each Score Means
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
+            {[
+              { score:1, label:"Poor", color:"#dc2626", bg:"#fef2f2", desc:"Strategy fails to address this criterion. Significant weakness or gap." },
+              { score:2, label:"Weak", color:"#d97706", bg:"#fffbeb", desc:"Below expectations. Partial address but material shortfall remains." },
+              { score:3, label:"Adequate", color:"#6b7280", bg:"#f8fafc", desc:"Meets minimum requirements. No clear advantage or disadvantage." },
+              { score:4, label:"Good", color:"#2563eb", bg:"#eff6ff", desc:"Meaningfully better than alternatives. Clear positive evidence." },
+              { score:5, label:"Excellent", color:"#059669", bg:"#ecfdf5", desc:"Exceptional. Strong evidence this strategy excels on this criterion." },
+            ].map(item => (
+              <div key={item.score} style={{ padding:"10px 12px", borderRadius:7,
+                background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.08)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5 }}>
+                  <div style={{ width:22, height:22, borderRadius:5, background:item.bg,
+                    border:`2px solid ${item.color}`, display:"flex", alignItems:"center",
+                    justifyContent:"center", fontSize:11, fontWeight:700, color:item.color }}>
+                    {item.score}
+                  </div>
+                  <span style={{ fontSize:11, fontWeight:700, color:item.color }}>{item.label}</span>
+                </div>
+                <div style={{ fontSize:10, color:"#8892a8", lineHeight:1.5 }}>{item.desc}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:10, padding:"8px 12px", background:"rgba(37,99,235,.1)",
+            border:"1px solid rgba(37,99,235,.2)", borderRadius:6,
+            fontSize:10, color:"#93b4fd", lineHeight:1.5 }}>
+            <strong style={{color:"#60a5fa"}}>DQ principle:</strong> Scores should be differentiated — if all strategies score similarly, the criterion may not be decision-relevant. Every score should have a rationale. Confidence reflects how well the team understands this relationship, not how certain the outcome is.
+          </div>
+        </div>
+      )}
+
+      {/* ── WEIGHT EDITOR ── */}
+      {weightsOpen && (
+        <div style={{ background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`,
+          padding:"12px 24px", flexShrink:0 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+            letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
+            Criterion Weights — how much each criterion matters to the final score
+          </div>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+            {criteria.map(crit => {
+              const w = getWeight(crit.id);
+              return (
+                <div key={crit.id} style={{ padding:"8px 12px", background:DS.canvas,
+                  border:`1px solid ${DS.canvasBdr}`, borderRadius:7, minWidth:180 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:6 }}>
+                    {crit.label}
+                  </div>
+                  <div style={{ display:"flex", gap:4 }}>
+                    {[1,2,3].map(wv => (
+                      <button key={wv} onClick={() => setWeight(crit.id, wv)}
+                        style={{ flex:1, padding:"4px 6px", fontSize:10, fontWeight:700,
+                          fontFamily:"inherit", borderRadius:4, cursor:"pointer",
+                          border:`1px solid ${w===wv ? WEIGHT_COLORS[wv] : DS.canvasBdr}`,
+                          background: w===wv ? (wv===1?"#f8fafc":wv===2?"#fffbeb":"#fef2f2") : "transparent",
+                          color: w===wv ? WEIGHT_COLORS[wv] : DS.inkTer,
+                          transition:"all .1s" }}>
+                        {WEIGHT_LABELS[wv]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── TAB BAR ── */}
-      <div style={{ display:"flex", background:DS.canvasAlt, borderBottom:`1px solid ${DS.canvasBdr}`,
-        flexShrink:0, paddingLeft:28 }}>
+      <div style={{ display:"flex", background:DS.canvasAlt,
+        borderBottom:`1px solid ${DS.canvasBdr}`, flexShrink:0 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setView(t.id)}
-            style={{ padding:"10px 18px", fontSize:11, fontWeight:700, fontFamily:"inherit",
-              cursor:"pointer", border:"none", background:"transparent",
+            style={{ padding:"9px 20px", fontSize:11, fontWeight:700,
+              fontFamily:"inherit", cursor:"pointer", border:"none",
+              background:"transparent",
               borderBottom:`2px solid ${view===t.id ? DS.accent : "transparent"}`,
               color: view===t.id ? DS.accent : DS.inkTer,
-              letterSpacing:.4, transition:"all .12s",
+              letterSpacing:.3, transition:"all .12s",
               display:"flex", alignItems:"center", gap:6 }}>
             {t.label}
             {t.highlight && (
               <span style={{ width:6, height:6, borderRadius:"50%",
-                background:DS.success, display:"inline-block" }}/>
+                background:DS.accent, display:"inline-block" }}/>
             )}
           </button>
         ))}
       </div>
 
-      {/* ── WEIGHT EDITOR ── */}
-      {weightsOpen && (
-        <div style={{ padding:"12px 28px", background:"#fff9f0",
-          borderBottom:`1px solid ${DS.warnLine}`, flexShrink:0 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:DS.warning,
-            letterSpacing:.6, textTransform:"uppercase", marginBottom:10 }}>
-            Criterion Weights — drag importance of each criterion
-          </div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
-            {criteria.map(c => (
-              <div key={c.id} style={{ display:"flex", alignItems:"center", gap:8,
-                padding:"6px 12px", background:DS.canvas, borderRadius:6,
-                border:`1px solid ${DS.canvasBdr}` }}>
-                <span style={{ fontSize:11, color:DS.ink, fontWeight:600 }}>{c.label}</span>
-                <div style={{ display:"flex", gap:3 }}>
-                  {[1,2,3].map(w => (
-                    <button key={w} onClick={() => setWeight(c.id, w)}
-                      style={{ padding:"3px 9px", fontSize:10, fontWeight:700,
-                        borderRadius:4, cursor:"pointer", fontFamily:"inherit",
-                        border:`1px solid ${getWeight(c.id)===w ? WEIGHT_COLORS[w] : DS.canvasBdr}`,
-                        background: getWeight(c.id)===w ? WEIGHT_COLORS[w]+"22" : "transparent",
-                        color: getWeight(c.id)===w ? WEIGHT_COLORS[w] : DS.inkTer }}>
-                      {WEIGHT_LABELS[w]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ── MATRIX VIEW ── */}
       {view === "matrix" && (
-        <div style={{ flex:1, overflowY:"auto" }}>
+        <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
 
-          {/* Empty states */}
-          {criteria.length === 0 && (
-            <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`,
-              borderRadius:10, color:DS.inkTer, fontSize:13, margin:28 }}>
-              No decision criteria yet. Add criteria in the Decision Hierarchy module → Decision Criteria tab,
-              or promote issues tagged as Decision Criteria.
-            </div>
-          )}
-          {strategies.length === 0 && (
-            <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`,
-              borderRadius:10, color:DS.inkTer, fontSize:13, margin:28 }}>
-              No strategies yet. Build strategies in the Strategy Table module first.
-            </div>
-          )}
+          {/* Left: scoring grid */}
+          <div style={{ flex:1, overflowY:"auto", overflowX:"auto" }}>
 
-          {criteria.length > 0 && strategies.length > 0 && (
-            <div style={{ padding:"20px 28px" }}>
-
-              {/* Ranked summary strip */}
-              <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
-                {ranked.map((s, rank) => {
-                  const col = DS.s[s.colorIdx];
-                  const p   = pct(s.id);
-                  return (
-                    <div key={s.id}
-                      onClick={() => setActiveStrat(activeStrat===s.id ? null : s.id)}
-                      style={{ padding:"11px 16px", borderRadius:8, cursor:"pointer",
-                        border:`1.5px solid ${activeStrat===s.id ? col.fill : rank===0&&p>0 ? col.fill : DS.canvasBdr}`,
-                        background: activeStrat===s.id ? col.soft : rank===0&&p>0 ? col.soft+"80" : DS.canvas,
-                        display:"flex", alignItems:"center", gap:10, flex:1, minWidth:160,
-                        boxShadow: rank===0&&p>0 ? `0 0 0 3px ${col.line}50` : "0 1px 3px rgba(0,0,0,.05)",
-                        transition:"all .15s" }}>
-                      <div style={{ width:28, height:28, borderRadius:"50%",
-                        background: rank===0&&p>0 ? col.fill : DS.canvasAlt,
-                        border:`2px solid ${rank===0&&p>0 ? col.fill : DS.canvasBdr}`,
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontSize:12, fontWeight:700,
-                        color: rank===0&&p>0 ? "#fff" : DS.inkTer, flexShrink:0 }}>
-                        {rank+1}
-                      </div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                          <span style={{ fontSize:12, fontWeight:700, color:col.fill }}>{DS.sNames[s.colorIdx]||s.name}</span>
-                          {rank===0 && p>0 && <Badge variant="green" size="xs">Leading</Badge>}
-                        </div>
-                        <div style={{ height:5, background:DS.canvasAlt, borderRadius:3, overflow:"hidden" }}>
-                          <div style={{ width:`${p}%`, height:"100%",
-                            background: rank===0 ? col.fill : DS.inkDis,
-                            borderRadius:3, transition:"width .5s" }}/>
-                        </div>
-                        <div style={{ fontSize:10, color:DS.inkTer, marginTop:3 }}>
-                          {weightedTotal(s.id)} pts · {p}%
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* Empty states */}
+            {criteria.length === 0 && (
+              <div style={{ padding:"60px 40px", textAlign:"center",
+                border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10,
+                color:DS.inkTer, fontSize:13, margin:28 }}>
+                No decision criteria yet. Add criteria in Module 03 — Decision Hierarchy.
               </div>
+            )}
+            {criteria.length > 0 && strategies.length === 0 && (
+              <div style={{ padding:"60px 40px", textAlign:"center",
+                border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10,
+                color:DS.inkTer, fontSize:13, margin:28 }}>
+                No strategies yet. Build strategies in Module 04 — Strategy Table.
+              </div>
+            )}
 
-              {/* The scoring grid */}
-              <div style={{ border:`1px solid ${DS.canvasBdr}`, borderRadius:9, overflow:"hidden" }}>
+            {criteria.length > 0 && strategies.length > 0 && (
+              <div style={{ padding:"20px 24px", minWidth: 240 + strategies.length * 160 }}>
 
                 {/* Column headers */}
                 <div style={{ display:"grid",
-                  gridTemplateColumns:`240px repeat(${strategies.length}, 1fr) 90px`,
-                  background:DS.ink }}>
-                  <div style={{ padding:"11px 16px", fontSize:10, fontWeight:700,
-                    color:"#5a6175", letterSpacing:.8, textTransform:"uppercase" }}>
-                    Criterion
-                  </div>
+                  gridTemplateColumns:`220px repeat(${strategies.length}, 1fr) 100px`,
+                  marginBottom:4 }}>
+                  <div style={{ padding:"8px 12px" }}/>
                   {strategies.map(s => {
                     const col = DS.s[s.colorIdx];
+                    const sp = pct(s.id);
                     return (
-                      <div key={s.id} style={{ padding:"11px 12px",
-                        display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                      <div key={s.id} style={{ padding:"10px 12px", textAlign:"center" }}>
+                        <div style={{ display:"flex", alignItems:"center",
+                          justifyContent:"center", gap:6, marginBottom:4 }}>
                           <div style={{ width:8, height:8, borderRadius:"50%", background:col.fill }}/>
-                          <span style={{ fontSize:11, fontWeight:700, color:col.fill }}>
+                          <span style={{ fontSize:12, fontWeight:700, color:col.fill }}>
                             {DS.sNames[s.colorIdx]||s.name}
                           </span>
                         </div>
-                        <div style={{ fontSize:9, color:"#4a5168", textAlign:"center", lineHeight:1.4 }}>
-                          {s.description?.slice(0,40)||""}
+                        <div style={{ fontSize:9, color:DS.inkTer, lineHeight:1.3,
+                          marginBottom:5, maxWidth:140, margin:"0 auto 5px" }}>
+                          {s.description?.slice(0,50)||(s.name?.slice(0,50)||"")}
                         </div>
+                        {sp > 0 && (
+                          <div style={{ display:"flex", alignItems:"center",
+                            justifyContent:"center", gap:4 }}>
+                            <div style={{ width:50, height:4, background:DS.canvasBdr,
+                              borderRadius:2, overflow:"hidden" }}>
+                              <div style={{ height:"100%", width:sp+"%", background:col.fill,
+                                borderRadius:2 }}/>
+                            </div>
+                            <span style={{ fontSize:10, fontWeight:700, color:col.fill }}>{sp}%</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
-                  <div style={{ padding:"11px 12px", textAlign:"center",
-                    fontSize:10, fontWeight:700, color:"#5a6175", letterSpacing:.8, textTransform:"uppercase" }}>
-                    Total
+                  <div style={{ padding:"10px 12px", textAlign:"center",
+                    fontSize:10, fontWeight:700, color:DS.inkTer, letterSpacing:.5 }}>
+                    TOTAL
                   </div>
                 </div>
 
                 {/* Criteria rows */}
                 {criteria.map((crit, ci) => {
                   const w = getWeight(crit.id);
+                  const rowScores = strategies.map(s => getScore(s.id, crit.id));
+                  const maxRowScore = Math.max(...rowScores);
                   return (
-                    <div key={crit.id}
-                      style={{ display:"grid",
-                        gridTemplateColumns:`240px repeat(${strategies.length}, 1fr) 90px`,
-                        background: ci%2===0 ? DS.canvas : DS.canvasAlt,
-                        borderTop:`1px solid ${DS.canvasBdr}` }}>
+                    <div key={crit.id} style={{ marginBottom:3 }}>
+                      <div style={{ display:"grid",
+                        gridTemplateColumns:`220px repeat(${strategies.length}, 1fr) 100px`,
+                        background:DS.canvas,
+                        border:`1px solid ${DS.canvasBdr}`,
+                        borderRadius:8, overflow:"hidden" }}>
 
-                      {/* Criterion label */}
-                      <div style={{ padding:"12px 16px", display:"flex",
-                        flexDirection:"column", justifyContent:"center", gap:5 }}>
-                        <div style={{ fontSize:12, fontWeight:700, color:DS.ink, lineHeight:1.35 }}>
-                          {crit.label}
-                        </div>
-                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                          <Badge variant={({financial:"green",strategic:"blue",operational:"default",risk:"danger",commercial:"amber",technical:"chrome"})[crit.type]||"default"} size="xs">
-                            {crit.type}
-                          </Badge>
-                          <span style={{ fontSize:9, fontWeight:700, color:WEIGHT_COLORS[w],
-                            padding:"1px 5px", borderRadius:3,
-                            background: WEIGHT_COLORS[w]+"18",
-                            border:`1px solid ${WEIGHT_COLORS[w]}40` }}>
-                            {WEIGHT_LABELS[w]} weight
-                          </span>
-                        </div>
-                        {crit.description && (
-                          <div style={{ fontSize:10, color:DS.inkTer, lineHeight:1.4 }}>
-                            {crit.description.slice(0,70)}{crit.description.length>70?"…":""}
+                        {/* Criterion label */}
+                        <div style={{ padding:"12px 14px", borderRight:`1px solid ${DS.canvasBdr}`,
+                          display:"flex", flexDirection:"column", justifyContent:"center", gap:4 }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:DS.ink, lineHeight:1.3 }}>
+                            {crit.label}
                           </div>
-                        )}
-                      </div>
-
-                      {/* Score cells */}
-                      {strategies.map(s => {
-                        const col     = DS.s[s.colorIdx];
-                        const score   = getScore(s.id, crit.id);
-                        const isActive = activeStrat === s.id || !activeStrat;
-                        const rowBest  = Math.max(...strategies.map(st => getScore(st.id, crit.id)));
-                        const isBest   = score > 0 && score === rowBest && strategies.length > 1;
-                        return (
-                          <div key={s.id}
-                            onClick={()=>setSelectedCell(
-                              selectedCell?.stratId===s.id&&selectedCell?.critId===crit.id
-                                ? null : {stratId:s.id,critId:crit.id}
-                            )}
-                            style={{ padding:"12px 10px",
-                              display:"flex", flexDirection:"column",
-                              alignItems:"center", gap:8,
-                              opacity: isActive ? 1 : 0.35,
-                              background: selectedCell?.stratId===s.id&&selectedCell?.critId===crit.id
-                                ? col.soft+"cc"
-                                : isBest && score > 0 ? col.soft : "transparent",
-                              borderLeft:`1px solid ${DS.canvasBdr}`,
-                              cursor:"pointer",
-                              transition:"all .12s" }}>
-                            <ScoreRow value={score} onChange={v => { setScore(s.id, crit.id, v); }} color={col.fill}/>
-                            <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                              <span style={{ fontSize:12, fontWeight:700,
-                                color: score > 0 ? col.fill : DS.inkDis }}>
-                                {score > 0 ? `${score}/5` : "—"}
-                              </span>
-                              {isBest && score > 0 && (
-                                <span style={{ fontSize:9, fontWeight:700, color:col.fill,
-                                  background:col.soft, padding:"1px 5px", borderRadius:3,
-                                  border:`1px solid ${col.line}` }}>best</span>
-                              )}
+                          <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                            <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px",
+                              borderRadius:3,
+                              background: w===3?"#fef2f2":w===2?"#fffbeb":"#f8fafc",
+                              color: WEIGHT_COLORS[w],
+                              border:`1px solid ${w===3?"#fecaca":w===2?"#fde68a":"#e5e7eb"}` }}>
+                              {WEIGHT_LABELS[w]}
+                            </span>
+                            <Badge variant={({financial:"green",strategic:"blue",operational:"default",
+                              risk:"danger",commercial:"amber",technical:"chrome"})[crit.type]||"default"}
+                              size="xs">
+                              {crit.type}
+                            </Badge>
+                          </div>
+                          {crit.description && (
+                            <div style={{ fontSize:9, color:DS.inkTer, lineHeight:1.4,
+                              marginTop:1 }}>
+                              {crit.description.slice(0,70)}
                             </div>
-                            {/* Rationale + disagreement indicators */}
-                            {score > 0 && (() => {
-                              const cell = getCell(s.id, crit.id);
-                              return (
+                          )}
+                        </div>
+
+                        {/* Score cells */}
+                        {strategies.map(s => {
+                          const score = getScore(s.id, crit.id);
+                          const col   = DS.s[s.colorIdx];
+                          const cell  = getCell(s.id, crit.id);
+                          const isBest = score > 0 && score === maxRowScore && strategies.length > 1;
+                          const isSelected = selectedCell?.stratId === s.id && selectedCell?.critId === crit.id;
+                          return (
+                            <div key={s.id}
+                              onClick={() => setSelectedCell(
+                                isSelected ? null : { stratId: s.id, critId: crit.id }
+                              )}
+                              style={{ padding:"10px 8px", borderLeft:`1px solid ${DS.canvasBdr}`,
+                                cursor:"pointer", transition:"all .12s",
+                                background: isSelected
+                                  ? col.soft
+                                  : score > 0 && isBest
+                                    ? col.soft + "66"
+                                    : "transparent",
+                                display:"flex", flexDirection:"column",
+                                alignItems:"center", gap:6 }}>
+
+                              {/* Score buttons */}
+                              <div style={{ display:"flex", gap:2 }}>
+                                {[1,2,3,4,5].map(v => (
+                                  <button key={v}
+                                    onClick={e => { e.stopPropagation(); setScore(s.id, crit.id, v); }}
+                                    style={{ width:24, height:24, borderRadius:4,
+                                      cursor:"pointer", fontFamily:"inherit",
+                                      fontSize:10, fontWeight:700, transition:"all .1s",
+                                      border:`1.5px solid ${v <= score ? col.fill : DS.canvasBdr}`,
+                                      background: v <= score ? col.fill : "transparent",
+                                      color: v <= score ? "#fff" : DS.inkDis }}>
+                                    {v}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Score label */}
+                              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                                {score > 0 ? (
+                                  <span style={{ fontSize:10, fontWeight:700,
+                                    color: SCORE_COLORS[score],
+                                    padding:"1px 6px", borderRadius:3,
+                                    background: SCORE_BG[score] }}>
+                                    {SCORE_LABELS[score]}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize:10, color:DS.inkDis }}>Not scored</span>
+                                )}
+                                {isBest && score > 0 && (
+                                  <span style={{ fontSize:8, fontWeight:700, color:col.fill,
+                                    background:col.soft, padding:"1px 4px",
+                                    borderRadius:3, border:`1px solid ${col.line}` }}>★</span>
+                                )}
+                              </div>
+
+                              {/* Indicators */}
+                              {score > 0 && (
                                 <div style={{ display:"flex", gap:3, alignItems:"center" }}>
                                   {cell.rationale && (
-                                    <span style={{ width:6, height:6, borderRadius:"50%",
-                                      background:col.fill, flexShrink:0,
-                                      title:"Has rationale" }}/>
+                                    <div title="Has rationale" style={{ width:5, height:5,
+                                      borderRadius:"50%", background:"#22c55e" }}/>
                                   )}
                                   {cell.disagreement && (
-                                    <span style={{ fontSize:8, color:"#dc2626" }}>⚡</span>
+                                    <div title="Disagreement flagged" style={{ width:5, height:5,
+                                      borderRadius:"50%", background:DS.danger }}/>
                                   )}
-                                  {cell.confidence==="low" && (
-                                    <span style={{ fontSize:8, color:"#d97706" }}>?</span>
+                                  {cell.confidence === "low" && (
+                                    <div title="Low confidence" style={{ width:5, height:5,
+                                      borderRadius:"50%", background:DS.warning }}/>
                                   )}
                                 </div>
-                              );
-                            })()}
-                          {/* Cell detail on click */}
-                            {selectedCell?.stratId===s.id && selectedCell?.critId===crit.id && (() => {
-                              const cell = getCell(s.id, crit.id);
-                              return (
-                                <div style={{ width:"100%", marginTop:6 }}
-                                  onClick={e=>e.stopPropagation()}>
-                                  <div style={{ display:"flex", gap:4, marginBottom:4 }}>
-                                    {["low","moderate","high"].map(conf=>(
-                                      <button key={conf}
-                                        onClick={()=>setCell(s.id,crit.id,"confidence",conf)}
-                                        style={{ flex:1, padding:"2px 0", fontSize:9, fontWeight:700,
-                                          fontFamily:"inherit", border:`1px solid ${conf===cell.confidence?col.fill:DS.canvasBdr}`,
-                                          borderRadius:3, cursor:"pointer",
-                                          background:conf===cell.confidence?col.soft:"transparent",
-                                          color:conf===cell.confidence?col.fill:DS.inkTer }}>
-                                        {conf}
-                                      </button>
-                                    ))}
-                                  </div>
-                                  <textarea value={cell.rationale||""}
-                                    onChange={e=>setCell(s.id,crit.id,"rationale",e.target.value)}
-                                    placeholder="Why this rating?"
-                                    rows={2}
-                                    style={{ width:"100%", fontSize:10, padding:"4px 6px",
-                                      fontFamily:"inherit", background:DS.canvas,
-                                      border:`1px solid ${DS.canvasBdr}`, borderRadius:4,
-                                      color:DS.ink, outline:"none", resize:"none",
-                                      lineHeight:1.4, boxSizing:"border-box", marginBottom:4 }}/>
-                                  <textarea value={cell.concerns||""}
-                                    onChange={e=>setCell(s.id,crit.id,"concerns",e.target.value)}
-                                    placeholder="Key concerns or caveats…"
-                                    rows={1}
-                                    style={{ width:"100%", fontSize:10, padding:"4px 6px",
-                                      fontFamily:"inherit", background:"#fffbeb",
-                                      border:"1px solid #fde68a", borderRadius:4,
-                                      color:DS.ink, outline:"none", resize:"none",
-                                      lineHeight:1.4, boxSizing:"border-box", marginBottom:4 }}/>
-                                  <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                                    <button
-                                      onClick={()=>setCell(s.id,crit.id,"disagreement",!cell.disagreement)}
-                                      style={{ fontSize:9, fontWeight:700, padding:"2px 6px",
-                                        fontFamily:"inherit", border:`1px solid ${cell.disagreement?"#dc2626":"#e5e7eb"}`,
-                                        borderRadius:3, cursor:"pointer",
-                                        background:cell.disagreement?"#fef2f2":"transparent",
-                                        color:cell.disagreement?"#dc2626":DS.inkTer }}>
-                                      {cell.disagreement?"⚡ Disagreement":"Mark disagreement"}
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })}
-
-                      {/* Row scores */}
-                      <div style={{ padding:"12px 8px", display:"flex", flexDirection:"column",
-                        alignItems:"center", justifyContent:"center", gap:4,
-                        borderLeft:`1px solid ${DS.canvasBdr}`, background:DS.canvasAlt }}>
-                        {strategies.map(s => {
-                          const col   = DS.s[s.colorIdx];
-                          const score = getScore(s.id, crit.id);
-                          return score > 0 ? (
-                            <div key={s.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
-                              <div style={{ width:5, height:5, borderRadius:"50%", background:col.fill }}/>
-                              <span style={{ fontSize:10, fontWeight:700, color:col.fill }}>
-                                {score * w}
-                              </span>
+                              )}
                             </div>
-                          ) : null;
+                          );
                         })}
-                        <div style={{ fontSize:9, color:DS.inkDis, marginTop:2 }}>
-                          ×{w}
+
+                        {/* Row total */}
+                        <div style={{ padding:"10px 8px", borderLeft:`1px solid ${DS.canvasBdr}`,
+                          display:"flex", flexDirection:"column",
+                          alignItems:"center", justifyContent:"center", gap:3,
+                          background:DS.canvasAlt }}>
+                          {strategies.map(s => {
+                            const score = getScore(s.id, crit.id);
+                            const col = DS.s[s.colorIdx];
+                            return score > 0 ? (
+                              <div key={s.id} style={{ display:"flex", alignItems:"center", gap:3 }}>
+                                <div style={{ width:5, height:5, borderRadius:"50%",
+                                  background:col.fill, flexShrink:0 }}/>
+                                <span style={{ fontSize:10, fontWeight:700,
+                                  color: col.fill }}>{score}</span>
+                              </div>
+                            ) : null;
+                          })}
                         </div>
                       </div>
                     </div>
                   );
                 })}
 
-                {/* Totals footer */}
-                <div style={{ display:"grid",
-                  gridTemplateColumns:`240px repeat(${strategies.length}, 1fr) 90px`,
-                  background:DS.ink, borderTop:`2px solid ${DS.border}` }}>
-                  <div style={{ padding:"14px 16px" }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:"#5a6175",
-                      letterSpacing:.8, textTransform:"uppercase" }}>
+                {/* Total row */}
+                {scoredCount > 0 && (
+                  <div style={{ marginTop:12, padding:"14px 16px",
+                    background:DS.ink, borderRadius:8,
+                    display:"grid",
+                    gridTemplateColumns:`220px repeat(${strategies.length}, 1fr) 100px` }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#6e7d9e",
+                      display:"flex", alignItems:"center" }}>
                       Weighted Total
                     </div>
-                    <div style={{ fontSize:10, color:"#3a4159", marginTop:2 }}>
-                      Max possible: {maxPossible} pts
-                    </div>
-                  </div>
-                  {strategies.map(s => {
-                    const col   = DS.s[s.colorIdx];
-                    const total = weightedTotal(s.id);
-                    const p     = pct(s.id);
-                    const isTop = ranked[0]?.id === s.id && p > 0;
-                    return (
-                      <div key={s.id}
-                        style={{ padding:"14px 12px", display:"flex", flexDirection:"column",
-                          alignItems:"center", gap:6,
-                          background: isTop ? col.fill+"20" : "transparent",
-                          borderLeft:`1px solid ${DS.border}` }}>
-                        <div style={{ fontSize:22, fontWeight:700, color:col.fill,
-                          fontFamily:"'Libre Baskerville',Georgia,serif", lineHeight:1 }}>
-                          {total > 0 ? total : "—"}
+                    {ranked.map(s => {
+                      const col = DS.s[s.colorIdx];
+                      const sp = pct(s.id);
+                      const isLeader = s.id === ranked[0].id;
+                      return (
+                        <div key={s.id} style={{ textAlign:"center",
+                          display:"flex", flexDirection:"column",
+                          alignItems:"center", gap:4 }}>
+                          <div style={{ fontFamily:"'Libre Baskerville',serif",
+                            fontSize:22, fontWeight:700,
+                            color: isLeader ? col.fill : "#6e7d9e" }}>
+                            {sp}%
+                          </div>
+                          <div style={{ width:50, height:4, background:"#2d3650",
+                            borderRadius:2, overflow:"hidden" }}>
+                            <div style={{ height:"100%", width:sp+"%",
+                              background: isLeader ? col.fill : "#3d4d6b",
+                              borderRadius:2 }}/>
+                          </div>
+                          {isLeader && (
+                            <span style={{ fontSize:8, fontWeight:700,
+                              color:col.fill, letterSpacing:.5 }}>LEADER</span>
+                          )}
                         </div>
-                        {total > 0 && (
-                          <>
-                            <div style={{ width:"80%", height:4, background:DS.border, borderRadius:2, overflow:"hidden" }}>
-                              <div style={{ width:`${p}%`, height:"100%", background:col.fill,
-                                borderRadius:2, transition:"width .5s" }}/>
-                            </div>
-                            <div style={{ fontSize:11, fontWeight:700, color:col.fill }}>{p}%</div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                  <div style={{ padding:"14px 12px", borderLeft:`1px solid ${DS.border}`,
-                    display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <span style={{ fontSize:11, color:"#5a6175", fontWeight:700 }}>{maxPossible}</span>
+                      );
+                    })}
+                    <div/>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Cell detail panel */}
+          <div style={{ width:300, borderLeft:`1px solid ${DS.canvasBdr}`,
+            display:"flex", flexDirection:"column", flexShrink:0, overflow:"hidden" }}>
+
+            {selCell && selStrat && selCrit ? (
+              <div style={{ flex:1, overflowY:"auto", padding:20 }}>
+
+                {/* Cell header */}
+                <div style={{ padding:"12px 14px", borderRadius:8,
+                  background: selCol?.soft, border:`1px solid ${selCol?.line}`,
+                  marginBottom:16 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:selCol?.fill,
+                    letterSpacing:.5, textTransform:"uppercase", marginBottom:4 }}>
+                    {DS.sNames[selStrat.colorIdx]||selStrat.name}
+                  </div>
+                  <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:6 }}>
+                    {selCrit.label}
+                  </div>
+                  {selCell.score > 0 && (
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:20, fontWeight:700,
+                        fontFamily:"'Libre Baskerville',serif",
+                        color: SCORE_COLORS[selCell.score] }}>
+                        {selCell.score}/5
+                      </span>
+                      <span style={{ fontSize:12, fontWeight:700,
+                        color: SCORE_COLORS[selCell.score],
+                        padding:"2px 8px", borderRadius:4,
+                        background: SCORE_BG[selCell.score] }}>
+                        {SCORE_LABELS[selCell.score]}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Score picker in panel */}
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                    Score
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:4 }}>
+                    {[1,2,3,4,5].map(v => (
+                      <button key={v}
+                        onClick={() => setScore(selStrat.id, selCrit.id, v)}
+                        style={{ padding:"8px 4px", borderRadius:6,
+                          cursor:"pointer", fontFamily:"inherit", border:"1.5px solid",
+                          transition:"all .1s",
+                          borderColor: v === selCell.score ? SCORE_COLORS[v] : DS.canvasBdr,
+                          background: v === selCell.score ? SCORE_BG[v] : "transparent",
+                          display:"flex", flexDirection:"column",
+                          alignItems:"center", gap:2 }}>
+                        <span style={{ fontSize:13, fontWeight:700,
+                          color: v === selCell.score ? SCORE_COLORS[v] : DS.inkTer }}>
+                          {v}
+                        </span>
+                        <span style={{ fontSize:8, fontWeight:600,
+                          color: v === selCell.score ? SCORE_COLORS[v] : DS.inkDis,
+                          letterSpacing:.2 }}>
+                          {SCORE_LABELS[v]}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
 
-              {/* Scoring guide */}
-              <div style={{ marginTop:14, padding:"10px 14px", background:DS.canvasAlt,
-                borderRadius:7, border:`1px solid ${DS.canvasBdr}`,
-                display:"flex", gap:16, flexWrap:"wrap", alignItems:"center" }}>
-                <span style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
-                  letterSpacing:.6, textTransform:"uppercase" }}>Scoring guide:</span>
-                {[
-                  {v:1, label:"Very poor fit"},
-                  {v:2, label:"Weak"},
-                  {v:3, label:"Adequate"},
-                  {v:4, label:"Strong"},
-                  {v:5, label:"Excellent fit"},
-                ].map(g => (
-                  <div key={g.v} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                    <span style={{ width:18, height:18, borderRadius:4, background:DS.accent,
-                      display:"inline-flex", alignItems:"center", justifyContent:"center",
-                      fontSize:10, fontWeight:700, color:"#fff" }}>{g.v}</span>
-                    <span style={{ fontSize:11, color:DS.inkSub }}>{g.label}</span>
+                {/* Confidence */}
+                <div style={{ marginBottom:14 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    textTransform:"uppercase", letterSpacing:.5, marginBottom:6 }}>
+                    Confidence in this score
                   </div>
-                ))}
-                <span style={{ marginLeft:"auto", fontSize:11, color:DS.inkTer }}>
-                  Cells highlighted in strategy colour = best score in that row
-                </span>
+                  <div style={{ display:"flex", gap:4 }}>
+                    {["low","moderate","high"].map(conf => (
+                      <button key={conf}
+                        onClick={() => setCell(selStrat.id, selCrit.id, "confidence", conf)}
+                        style={{ flex:1, padding:"5px 4px", fontSize:10, fontWeight:700,
+                          fontFamily:"inherit", borderRadius:5, cursor:"pointer",
+                          border:`1px solid ${conf === selCell.confidence ? selCol?.fill : DS.canvasBdr}`,
+                          background: conf === selCell.confidence ? selCol?.soft : "transparent",
+                          color: conf === selCell.confidence ? selCol?.fill : DS.inkTer }}>
+                        {conf}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:9, color:DS.inkDis, marginTop:5, lineHeight:1.4 }}>
+                    Confidence = how well the team understands this relationship, not certainty of outcome.
+                  </div>
+                </div>
+
+                {/* Rationale */}
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    textTransform:"uppercase", letterSpacing:.5, marginBottom:6 }}>
+                    Rationale <span style={{ fontSize:9, color:DS.danger }}>required</span>
+                  </div>
+                  <textarea value={selCell.rationale||""}
+                    onChange={e => setCell(selStrat.id, selCrit.id, "rationale", e.target.value)}
+                    placeholder={"Why this score? Be specific — what evidence or reasoning supports " + SCORE_LABELS[selCell.score||3] + " for " + selCrit.label + "?"}
+                    rows={4}
+                    style={{ width:"100%", fontSize:11, padding:"8px 10px",
+                      fontFamily:"inherit", background:DS.canvasAlt,
+                      border:`1px solid ${selCell.rationale ? DS.success + "60" : DS.canvasBdr}`,
+                      borderRadius:6, color:DS.ink, outline:"none",
+                      resize:"vertical", lineHeight:1.5,
+                      boxSizing:"border-box" }}
+                    onFocus={e => e.target.style.borderColor = selCol?.fill || DS.accent}
+                    onBlur={e => e.target.style.borderColor = selCell.rationale ? DS.success+"60" : DS.canvasBdr}
+                  />
+                </div>
+
+                {/* Concerns */}
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                    textTransform:"uppercase", letterSpacing:.5, marginBottom:6 }}>
+                    Key concerns or caveats
+                  </div>
+                  <textarea value={selCell.concerns||""}
+                    onChange={e => setCell(selStrat.id, selCrit.id, "concerns", e.target.value)}
+                    placeholder="Any risks, assumptions, or conditions that could invalidate this score…"
+                    rows={2}
+                    style={{ width:"100%", fontSize:11, padding:"8px 10px",
+                      fontFamily:"inherit", background:"#fffbeb",
+                      border:`1px solid ${selCell.concerns ? "#f59e0b60" : "#fde68a"}`,
+                      borderRadius:6, color:DS.ink, outline:"none",
+                      resize:"vertical", lineHeight:1.5, boxSizing:"border-box" }}
+                  />
+                </div>
+
+                {/* Disagreement flag */}
+                <button
+                  onClick={() => setCell(selStrat.id, selCrit.id, "disagreement", !selCell.disagreement)}
+                  style={{ width:"100%", padding:"8px 12px",
+                    border:`1px solid ${selCell.disagreement ? DS.danger : DS.canvasBdr}`,
+                    borderRadius:6, cursor:"pointer", fontFamily:"inherit",
+                    background: selCell.disagreement ? DS.dangerSoft : "transparent",
+                    color: selCell.disagreement ? DS.danger : DS.inkTer,
+                    fontSize:11, fontWeight:700, display:"flex",
+                    alignItems:"center", gap:6, transition:"all .12s" }}>
+                  <span>{selCell.disagreement ? "⚑" : "⚐"}</span>
+                  {selCell.disagreement ? "Disagreement flagged — team not aligned" : "Flag disagreement"}
+                </button>
+
+                {/* What score guide says for this criterion */}
+                {selCrit.description && (
+                  <div style={{ marginTop:14, padding:"10px 12px",
+                    background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                    borderRadius:6 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:DS.inkTer,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>
+                      Criterion definition
+                    </div>
+                    <div style={{ fontSize:11, color:DS.inkSub, lineHeight:1.5 }}>
+                      {selCrit.description}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            ) : (
+              <div style={{ flex:1, display:"flex", flexDirection:"column",
+                alignItems:"center", justifyContent:"center",
+                padding:24, color:DS.inkTer, textAlign:"center" }}>
+                <div style={{ fontSize:24, marginBottom:12, opacity:.3 }}>◫</div>
+                <div style={{ fontSize:12, fontWeight:700, color:DS.inkSub, marginBottom:8 }}>
+                  Click any cell to score it
+                </div>
+                <div style={{ fontSize:11, color:DS.inkTer, lineHeight:1.6 }}>
+                  Select a strategy/criterion intersection to enter your score, rationale, confidence, and flag any team disagreements.
+                </div>
+                {completionPct > 0 && completionPct < 100 && (
+                  <div style={{ marginTop:16, padding:"8px 14px",
+                    background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                    borderRadius:6, fontSize:11, color:DS.inkTer }}>
+                    {totalCells - scoredCount} cell{totalCells-scoredCount!==1?"s":""} remaining
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -5669,165 +5792,87 @@ Return ONLY valid JSON:
       {view === "radar" && (
         <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
           {criteria.length < 3 || strategies.length === 0 ? (
-            <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`,
-              borderRadius:10, color:DS.inkTer, fontSize:13 }}>
+            <div style={{ padding:"60px 40px", textAlign:"center",
+              border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10,
+              color:DS.inkTer, fontSize:13 }}>
               Score at least 3 criteria across your strategies to see the radar comparison.
             </div>
           ) : (
-            <div>
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:4 }}>
-                  Strategy Radar Comparison
+            <div style={{ display:"flex", gap:28, flexWrap:"wrap" }}>
+              <div style={{ flexShrink:0 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:DS.ink, marginBottom:6 }}>
+                  Strategy Comparison Radar
                 </div>
-                <div style={{ fontSize:12, color:DS.inkSub }}>
-                  Visual overlay of how each strategy scores across all criteria. Larger area = stronger overall fit.
+                <div style={{ fontSize:11, color:DS.inkTer, marginBottom:16 }}>
+                  Larger area = better overall performance across criteria
                 </div>
+                <RadarChart
+                  labels={criteria.map(c => c.label)}
+                  datasets={radarDatasets}
+                  size={360}
+                />
               </div>
 
-              <div style={{ display:"flex", gap:32, flexWrap:"wrap", alignItems:"flex-start" }}>
-                {/* Radar chart */}
-                <div style={{ padding:"24px", background:DS.canvas, borderRadius:12,
-                  border:`1px solid ${DS.canvasBdr}`,
-                  boxShadow:"0 2px 12px rgba(0,0,0,.06)", flexShrink:0 }}>
-                  <RadarChart
-                    labels={criteria.map(c => c.label)}
-                    datasets={radarDatasets}
-                    size={340}
-                  />
+              <div style={{ flex:1, minWidth:240 }}>
+                {/* Strategy breakdown cards */}
+                <div style={{ fontSize:11, fontWeight:700, color:DS.inkTer,
+                  textTransform:"uppercase", letterSpacing:.5, marginBottom:12 }}>
+                  Per-Strategy Breakdown
                 </div>
-
-                {/* Legend + per-strategy breakdown */}
-                <div style={{ flex:1, minWidth:240 }}>
-                  {/* Legend */}
-                  <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:20 }}>
-                    {strategies.map(s => {
-                      const col = DS.s[s.colorIdx];
-                      return (
-                        <div key={s.id} style={{ display:"flex", alignItems:"center", gap:7 }}>
-                          <div style={{ width:12, height:4, borderRadius:2, background:col.fill }}/>
-                          <span style={{ fontSize:12, fontWeight:700, color:col.fill }}>
-                            {DS.sNames[s.colorIdx]||s.name}
-                          </span>
-                          <span style={{ fontSize:11, color:DS.inkTer }}>{pct(s.id)}%</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Per-strategy strengths/weaknesses */}
-                  {strategies.map(s => {
-                    const col    = DS.s[s.colorIdx];
-                    const sScores = criteria.map(c => ({ label:c.label, score:getScore(s.id,c.id), id:c.id }))
-                      .filter(x => x.score > 0)
-                      .sort((a,b) => b.score - a.score);
-                    const strengths  = sScores.slice(0, 2);
-                    const weaknesses = [...sScores].sort((a,b)=>a.score-b.score).slice(0, 2);
-
-                    return (
-                      <div key={s.id} style={{ marginBottom:14, padding:"14px 16px",
-                        background:col.soft, borderRadius:8,
-                        border:`1.5px solid ${col.line}` }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                          <div style={{ width:9, height:9, borderRadius:"50%", background:col.fill }}/>
-                          <span style={{ fontSize:13, fontWeight:700, color:col.fill }}>
-                            {DS.sNames[s.colorIdx]||s.name}
-                          </span>
-                          <span style={{ marginLeft:"auto", fontSize:16, fontWeight:700,
-                            color:col.fill, fontFamily:"'Libre Baskerville',Georgia,serif" }}>
-                            {pct(s.id)}%
-                          </span>
-                        </div>
-
-                        {strengths.length > 0 && (
-                          <div style={{ marginBottom:6 }}>
-                            <div style={{ fontSize:9, fontWeight:700, color:DS.success,
-                              letterSpacing:.6, textTransform:"uppercase", marginBottom:4 }}>Strengths</div>
-                            {strengths.map((x,i) => (
-                              <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                                <div style={{ width:"60%", height:4, background:"rgba(255,255,255,.5)",
-                                  borderRadius:2, overflow:"hidden" }}>
-                                  <div style={{ width:`${(x.score/5)*100}%`, height:"100%",
-                                    background:DS.success, borderRadius:2 }}/>
-                                </div>
-                                <span style={{ fontSize:10, color:DS.inkSub }}>{x.label} ({x.score}/5)</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {weaknesses.length > 0 && weaknesses[0].score < 4 && (
-                          <div>
-                            <div style={{ fontSize:9, fontWeight:700, color:DS.danger,
-                              letterSpacing:.6, textTransform:"uppercase", marginBottom:4 }}>Watch points</div>
-                            {weaknesses.filter(x=>x.score<=3).map((x,i) => (
-                              <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                                <div style={{ width:"60%", height:4, background:"rgba(255,255,255,.5)",
-                                  borderRadius:2, overflow:"hidden" }}>
-                                  <div style={{ width:`${(x.score/5)*100}%`, height:"100%",
-                                    background:DS.danger, borderRadius:2 }}/>
-                                </div>
-                                <span style={{ fontSize:10, color:DS.inkSub }}>{x.label} ({x.score}/5)</span>
-                              </div>
-                            ))}
-                          </div>
+                {ranked.map((s, rank) => {
+                  const col = DS.s[s.colorIdx];
+                  const sp = pct(s.id);
+                  const isLeader = rank === 0;
+                  return (
+                    <div key={s.id} style={{ marginBottom:12, padding:"14px 16px",
+                      border:`1px solid ${isLeader ? col.line : DS.canvasBdr}`,
+                      borderRadius:8,
+                      background: isLeader ? col.soft : DS.canvas }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                        <div style={{ width:8, height:8, borderRadius:"50%", background:col.fill }}/>
+                        <span style={{ fontSize:12, fontWeight:700, color:col.fill }}>
+                          {DS.sNames[s.colorIdx]||s.name}
+                        </span>
+                        <span style={{ marginLeft:"auto", fontFamily:"'Libre Baskerville',serif",
+                          fontSize:18, fontWeight:700, color: isLeader ? col.fill : DS.inkTer }}>
+                          {sp}%
+                        </span>
+                        {isLeader && (
+                          <Badge variant="green" size="xs">Leader</Badge>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Criteria coverage heatmap strip */}
-              <div style={{ marginTop:24, border:`1px solid ${DS.canvasBdr}`, borderRadius:8, overflow:"hidden" }}>
-                <div style={{ padding:"10px 16px", background:DS.canvasAlt,
-                  borderBottom:`1px solid ${DS.canvasBdr}`, fontSize:11, fontWeight:700, color:DS.ink }}>
-                  Score Distribution by Criterion
-                </div>
-                <div style={{ overflowX:"auto" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                    <thead>
-                      <tr style={{ background:DS.canvasAlt }}>
-                        <th style={{ padding:"8px 14px", textAlign:"left", fontSize:10, color:DS.inkTer,
-                          fontWeight:700, letterSpacing:.6, textTransform:"uppercase",
-                          borderBottom:`1px solid ${DS.canvasBdr}`, width:200 }}>Criterion</th>
-                        {strategies.map(s => (
-                          <th key={s.id} style={{ padding:"8px 10px", textAlign:"center",
-                            fontSize:10, color:DS.s[s.colorIdx]?.fill||DS.accent, fontWeight:700,
-                            borderBottom:`1px solid ${DS.canvasBdr}` }}>
-                            {DS.sNames[s.colorIdx]||s.name}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {criteria.map((c, ci) => (
-                        <tr key={c.id} style={{ borderBottom:`1px solid ${DS.canvasBdr}`,
-                          background: ci%2===0?DS.canvas:DS.canvasAlt }}>
-                          <td style={{ padding:"8px 14px", fontSize:11, color:DS.ink, fontWeight:600 }}>
-                            {c.label}
-                          </td>
-                          {strategies.map(s => {
-                            const score = getScore(s.id, c.id);
-                            const col   = DS.s[s.colorIdx];
-                            const bg    = score===0 ? "transparent" :
-                              score>=4 ? col.fill+"30" :
-                              score===3 ? col.fill+"18" : DS.dangerSoft;
-                            return (
-                              <td key={s.id} style={{ padding:"8px 10px", textAlign:"center",
-                                background:bg }}>
-                                <span style={{ fontSize:13, fontWeight:700,
-                                  color: score===0 ? DS.inkDis :
-                                    score>=4 ? col.fill : score===3 ? DS.inkSub : DS.danger }}>
-                                  {score || "—"}
+                      <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                        {criteria.map(crit => {
+                          const score = getScore(s.id, crit.id);
+                          const w = getWeight(crit.id);
+                          return (
+                            <div key={crit.id} style={{ display:"flex",
+                              alignItems:"center", gap:8 }}>
+                              <div style={{ fontSize:10, color:DS.inkSub, flex:1,
+                                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                                {crit.label}
+                                {w === 3 && <span style={{ color:DS.danger, marginLeft:3 }}>★</span>}
+                                {w === 2 && <span style={{ color:DS.warning, marginLeft:3 }}>·</span>}
+                              </div>
+                              <div style={{ display:"flex", gap:1 }}>
+                                {[1,2,3,4,5].map(v => (
+                                  <div key={v} style={{ width:10, height:10, borderRadius:2,
+                                    background: v <= score ? col.fill : DS.canvasBdr }}/>
+                                ))}
+                              </div>
+                              {score > 0 && (
+                                <span style={{ fontSize:9, fontWeight:700, width:14,
+                                  color: SCORE_COLORS[score], textAlign:"right" }}>
+                                  {score}
                                 </span>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -5838,193 +5883,166 @@ Return ONLY valid JSON:
       {view === "brief" && (
         <div style={{ flex:1, overflowY:"auto", padding:"28px 36px" }}>
           {!brief ? (
-            <div style={{ padding:"60px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`,
-              borderRadius:10, color:DS.inkTer, fontSize:13 }}>
-              <div style={{ marginBottom:16 }}>Score your strategies in the Scoring Matrix first, then generate the AI decision brief.</div>
-              <Btn variant="primary" icon="spark" onClick={generateBrief}
-                disabled={aiBusy||generating||scoredCount<strategies.length}>
-                {generating?"Writing…":"Generate Decision Brief"}
-              </Btn>
+            <div style={{ padding:"60px 40px", textAlign:"center",
+              border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10,
+              color:DS.inkTer, fontSize:13 }}>
+              <div style={{ marginBottom:16, fontSize:20, opacity:.3 }}>◉</div>
+              Score your strategies first, then generate a Decision Brief.
+              <br/>
+              <span style={{ fontSize:11 }}>The brief summarises the assessment and produces a recommendation with rationale.</span>
             </div>
           ) : (
-            <div style={{ maxWidth:860, margin:"0 auto" }}>
-
-              {/* Brief header */}
-              <div style={{ marginBottom:28 }}>
-                <div style={{ fontSize:9, fontWeight:700, color:DS.inkTer,
-                  letterSpacing:1.5, textTransform:"uppercase", marginBottom:8 }}>
-                  Decision Brief · {new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}
-                </div>
-                <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:26,
-                  fontWeight:700, color:DS.ink, lineHeight:1.25, marginBottom:12, letterSpacing:-.3 }}>
+            <div style={{ maxWidth:760, margin:"0 auto" }}>
+              {/* Headline */}
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:22,
+                  fontWeight:700, color:DS.ink, marginBottom:8, lineHeight:1.3 }}>
                   {brief.headline}
                 </div>
-                <div style={{ fontSize:13, color:DS.inkSub, lineHeight:1.7, paddingBottom:16,
-                  borderBottom:`2px solid ${DS.ink}` }}>
+                <div style={{ fontSize:13, color:DS.inkSub, lineHeight:1.7 }}>
                   {brief.situationSummary}
                 </div>
               </div>
 
-              {/* Recommendation banner */}
+              {/* Recommendation */}
               {brief.recommendedStrategyName && (() => {
-                const recStrat = strategies.find(s =>
-                  (DS.sNames[s.colorIdx]||s.name).toLowerCase() === brief.recommendedStrategyName?.toLowerCase() ||
-                  s.name?.toLowerCase() === brief.recommendedStrategyName?.toLowerCase()
-                ) || strategies[0];
-                const col = recStrat ? DS.s[recStrat.colorIdx] : DS.s[0];
+                const recStrat = strategies.find(s => s.name === brief.recommendedStrategyName);
+                const recCol = recStrat ? DS.s[recStrat.colorIdx] : { fill:DS.accent, soft:DS.accentSoft, line:DS.accentLine };
                 return (
-                  <div style={{ marginBottom:28, padding:"20px 24px",
-                    background:col.soft, border:`2px solid ${col.fill}`,
-                    borderRadius:10 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:col.fill,
-                      letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>
+                  <div style={{ padding:"18px 20px", borderRadius:10, marginBottom:20,
+                    background: recCol.soft, border:`2px solid ${recCol.line}` }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:recCol.fill,
+                      textTransform:"uppercase", letterSpacing:.8, marginBottom:6 }}>
                       Recommended Strategy
                     </div>
-                    <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:20,
-                      fontWeight:700, color:DS.ink, marginBottom:10 }}>
+                    <div style={{ fontSize:18, fontWeight:700, color:DS.ink, marginBottom:8 }}>
                       {brief.recommendedStrategyName}
                     </div>
-                    <div style={{ fontSize:13, color:DS.ink, lineHeight:1.7, marginBottom:16 }}>
+                    <div style={{ fontSize:13, color:DS.inkSub, lineHeight:1.7 }}>
                       {brief.recommendationRationale}
-                    </div>
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-                      {brief.keyTradeoff && (
-                        <div style={{ padding:"12px 14px", background:"rgba(255,255,255,.6)",
-                          borderRadius:7, border:`1px solid ${col.line}` }}>
-                          <div style={{ fontSize:10, fontWeight:700, color:DS.warning,
-                            letterSpacing:.6, textTransform:"uppercase", marginBottom:4 }}>Key Trade-off</div>
-                          <div style={{ fontSize:12, color:DS.ink, lineHeight:1.55 }}>{brief.keyTradeoff}</div>
-                        </div>
-                      )}
-                      {brief.criticalAssumption && (
-                        <div style={{ padding:"12px 14px", background:"rgba(255,255,255,.6)",
-                          borderRadius:7, border:`1px solid ${col.line}` }}>
-                          <div style={{ fontSize:10, fontWeight:700, color:DS.danger,
-                            letterSpacing:.6, textTransform:"uppercase", marginBottom:4 }}>Critical Assumption</div>
-                          <div style={{ fontSize:12, color:DS.ink, lineHeight:1.55 }}>{brief.criticalAssumption}</div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
               })()}
 
-              {/* Strategy comparison table */}
-              {brief.strategyComparisons?.length > 0 && (
-                <div style={{ marginBottom:28 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:14,
-                    fontFamily:"'Libre Baskerville',Georgia,serif" }}>
+              {/* Key tradeoff + critical assumption */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr",
+                gap:12, marginBottom:20 }}>
+                {brief.keyTradeoff && (
+                  <div style={{ padding:"14px 16px", borderRadius:8,
+                    background:"#fffbeb", border:"1px solid #fde68a" }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.warning,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:5 }}>
+                      Key Trade-off Accepted
+                    </div>
+                    <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>
+                      {brief.keyTradeoff}
+                    </div>
+                  </div>
+                )}
+                {brief.criticalAssumption && (
+                  <div style={{ padding:"14px 16px", borderRadius:8,
+                    background:"#fef2f2", border:"1px solid #fecaca" }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.danger,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:5 }}>
+                      Critical Assumption
+                    </div>
+                    <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>
+                      {brief.criticalAssumption}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Strategy comparisons */}
+              {(brief.strategyComparisons||[]).length > 0 && (
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:10 }}>
                     Strategy Comparison
                   </div>
-                  <div style={{ border:`1px solid ${DS.canvasBdr}`, borderRadius:8, overflow:"hidden" }}>
-                    <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                      <thead>
-                        <tr style={{ background:DS.canvasAlt }}>
-                          {["Strategy","Verdict","Best When","Main Risk","Score"].map(h=>(
-                            <th key={h} style={{ padding:"9px 14px", textAlign:"left",
-                              fontSize:10, fontWeight:700, color:DS.inkTer,
-                              letterSpacing:.6, textTransform:"uppercase",
-                              borderBottom:`1px solid ${DS.canvasBdr}` }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {brief.strategyComparisons.map((sc, i) => {
-                          const matchStrat = strategies.find(s =>
-                            (DS.sNames[s.colorIdx]||s.name).toLowerCase() === sc.name?.toLowerCase()
-                          );
-                          const col = matchStrat ? DS.s[matchStrat.colorIdx] : DS.s[i%DS.s.length];
-                          const isRec = sc.name?.toLowerCase() === brief.recommendedStrategyName?.toLowerCase();
-                          return (
-                            <tr key={i} style={{ borderTop:`1px solid ${DS.canvasBdr}`,
-                              background: isRec ? col.soft : DS.canvas }}>
-                              <td style={{ padding:"11px 14px" }}>
-                                <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                                  <div style={{ width:8, height:8, borderRadius:"50%", background:col.fill }}/>
-                                  <span style={{ fontSize:12, fontWeight:700, color:col.fill }}>{sc.name}</span>
-                                  {isRec && <Badge variant="green" size="xs">Recommended</Badge>}
-                                </div>
-                              </td>
-                              <td style={{ padding:"11px 14px", fontSize:12, color:DS.ink, lineHeight:1.45 }}>{sc.verdict}</td>
-                              <td style={{ padding:"11px 14px", fontSize:11, color:DS.inkSub, lineHeight:1.45 }}>{sc.bestFor}</td>
-                              <td style={{ padding:"11px 14px", fontSize:11, color:DS.danger, lineHeight:1.45 }}>{sc.mainRisk}</td>
-                              <td style={{ padding:"11px 14px", textAlign:"center" }}>
-                                <div style={{ fontSize:16, fontWeight:700, color:col.fill,
-                                  fontFamily:"'Libre Baskerville',Georgia,serif" }}>
-                                  {matchStrat ? pct(matchStrat.id) : sc.score}%
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  {brief.strategyComparisons.map((sc, i) => {
+                    const strat = strategies.find(s => s.name === sc.name);
+                    const col = strat ? DS.s[strat.colorIdx] : { fill:DS.inkTer, soft:DS.canvasAlt, line:DS.canvasBdr };
+                    return (
+                      <div key={i} style={{ padding:"12px 16px", marginBottom:8,
+                        border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
+                        display:"flex", gap:12 }}>
+                        <div style={{ width:3, background:col.fill, borderRadius:2, flexShrink:0 }}/>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:col.fill, marginBottom:3 }}>
+                            {sc.name}
+                          </div>
+                          <div style={{ fontSize:12, color:DS.ink, marginBottom:6 }}>{sc.verdict}</div>
+                          <div style={{ display:"flex", gap:12, fontSize:11, color:DS.inkSub }}>
+                            {sc.bestFor && <span>✓ Best for: {sc.bestFor}</span>}
+                            {sc.mainRisk && <span>⚠ Risk: {sc.mainRisk}</span>}
+                          </div>
+                        </div>
+                        {sc.score > 0 && (
+                          <div style={{ textAlign:"center", flexShrink:0 }}>
+                            <div style={{ fontFamily:"'Libre Baskerville',serif",
+                              fontSize:20, fontWeight:700, color:col.fill }}>
+                              {sc.score}%
+                            </div>
+                            <div style={{ fontSize:9, color:DS.inkTer }}>weighted</div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
-              {/* Conditions + next step */}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:28 }}>
-                {brief.conditionsToRevisit?.length > 0 && (
-                  <div style={{ padding:"16px 18px", background:DS.warnSoft,
-                    border:`1px solid ${DS.warnLine}`, borderRadius:8 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:DS.warning,
-                      letterSpacing:.6, textTransform:"uppercase", marginBottom:10 }}>
-                      Conditions to Revisit This Decision
+              {/* Conditions to revisit + next step */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                {(brief.conditionsToRevisit||[]).length > 0 && (
+                  <div style={{ padding:"14px 16px", background:DS.canvasAlt,
+                    border:`1px solid ${DS.canvasBdr}`, borderRadius:8 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                      Revisit if…
                     </div>
-                    {brief.conditionsToRevisit.map((c,i) => (
-                      <div key={i} style={{ fontSize:12, color:DS.ink, marginBottom:5,
-                        display:"flex", gap:6 }}>
-                        <span style={{ color:DS.warning, flexShrink:0 }}>•</span>{c}
+                    {brief.conditionsToRevisit.map((c, i) => (
+                      <div key={i} style={{ fontSize:11, color:DS.inkSub,
+                        lineHeight:1.5, marginBottom:4, paddingLeft:10,
+                        borderLeft:`2px solid ${DS.canvasBdr}` }}>
+                        {c}
                       </div>
                     ))}
                   </div>
                 )}
                 {brief.recommendedNextStep && (
-                  <div style={{ padding:"16px 18px", background:DS.successSoft,
-                    border:`1px solid ${DS.successLine}`, borderRadius:8 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:DS.success,
-                      letterSpacing:.6, textTransform:"uppercase", marginBottom:8 }}>
+                  <div style={{ padding:"14px 16px", background:DS.accentSoft,
+                    border:`1px solid ${DS.accentLine}`, borderRadius:8 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
                       Recommended Next Step
                     </div>
-                    <div style={{ fontSize:13, color:DS.ink, lineHeight:1.6, fontWeight:600 }}>
+                    <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5 }}>
                       {brief.recommendedNextStep}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* DQ Readiness */}
               {brief.dqReadiness && (
-                <div style={{ padding:"16px 20px",
-                  background: brief.dqReadiness.score >= 70 ? DS.successSoft :
-                    brief.dqReadiness.score >= 50 ? DS.warnSoft : DS.dangerSoft,
-                  border:`1px solid ${brief.dqReadiness.score>=70?DS.successLine:brief.dqReadiness.score>=50?DS.warnLine:DS.dangerLine}`,
-                  borderRadius:8, display:"flex", alignItems:"center", gap:20 }}>
+                <div style={{ marginTop:16, padding:"12px 16px",
+                  background: brief.dqReadiness.score >= 70 ? DS.successSoft : DS.warnSoft,
+                  border:`1px solid ${brief.dqReadiness.score >= 70 ? DS.successLine : DS.warnLine}`,
+                  borderRadius:8, display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:28,
+                    fontWeight:700,
+                    color: brief.dqReadiness.score >= 70 ? DS.success : DS.warning }}>
+                    {brief.dqReadiness.score}
+                  </div>
                   <div>
-                    <div style={{ fontSize:9, fontWeight:700, letterSpacing:1,
-                      textTransform:"uppercase", marginBottom:4,
-                      color:brief.dqReadiness.score>=70?DS.success:brief.dqReadiness.score>=50?DS.warning:DS.danger }}>
-                      Decision Readiness
+                    <div style={{ fontSize:10, fontWeight:700,
+                      color: brief.dqReadiness.score >= 70 ? DS.success : DS.warning,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:3 }}>
+                      DQ Readiness Score
                     </div>
-                    <div style={{ fontSize:32, fontWeight:700, lineHeight:1,
-                      fontFamily:"'Libre Baskerville',Georgia,serif",
-                      color:brief.dqReadiness.score>=70?DS.success:brief.dqReadiness.score>=50?DS.warning:DS.danger }}>
-                      {brief.dqReadiness.score}
-                      <span style={{ fontSize:14, fontWeight:400 }}>/100</span>
-                    </div>
+                    <div style={{ fontSize:11, color:DS.inkSub }}>{brief.dqReadiness.note}</div>
                   </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ height:6, background:"rgba(0,0,0,.08)", borderRadius:3, marginBottom:8, overflow:"hidden" }}>
-                      <div style={{ width:`${brief.dqReadiness.score}%`, height:"100%", borderRadius:3,
-                        background:brief.dqReadiness.score>=70?DS.success:brief.dqReadiness.score>=50?DS.warning:DS.danger,
-                        transition:"width .6s" }}/>
-                    </div>
-                    <div style={{ fontSize:12, color:DS.ink, lineHeight:1.55 }}>{brief.dqReadiness.note}</div>
-                  </div>
-                  <Btn variant="secondary" size="sm" onClick={generateBrief} disabled={aiBusy||generating}>
-                    Refresh Brief
-                  </Btn>
                 </div>
               )}
             </div>
@@ -6032,214 +6050,219 @@ Return ONLY valid JSON:
         </div>
       )}
 
-      {/* ══ ANALYSIS TAB ══ */}
-      {view==="analysis" && (
+      {/* ── AI ANALYSIS VIEW ── */}
+      {view === "analysis" && (
         <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
-          <div style={{ maxWidth:820, margin:"0 auto" }}>
-
+          <div style={{ maxWidth:720, margin:"0 auto" }}>
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
               <div style={{ flex:1 }}>
                 <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
-                  fontWeight:700, color:DS.ink, marginBottom:3 }}>Assessment Quality Analysis</div>
+                  fontWeight:700, color:DS.ink, marginBottom:3 }}>
+                  Assessment Quality Analysis
+                </div>
                 <div style={{ fontSize:12, color:DS.inkTer }}>
-                  AI evaluates rationale quality, bias risk, trade-off visibility, and consistency.
+                  Evaluates scoring rigour, differentiation, rationale coverage, and bias risk.
                 </div>
               </div>
               <Btn variant="primary" size="sm" onClick={aiAnalyseQuality}
-                disabled={aiBusy||analysing}>
-                {analysing?"Analysing…":qaAnalysis?"Re-run Analysis":"Run Analysis"}
+                disabled={aiBusy || analysing || scoredCount < 2}>
+                {analysing ? "Analysing…" : qaAnalysis ? "Re-run" : "Run Analysis"}
               </Btn>
             </div>
 
             {!qaAnalysis && !analysing && (
               <div style={{ padding:"48px 32px", textAlign:"center",
                 border:`1.5px dashed ${DS.canvasBdr}`, borderRadius:10, color:DS.inkTer }}>
-                <div style={{ fontSize:28, marginBottom:12, opacity:.4 }}>◎</div>
-                <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>Analysis not yet run</div>
-                <div style={{ fontSize:12, lineHeight:1.6, maxWidth:380, margin:"0 auto" }}>
-                  Score some cells then run AI Analysis to get quality scoring, bias detection,
-                  trade-off insights, and improvement recommendations.
+                <div style={{ fontSize:28, marginBottom:12, opacity:.3 }}>◫</div>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>Not yet run</div>
+                <div style={{ fontSize:12, lineHeight:1.6, maxWidth:400, margin:"0 auto" }}>
+                  Score at least 2 cells then run AI Analysis to check scoring rigour, detect bias, and get facilitator questions.
                 </div>
               </div>
             )}
 
             {analysing && (
-              <div style={{ textAlign:"center", padding:"48px", color:DS.inkTer }}>
-                <div style={{ fontSize:12 }}>Evaluating assessment quality…</div>
+              <div style={{ textAlign:"center", padding:48, color:DS.inkTer, fontSize:12 }}>
+                Analysing assessment quality…
               </div>
             )}
 
-            {qaAnalysis && !analysing && (
-              <div>
-                {/* Quality score */}
-                <div style={{ display:"flex", gap:16, marginBottom:20, padding:"16px 18px",
-                  background:DS.canvas, border:`1px solid ${DS.canvasBdr}`, borderRadius:10 }}>
-                  <div style={{ textAlign:"center", flexShrink:0 }}>
-                    <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:52,
-                      fontWeight:700, lineHeight:1,
-                      color:qaAnalysis.qualityScore>=70?"#059669":qaAnalysis.qualityScore>=50?"#d97706":"#dc2626" }}>
-                      {qaAnalysis.qualityScore||0}
+            {qaAnalysis && !analysing && (() => {
+              const qs = qaAnalysis.qualityScore || 0;
+              const scoreCol = qs >= 80 ? DS.success : qs >= 60 ? DS.accent : qs >= 40 ? DS.warning : DS.danger;
+              const FLAG_COLS = {
+                critical: { bg:"#fef2f2", border:"#fecaca", text:"#dc2626", icon:"⛔" },
+                warning:  { bg:"#fffbeb", border:"#fde68a", text:"#d97706", icon:"⚠" },
+                info:     { bg:"#eff6ff", border:"#bfdbfe", text:"#2563eb", icon:"ℹ" },
+              };
+              return (
+                <div>
+                  {/* Quality score */}
+                  <div style={{ display:"flex", gap:16, padding:"16px 18px",
+                    border:`1px solid ${DS.canvasBdr}`, borderRadius:10, marginBottom:20 }}>
+                    <div style={{ textAlign:"center", flexShrink:0 }}>
+                      <div style={{ fontFamily:"'Libre Baskerville',serif",
+                        fontSize:52, fontWeight:700, lineHeight:1, color:scoreCol }}>
+                        {qs}
+                      </div>
+                      <div style={{ fontSize:10, color:DS.inkTer, marginTop:4 }}>/100</div>
                     </div>
-                    <div style={{ fontSize:10, color:DS.inkTer, marginTop:4 }}>/100</div>
-                    <div style={{ fontSize:11, fontWeight:700, marginTop:6,
-                      color:qaAnalysis.qualityScore>=70?"#059669":qaAnalysis.qualityScore>=50?"#d97706":"#dc2626" }}>
-                      {qaAnalysis.qualityScore>=70?"Strong":qaAnalysis.qualityScore>=50?"Adequate":"Weak"}
+                    <div style={{ flex:1 }}>
+                      <div style={{ height:8, background:DS.canvasBdr, borderRadius:4,
+                        overflow:"hidden", marginBottom:10 }}>
+                        <div style={{ height:"100%", width:qs+"%", background:scoreCol,
+                          borderRadius:4, transition:"width .6s" }}/>
+                      </div>
+                      <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
+                        {qaAnalysis.diagnosticSummary}
+                      </div>
                     </div>
                   </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ height:8, background:DS.canvasBdr, borderRadius:4,
-                      overflow:"hidden", marginBottom:10 }}>
-                      <div style={{ height:"100%", borderRadius:4, transition:"width .6s",
-                        background:qaAnalysis.qualityScore>=70?"#059669":qaAnalysis.qualityScore>=50?"#d97706":"#dc2626",
-                        width:(qaAnalysis.qualityScore||0)+"%" }}/>
-                    </div>
-                    <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
-                      {qaAnalysis.diagnosticSummary}
-                    </div>
-                  </div>
-                </div>
 
-                {/* Validation flags */}
-                {(qaAnalysis.flags||[]).length > 0 && (
-                  <div style={{ marginBottom:20 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:10 }}>
-                      Validation Flags ({qaAnalysis.flags.length})
-                    </div>
-                    {qaAnalysis.flags.map((f,i)=>{
-                      const fc = {critical:{bg:"#fef2f2",border:"#fecaca",text:"#dc2626",icon:"⛔"},warning:{bg:"#fffbeb",border:"#fde68a",text:"#d97706",icon:"⚠"},info:{bg:"#eff6ff",border:"#bfdbfe",text:"#2563eb",icon:"ℹ"}}[f.severity]||{bg:"#eff6ff",border:"#bfdbfe",text:"#2563eb",icon:"ℹ"};
-                      return (
-                        <div key={i} style={{ marginBottom:8, padding:"10px 14px",
-                          background:fc.bg, border:`1px solid ${fc.border}`, borderRadius:7 }}>
-                          <div style={{ display:"flex", gap:8 }}>
-                            <span>{fc.icon}</span>
-                            <div style={{ flex:1 }}>
-                              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
-                                <span style={{ fontSize:11, fontWeight:700, color:fc.text }}>
-                                  {(f.type||"").replace(/_/g," ")}
-                                </span>
-                                {(f.strategy||f.criterion) && (
-                                  <span style={{ fontSize:9, color:fc.text, padding:"0 5px",
-                                    border:`1px solid ${fc.border}`, borderRadius:3 }}>
-                                    {[f.strategy,f.criterion].filter(Boolean).join(" / ")}
+                  {/* Flags */}
+                  {(qaAnalysis.flags||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:10 }}>
+                        Quality Flags ({qaAnalysis.flags.length})
+                      </div>
+                      {qaAnalysis.flags.map((f, i) => {
+                        const fc = FLAG_COLS[f.severity] || FLAG_COLS.info;
+                        return (
+                          <div key={i} style={{ marginBottom:8, padding:"10px 14px",
+                            background:fc.bg, border:`1px solid ${fc.border}`, borderRadius:7 }}>
+                            <div style={{ display:"flex", gap:8 }}>
+                              <span>{fc.icon}</span>
+                              <div style={{ flex:1 }}>
+                                <div style={{ display:"flex", gap:6, alignItems:"center", marginBottom:3 }}>
+                                  <span style={{ fontSize:11, fontWeight:700, color:fc.text }}>
+                                    {(f.type||"").replace(/_/g," ")}
                                   </span>
+                                  {f.strategy && (
+                                    <span style={{ fontSize:9, color:fc.text, padding:"0 5px",
+                                      border:`1px solid ${fc.border}`, borderRadius:3 }}>
+                                      {f.strategy}
+                                    </span>
+                                  )}
+                                  {f.criterion && (
+                                    <span style={{ fontSize:9, color:fc.text, padding:"0 5px",
+                                      border:`1px solid ${fc.border}`, borderRadius:3 }}>
+                                      {f.criterion}
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize:11, color:DS.ink, lineHeight:1.5,
+                                  marginBottom:f.suggestion?4:0 }}>
+                                  {f.message}
+                                </div>
+                                {f.suggestion && (
+                                  <div style={{ fontSize:11, color:fc.text, fontWeight:600 }}>
+                                    → {f.suggestion}
+                                  </div>
                                 )}
                               </div>
-                              <div style={{ fontSize:11, color:DS.ink, lineHeight:1.5, marginBottom:f.suggestion?4:0 }}>
-                                {f.message}
-                              </div>
-                              {f.suggestion && (
-                                <div style={{ fontSize:11, color:fc.text, fontWeight:600 }}>
-                                  → {f.suggestion}
-                                </div>
-                              )}
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Trade-off insights */}
+                  {(qaAnalysis.tradeOffInsights||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        Trade-off Insights
+                      </div>
+                      {qaAnalysis.tradeOffInsights.map((t, i) => (
+                        <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                          background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                          borderRadius:5, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                          {typeof t==="string"?t:JSON.stringify(t)}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Trade-off insights */}
-                {(qaAnalysis.tradeOffInsights||[]).length > 0 && (
-                  <div style={{ marginBottom:20 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
-                      ⚖ Trade-Off Insights
+                      ))}
                     </div>
-                    {qaAnalysis.tradeOffInsights.map((t,i)=>(
-                      <div key={i} style={{ padding:"8px 12px", marginBottom:6,
-                        background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
-                        borderRadius:6, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
-                        {i+1}. {typeof t==="string"?t:JSON.stringify(t)}
+                  )}
+
+                  {/* Missing criteria */}
+                  {(qaAnalysis.missingCriteria||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        Suggested Missing Criteria
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Disagreement risks */}
-                {(qaAnalysis.disagreementRisks||[]).length > 0 && (
-                  <div style={{ marginBottom:20 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
-                      ⚡ Likely Disagreement Areas
-                    </div>
-                    {qaAnalysis.disagreementRisks.map((r,i)=>(
-                      <div key={i} style={{ padding:"7px 10px", marginBottom:5,
-                        background:"#fef2f2", border:"1px solid #fecaca",
-                        borderRadius:5, fontSize:11, color:"#991b1b" }}>
-                        {typeof r==="string"?r:JSON.stringify(r)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Missing criteria */}
-                {(qaAnalysis.missingCriteria||[]).length > 0 && (
-                  <div style={{ marginBottom:20 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
-                      ◻ Suggested Missing Criteria
-                    </div>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                      {qaAnalysis.missingCriteria.map((m,i)=>(
-                        <span key={i} style={{ padding:"4px 10px", borderRadius:5, fontSize:11,
-                          background:"#fffbeb", border:"1px solid #fde68a", color:"#92400e" }}>
+                      {qaAnalysis.missingCriteria.map((m, i) => (
+                        <div key={i} style={{ padding:"7px 10px", marginBottom:5,
+                          background:"#fffbeb", border:"1px solid #fde68a",
+                          borderRadius:5, fontSize:11, color:"#92400e" }}>
                           + {typeof m==="string"?m:JSON.stringify(m)}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Facilitator questions */}
-                {(qaAnalysis.facilitatorQuestions||[]).length > 0 && (
-                  <div style={{ marginBottom:20 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
-                      🎙 Facilitator Questions
-                    </div>
-                    {qaAnalysis.facilitatorQuestions.map((q,i)=>(
-                      <div key={i} style={{ padding:"8px 12px", marginBottom:6,
-                        background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
-                        borderRadius:5, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
-                        {i+1}. {typeof q==="string"?q:JSON.stringify(q)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Downstream recommendations */}
-                {(qaAnalysis.downstreamRecommendations||[]).length > 0 && (
-                  <div style={{ marginBottom:20 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
-                      → Recommended Next Modules
-                    </div>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-                      {qaAnalysis.downstreamRecommendations.map((r,i)=>(
-                        <div key={i} style={{ padding:"8px 12px", background:DS.canvas,
-                          border:`1px solid ${DS.canvasBdr}`, borderRadius:7, fontSize:11 }}>
-                          <div style={{ fontWeight:700, color:DS.ink, marginBottom:2 }}>
-                            {typeof r==="string"?r:(r.module||"")}
-                          </div>
-                          {r.reason && (
-                            <div style={{ fontSize:10, color:DS.inkTer }}>{r.reason}</div>
-                          )}
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+
+                  {/* Disagreement risks */}
+                  {(qaAnalysis.disagreementRisks||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        ⚠ Disagreement Risks
+                      </div>
+                      {qaAnalysis.disagreementRisks.map((d, i) => (
+                        <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                          background:"#fef2f2", border:"1px solid #fecaca",
+                          borderRadius:5, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                          {typeof d==="string"?d:JSON.stringify(d)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Facilitator questions */}
+                  {(qaAnalysis.facilitatorQuestions||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        🎙 Facilitator Questions
+                      </div>
+                      {qaAnalysis.facilitatorQuestions.map((q, i) => (
+                        <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                          background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                          borderRadius:5, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                          {i+1}. {typeof q==="string"?q:JSON.stringify(q)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Downstream recommendations */}
+                  {(qaAnalysis.downstreamRecommendations||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        → Recommended Next Modules
+                      </div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                        {qaAnalysis.downstreamRecommendations.map((r, i) => (
+                          <div key={i} style={{ padding:"8px 12px", background:DS.canvas,
+                            border:`1px solid ${DS.canvasBdr}`, borderRadius:7, fontSize:11 }}>
+                            <div style={{ fontWeight:700, color:DS.ink, marginBottom:2 }}>
+                              {typeof r==="string"?r:(r.module||"")}
+                            </div>
+                            {r.reason && (
+                              <div style={{ fontSize:10, color:DS.inkTer }}>{r.reason}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   MODULE 06 — DQ SCORECARD
-───────────────────────────────────────────────────────────────────────────── */
 
 const DQ_ELEMENTS = [
   {
