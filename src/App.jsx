@@ -5667,32 +5667,64 @@ function ModuleQualitativeAssessment({
   // ── GENERATE BRIEF ────────────────────────────────────────────────────────────
   const generateBrief = () => {
     setGenerating(true);
-    const tableRows = criteria.map(c => {
-      const row = strategies.map(s => `${DS.sNames[s.colorIdx]||s.name}: ${getScore(s.id,c.id)||"--"}/5`).join(" | ");
-      return `${c.label} [wt:${getWeight(c.id)}]: ${row}`;
+    const tableRows = criteria.map(cr => {
+      const row = strategies.map(s => (DS.sNames[s.colorIdx]||s.name)+": "+(getScore(s.id,cr.id)||"--")+"/5").join(" | ");
+      return cr.label+" [wt:"+getWeight(cr.id)+"]: "+row;
     }).join("\n");
     const totals = strategies.map(s =>
-      `${DS.sNames[s.colorIdx]||s.name}: ${pct(s.id)}% (${weightedTotal(s.id)}/${maxPossible} weighted)`
+      (DS.sNames[s.colorIdx]||s.name)+": "+pct(s.id)+"% ("+weightedTotal(s.id)+"/"+maxPossible+" weighted)"
     ).join(", ");
     const stratDescs = strategies.map(s =>
-      `${DS.sNames[s.colorIdx]||s.name} -- ${s.description||"No description"}: ${
-        focusDecisions.map(d => {
-          const idx = s.selections?.[d.id];
-          return idx !== undefined ? `${d.label}→${d.choices[idx]}` : `${d.label}→?`;
-        }).join(", ")
-      }`
+      (DS.sNames[s.colorIdx]||s.name)+" -- "+(s.description||"No description")+": "+
+      focusDecisions.map(d => {
+        const idx = s.selections?.[d.id];
+        return idx !== undefined ? d.label+"→"+d.choices[idx] : d.label+"→?";
+      }).join(", ")
     ).join("\n");
-    aiCall(
-      `You are a senior Decision Quality expert writing a decision brief for an executive audience.\n\nDecision: "${problem.decisionStatement}"\nOwner: "${problem.owner}" | Deadline: "${problem.deadline}"\nContext: "${problem.context}"\n\nStrategies:\n${stratDescs}\n\nScores (weighted):\n${tableRows}\n\nTotals: ${totals}\n\nReturn ONLY valid JSON:\n{"headline":"One sentence decision brief","situationSummary":"2-3 sentences","recommendedStrategy":"name","recommendedStrategyName":"exact name","recommendationRationale":"3-4 sentences why","keyTradeoff":"The single most important trade-off","criticalAssumption":"The one assumption that if wrong changes the recommendation","strategyComparisons":[{"name":"name","verdict":"one sentence","bestFor":"what conditions","mainRisk":"primary downside","score":0}],"conditionsToRevisit":["Condition"],"recommendedNextStep":"Single most important action","dqReadiness":{"score":0,"note":"one sentence readiness"}}`,
-      (r) => {
-        if (!r.error) {
-          setBrief(r);
-          setView("brief");
-          onAIMsg({ role:"ai", text:`Brief ready: ${r.recommendedStrategyName}. ${r.keyTradeoff}` });
-        }
-        setGenerating(false);
+
+    const prompt =
+      "You are a senior Decision Quality expert writing an executive decision brief.\n" +
+      "Decision: " + (problem.decisionStatement||"Not defined") + "\n" +
+      "Owner: " + (problem.owner||"Not stated") + " | Deadline: " + (problem.deadline||"Not stated") + "\n" +
+      "Context: " + (problem.context||"Not provided") + "\n\n" +
+      "Strategies:\n" + stratDescs + "\n\n" +
+      "Scores (weighted):\n" + tableRows + "\n\n" +
+      "Totals: " + totals + "\n\n" +
+      "Write a concise executive brief and return a JSON object with no markdown and no explanation.\n" +
+      "Keys required:\n" +
+      "headline: one sentence capturing the decision and recommendation\n" +
+      "situationSummary: 2-3 sentences on context and why this decision matters\n" +
+      "recommendedStrategy: short name of recommended strategy\n" +
+      "recommendedStrategyName: exact strategy name as given above\n" +
+      "recommendationRationale: 3-4 sentences explaining why this strategy is recommended\n" +
+      "keyTradeoff: the single most important trade-off accepted by this recommendation\n" +
+      "criticalAssumption: the one assumption that if wrong would change the recommendation\n" +
+      "strategyComparisons: array of objects each with name (string), verdict (one sentence), bestFor (string), mainRisk (string), score (number)\n" +
+      "conditionsToRevisit: array of strings describing conditions that would trigger a re-evaluation\n" +
+      "recommendedNextStep: single most important immediate action\n" +
+      "dqReadiness: object with score (integer 0-100) and note (one sentence on decision readiness)";
+
+    aiCall(prompt, (r) => {
+      let result = r;
+      if (r && r._raw) {
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (!m) { setGenerating(false); onAIMsg({role:"ai",text:"Brief failed to parse. Try again."}); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setGenerating(false); onAIMsg({role:"ai",text:"Brief could not be parsed. Try again."}); return; }
       }
-    );
+      if (!result || result.error) {
+        setGenerating(false);
+        onAIMsg({role:"ai", text:"Brief failed: "+(result?.error||"unknown error")});
+        return;
+      }
+      setBrief(result);
+      setView("brief");
+      onAIMsg({ role:"ai", text:
+        "Brief ready: " + (result.recommendedStrategyName||result.recommendedStrategy||"") +
+        (result.keyTradeoff ? ". " + result.keyTradeoff : "")
+      });
+      setGenerating(false);
+    });
   };
 
   // ── RADAR DATA ────────────────────────────────────────────────────────────────
