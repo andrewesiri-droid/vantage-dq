@@ -4143,8 +4143,17 @@ Strategies:\n${stratDesc}
 Return ONLY JSON:
 {"overall":"pass|warn|fail","qualityScore":75,"completenessScores":[{"strategy":"name","score":0-100,"missing":["decision"]}],"coherenceIssues":[{"strategy":"name","issue":"description","severity":"critical|warning"}],"distinctiveness":"high|medium|low","distinctivenessNote":"explanation","dominatedStrategies":["strategy name if dominated"],"missingDimensions":["important evaluation dimension not yet in table"],"tradeOffInsights":["key trade-off observation"],"validationFlags":[{"type":"insufficient_alternatives|non_distinct|solution_locking|missing_dimensions|no_tradeoff|assumption_confusion|uncertainty_gap|dominated|overcomplexity","severity":"critical|warning|info","message":"specific issue"}],"facilitatorQuestions":["strategic question for the team"],"recommendations":["rec 1","rec 2"],"downstreamRecommendations":[{"module":"Scenario Planning","reason":"why"}]}`,
     (r) => {
-      setValidation(r);
-      onAIMsg({ role:"ai", text:`Validation: ${r.overall}. Distinctiveness: ${r.distinctiveness}. ${r.recommendations?.[0]||""}` });
+      let result = r;
+      if (r && r._raw) {
+        try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
+        catch(e) { setValidating(false); onAIMsg({role:"ai",text:"Analysis failed to parse. Try again."}); return; }
+      }
+      if (!result || result.error) { setValidating(false); return; }
+      setValidation(result);
+      const score = result.qualityScore ? ` Quality score: ${result.qualityScore}/100.` : "";
+      const dist  = result.distinctiveness ? ` Distinctiveness: ${result.distinctiveness}.` : "";
+      const rec   = result.recommendations?.[0] ? ` ${result.recommendations[0]}` : "";
+      onAIMsg({ role:"ai", text:`Strategy Analysis complete.${score}${dist}${rec}` });
       setValidating(false);
     });
   };
