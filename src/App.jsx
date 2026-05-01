@@ -5839,19 +5839,150 @@ function ModuleQualitativeAssessment({
               </div>
             ) : (
               <div style={{ flex:1, display:"flex", flexDirection:"column",
-                alignItems:"center", justifyContent:"center",
-                padding:24, color:DS.inkTer, textAlign:"center" }}>
-                <div style={{ fontSize:24, marginBottom:12, opacity:.3 }}>◫</div>
-                <div style={{ fontSize:12, fontWeight:700, color:DS.inkSub, marginBottom:8 }}>
-                  Click any cell to score it
+                padding:"24px 20px", overflowY:"auto" }}>
+
+                {/* Mini diagram showing grid → panel flow */}
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"stretch", marginBottom:14 }}>
+
+                    {/* Grid schematic */}
+                    <div style={{ flex:1, background:DS.canvasAlt,
+                      border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
+                      padding:"10px 10px 8px", overflow:"hidden" }}>
+                      <div style={{ fontSize:8, fontWeight:700, color:DS.inkDis,
+                        textTransform:"uppercase", letterSpacing:.6, marginBottom:7 }}>
+                        Scoring grid
+                      </div>
+                      {/* Fake mini grid */}
+                      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr 1fr",
+                        gap:3 }}>
+                        {/* Header row */}
+                        <div style={{ height:14, borderRadius:2,
+                          background:"transparent" }}/>
+                        {["S1","S2"].map(s => (
+                          <div key={s} style={{ height:14, borderRadius:3,
+                            background:DS.chromeSub,
+                            display:"flex", alignItems:"center",
+                            justifyContent:"center" }}>
+                            <span style={{ fontSize:7, fontWeight:700,
+                              color:DS.inkDis }}>{s}</span>
+                          </div>
+                        ))}
+                        {/* Criterion rows */}
+                        {["C1","C2","C3"].map((cr, ri) => (
+                          [
+                            <div key={cr} style={{ height:18, borderRadius:3,
+                              background:DS.chromeSub, display:"flex",
+                              alignItems:"center", paddingLeft:4 }}>
+                              <span style={{ fontSize:7, color:DS.inkDis }}>{cr}</span>
+                            </div>,
+                            <div key={cr+"a"} style={{ height:18, borderRadius:3,
+                              background: ri===0 ? DS.accent+"33" : DS.canvasBdr,
+                              border: ri===0 ? `1.5px solid ${DS.accent}` : "none",
+                              display:"flex", alignItems:"center",
+                              justifyContent:"center", cursor:"pointer" }}>
+                              {ri===0 && (
+                                <span style={{ fontSize:8, fontWeight:700,
+                                  color:DS.accent }}>4</span>
+                              )}
+                            </div>,
+                            <div key={cr+"b"} style={{ height:18, borderRadius:3,
+                              background:DS.canvasBdr }}/>
+                          ]
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div style={{ display:"flex", alignItems:"center",
+                      color:DS.inkDis, fontSize:16, flexShrink:0 }}>→</div>
+
+                    {/* Panel schematic */}
+                    <div style={{ flex:1, background:DS.canvasAlt,
+                      border:`1.5px solid ${DS.accent}40`,
+                      borderRadius:8, padding:"10px 10px 8px" }}>
+                      <div style={{ fontSize:8, fontWeight:700, color:DS.accent,
+                        textTransform:"uppercase", letterSpacing:.6, marginBottom:7 }}>
+                        Score panel
+                      </div>
+                      {[
+                        { label:"Score", w:"70%", accent:true },
+                        { label:"Confidence", w:"55%" },
+                        { label:"Rationale", w:"90%" },
+                        { label:"Concerns", w:"75%" },
+                      ].map(row => (
+                        <div key={row.label} style={{ marginBottom:5 }}>
+                          <div style={{ fontSize:7, color:DS.inkDis, marginBottom:2 }}>
+                            {row.label}
+                          </div>
+                          <div style={{ height:8, borderRadius:2,
+                            background:row.accent ? DS.accent+"55" : DS.canvasBdr,
+                            width:row.w }}/>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Instruction */}
+                  <div style={{ textAlign:"center" }}>
+                    <span style={{ fontSize:11, color:DS.inkTer, lineHeight:1.6 }}>
+                      Click any cell in the grid to open the scoring panel.
+                      Enter a score, your rationale, and confidence level.
+                    </span>
+                  </div>
                 </div>
-                <div style={{ fontSize:11, color:DS.inkTer, lineHeight:1.6 }}>
-                  Select a strategy/criterion intersection to enter your score, rationale, confidence, and flag any team disagreements.
+
+                {/* Score guide — what 1–5 means */}
+                <div style={{ borderTop:`1px solid ${DS.canvasBdr}`,
+                  paddingTop:16, marginBottom:4 }}>
+                  <div style={{ fontSize:9, fontWeight:700, color:DS.inkDis,
+                    textTransform:"uppercase", letterSpacing:.6, marginBottom:10 }}>
+                    Score guide
+                  </div>
+                  {[
+                    { score:5, label:"Excellent", color:"#059669", desc:"Strong evidence this strategy excels" },
+                    { score:4, label:"Good",      color:"#2563eb", desc:"Clear advantage over alternatives" },
+                    { score:3, label:"Adequate",  color:"#6b7280", desc:"Meets the bar, no clear edge" },
+                    { score:2, label:"Weak",      color:"#d97706", desc:"Below expectations, material gap" },
+                    { score:1, label:"Poor",      color:"#dc2626", desc:"Strategy fails on this criterion" },
+                  ].map(item => (
+                    <div key={item.score} style={{ display:"flex", alignItems:"center",
+                      gap:8, marginBottom:7 }}>
+                      <div style={{ width:20, height:20, borderRadius:4, flexShrink:0,
+                        background:item.color+"18",
+                        border:`1.5px solid ${item.color}`,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:10, fontWeight:700, color:item.color }}>
+                        {item.score}
+                      </div>
+                      <div style={{ flex:1 }}>
+                        <span style={{ fontSize:10, fontWeight:700,
+                          color:item.color, marginRight:5 }}>
+                          {item.label}
+                        </span>
+                        <span style={{ fontSize:10, color:DS.inkTer }}>
+                          — {item.desc}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
+                {/* DQ tip */}
+                <div style={{ marginTop:8, padding:"8px 10px",
+                  background:DS.accentSoft,
+                  border:`1px solid ${DS.accentLine}`,
+                  borderRadius:6, fontSize:10,
+                  color:DS.inkTer, lineHeight:1.5 }}>
+                  <span style={{ fontWeight:700, color:DS.accent }}>DQ tip: </span>
+                  If all strategies score similarly on a criterion, that criterion
+                  may not be decision-relevant. Push for differentiation.
+                </div>
+
                 {completionPct > 0 && completionPct < 100 && (
-                  <div style={{ marginTop:16, padding:"8px 14px",
+                  <div style={{ marginTop:12, padding:"7px 12px",
                     background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
-                    borderRadius:6, fontSize:11, color:DS.inkTer }}>
+                    borderRadius:6, fontSize:11, color:DS.inkTer, textAlign:"center" }}>
                     {totalCells - scoredCount} cell{totalCells-scoredCount!==1?"s":""} remaining
                   </div>
                 )}
