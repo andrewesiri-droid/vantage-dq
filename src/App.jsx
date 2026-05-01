@@ -1115,7 +1115,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
               </div>
 
               <Field label="Situation / Context" fieldKey="context" required rows={4}
-                placeholder="What situation, trigger, or opportunity created the need for this decision? Describe the current reality, what is changing, and why this matters now."
+                placeholder="What event, trigger, or situation created the need for this decision? e.g. a competitor move, board mandate, regulatory change, market opportunity, or performance gap. Describe the current reality, what is changing, and why this decision cannot be delayed."
                 hint="Describe the situation, not the solution"/>
 
               <Field label="Why This Decision Matters" fieldKey="importance" rows={3}
@@ -1188,6 +1188,31 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                   ))}
                 </div>
               </div>
+
+              {/* Root Decision Guard Rail */}
+              {(data.decisionStatement||"").length > 20 && (
+                <div style={{ marginBottom:18, padding:"12px 14px",
+                  background:"#f5f3ff", border:"1px solid #ddd6fe",
+                  borderRadius:7, display:"flex", gap:10 }}>
+                  <span style={{ fontSize:16, flexShrink:0 }}>🔍</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#7c3aed",
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>
+                      Root Decision Check
+                    </div>
+                    <div style={{ fontSize:11, color:"#4c1d95", lineHeight:1.6, marginBottom:5 }}>
+                      Is this <em>the</em> decision, or a sub-decision of a larger one?
+                      Teams often frame a sub-decision without realising the root decision
+                      hasn&#39;t been made yet — leading to premature commitment downstream.
+                    </div>
+                    <div style={{ fontSize:11, color:"#6d28d9", lineHeight:1.6 }}>
+                      <strong>Ask:</strong> Could a more fundamental decision change whether
+                      this decision matters at all? e.g. &#34;Should we expand internationally?&#34;
+                      must be resolved before &#34;Which APAC market should we enter?&#34;
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
                 <Field label="Decision Owner" fieldKey="owner" required rows={1} type="text"
@@ -1711,10 +1736,172 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                 </div>
               )}
             </div>
-          )}
+
+            {/* ── AI Facilitator Chat ── */}
+            {v && !checking && (
+              <div style={{ marginTop:24, borderTop:`1px solid ${DS.canvasBdr}`,
+                paddingTop:20 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                  <div style={{ width:28, height:28, borderRadius:7, flexShrink:0,
+                    background:"linear-gradient(135deg,#7c3aed,#2563eb)",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:13 }}>🎙</div>
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>AI Facilitator</div>
+                    <div style={{ fontSize:10, color:DS.inkTer }}>
+                      Ask anything about your frame — or click a prompt below
+                    </div>
+                  </div>
+                </div>
+
+                {/* Opening message + quick prompt chips */}
+                <div style={{ padding:"12px 14px", marginBottom:8,
+                  background:"linear-gradient(135deg,#f5f3ff,#eff6ff)",
+                  border:`1px solid #ddd6fe`, borderRadius:8 }}>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <div style={{ width:24, height:24, borderRadius:"50%", flexShrink:0,
+                      background:"linear-gradient(135deg,#7c3aed,#2563eb)",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize:9, color:"#fff", fontWeight:700 }}>DQ</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:"#7c3aed", marginBottom:4 }}>
+                        AI Facilitator
+                      </div>
+                      <div style={{ fontSize:12, color:DS.ink, lineHeight:1.6, marginBottom:8 }}>
+                        {v.diagnosticSummary
+                          ? v.diagnosticSummary + " What would you like to explore?"
+                          : "I've reviewed your frame. What aspect would you like to work on?"}
+                      </div>
+                      {(v.facilitatorQuestions||[]).length > 0 && (
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                          {v.facilitatorQuestions.slice(0,3).map((q,qi)=>{
+                            const qText = typeof q === "string" ? q : JSON.stringify(q);
+                            return (
+                              <button key={qi}
+                                onClick={()=>{
+                                  onAIMsg({ role:"user", text:qText });
+                                  const fp =
+                                    "You are an elite DQ facilitator coaching a team on their decision frame. " +
+                                    "The user is asking: "" + qText + "". " +
+                                    "Their frame — Decision: "" + (data.decisionStatement||"") + "". " +
+                                    "Context: "" + (data.context||"") + "". " +
+                                    "Owner: "" + (data.owner||"") + "". " +
+                                    "Objectives: "" + (data.objectives||"") + "". " +
+                                    "DQ Score: " + (v.overallScore||"?") + "/100. " +
+                                    "Respond as a senior DQ facilitator — specific, direct, practical. Under 120 words. Conversational, no bullet points.";
+                                  aiCall(fp, (r)=>{
+                                    const txt = typeof r==="string"?r:(r&&r._raw?r._raw.replace(/```json|```/g,"").trim():(r&&typeof r==="object"?(r.message||r.text||r.executiveSummary||""):String(r)));
+                                    onAIMsg({ role:"ai", text:txt||"Let me think about that differently…" });
+                                  });
+                                }}
+                                style={{ padding:"3px 10px", fontSize:10, fontFamily:"inherit",
+                                  border:"1px solid #ddd6fe", borderRadius:12,
+                                  background:"rgba(124,58,237,.08)", color:"#7c3aed",
+                                  cursor:"pointer", lineHeight:1.5 }}>
+                                {qText.length > 55 ? qText.slice(0,55)+"…" : qText}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Message history */}
+                {(messages||[]).filter(m=>m.role==="user"||m.role==="ai").slice(-8).map((msg,mi)=>(
+                  <div key={mi} style={{ marginBottom:6, padding:"9px 12px",
+                    borderRadius:7, display:"flex", gap:8,
+                    background:msg.role==="user"?DS.canvas:DS.canvasAlt,
+                    border:`1px solid ${DS.canvasBdr}` }}>
+                    <div style={{ width:22, height:22, borderRadius:"50%", flexShrink:0,
+                      background:msg.role==="user"?DS.chromeSub:"linear-gradient(135deg,#7c3aed,#2563eb)",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize:9, fontWeight:700,
+                      color:msg.role==="user"?DS.textSec:"#fff" }}>
+                      {msg.role==="user"?"You":"DQ"}
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:msg.role==="user"?DS.inkTer:"#7c3aed",
+                        marginBottom:3, textTransform:"uppercase", letterSpacing:.4 }}>
+                        {msg.role==="user"?"You":"AI Facilitator"}
+                      </div>
+                      <div style={{ fontSize:12, color:DS.ink, lineHeight:1.6 }}>
+                        {typeof msg.text==="string"?msg.text:JSON.stringify(msg.text)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Input */}
+                <ProblemDefChat
+                  data={data} v={v}
+                  aiCall={aiCall} aiBusy={aiBusy}
+                  onAIMsg={onAIMsg}/>
+              </div>
+            )}
+
+          </div>
+        )}
 
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProblemDefChat({ data, v, aiCall, aiBusy, onAIMsg }) {
+  const [inputText, setInputText] = useState("");
+
+  const send = () => {
+    const text = inputText.trim();
+    if (!text || aiBusy) return;
+    setInputText("");
+    onAIMsg({ role:"user", text });
+
+    const fp =
+      "You are an elite Decision Quality facilitator coaching a team on their problem definition. " +
+      "The user says: "" + text + "". " +
+      "Current frame — Decision Statement: "" + (data.decisionStatement||"not yet defined") + "". " +
+      "Context: "" + (data.context||"not yet defined") + "". " +
+      "Owner: "" + (data.owner||"not defined") + "". " +
+      "Objectives: "" + (data.objectives||"not defined") + "". " +
+      "Key Uncertainties: "" + (data.keyUncertainties||"not defined") + "". " +
+      "Scope In: "" + (data.scopeIn||"not defined") + "". " +
+      "Success Criteria: "" + (data.successCriteria||"not defined") + "". " +
+      "DQ Score: " + (v?.overallScore||"not run") + "/100. " +
+      "Open flags: " + ((v?.flags||[]).filter(f=>f.severity==="critical"||f.severity==="warning").map(f=>f.title||f.message).join("; ")||"none") + ". " +
+      "Respond as a senior DQ facilitator — specific, direct, constructive, referencing their actual frame. " +
+      "Help them improve decision quality. Under 150 words. Conversational tone. No bullet points.";
+
+    aiCall(fp, (r)=>{
+      let txt = "";
+      if (typeof r==="string") txt = r;
+      else if (r&&r._raw) txt = r._raw.replace(/```json|```/g,"").trim();
+      else if (r&&typeof r==="object") txt = r.message||r.text||r.executiveSummary||"";
+      onAIMsg({ role:"ai", text:txt||"Could you tell me more about what you are trying to achieve?" });
+    });
+  };
+
+  return (
+    <div style={{ display:"flex", gap:8, marginTop:8 }}>
+      <input
+        value={inputText}
+        onChange={e=>setInputText(e.target.value)}
+        onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
+        placeholder="Ask the AI facilitator about your decision frame…"
+        disabled={aiBusy}
+        style={{ flex:1, padding:"9px 12px", fontSize:12, fontFamily:"inherit",
+          background:DS.canvas, border:`1px solid ${DS.canvasBdr}`,
+          borderRadius:7, color:DS.ink, outline:"none" }}/>
+      <button onClick={send} disabled={aiBusy||!inputText.trim()}
+        style={{ padding:"9px 16px", fontSize:12, fontWeight:700,
+          fontFamily:"inherit", border:"none", borderRadius:7,
+          background:"linear-gradient(135deg,#7c3aed,#2563eb)",
+          color:"#fff", cursor:"pointer",
+          opacity:aiBusy||!inputText.trim()?0.5:1 }}>
+        {aiBusy?"…":"Ask →"}
+      </button>
     </div>
   );
 }
