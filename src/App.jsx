@@ -13993,7 +13993,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
   const [phase, setPhase] = useState("landing");
   const [inputMode, setInputMode] = useState("paste");
   const [rawText, setRawText] = useState("");
-  const [guidedAnswers, setGuidedAnswers] = useState({ frame:"", trigger:"", options:"", uncertainty:"", success:"" });
+  const [guidedAnswers, setGuidedAnswers] = useState({ frame:"", trigger:"", options:"", regret:"", alignment:"" });
   const [analysisProgress, setAnalysisProgress] = useState([]);
   const [draft, setDraft] = useState(null);
   const [accepted, setAccepted] = useState({});
@@ -14003,28 +14003,28 @@ function QuickStartScreen({ onComplete, onSkip }) {
   const GUIDED_QUESTIONS = [
     {
       key: "frame",
-      label: "What is the decision you are trying to make?",
-      placeholder: "Describe the decision in your own words — not the problem, not a task, but the actual choice. Who has to decide, and on what?\n\nExample: \"We need to decide whether to build our own logistics capability or continue outsourcing — and if we build, at what scale and pace.\"",
+      label: "If we walk out of this process with a great outcome, what decision will we have confidently made?",
+      placeholder: "Describe the decision as if it has already been resolved — what choice was made, by whom, and with what level of confidence?\n\nExample: \"We will have decided to enter APAC through a strategic partnership rather than a direct subsidiary — with clear partner criteria agreed, a budget ceiling set, and the board aligned on a 24-month horizon.\"",
     },
     {
       key: "trigger",
-      label: "What triggered this decision, and what happens if it is delayed or avoided?",
-      placeholder: "What changed — internally or externally — that put this on the agenda now? What is the cost of inaction or delay?\n\nExample: \"A key logistics partner just announced a 40% price increase effective Q3. If we don't act, our margins collapse. If we delay, we lose 12 months of build time.\"",
+      label: "What problem, opportunity, tension, or trigger is making this decision necessary right now?",
+      placeholder: "What is forcing this onto the agenda? Is it an external event, internal tension, a missed opportunity, or a looming deadline?\n\nExample: \"A key competitor moved into APAC 14 months ago and is taking market share. Internally, our growth targets require a new region by FY26. There is tension between the CFO (capital caution) and the CEO (speed to market).\"",
     },
     {
       key: "options",
-      label: "What are the main options or directions being considered?",
-      placeholder: "List the real alternatives on the table — not just the preferred one. Include the \"do nothing\" or \"status quo\" option if relevant.\n\nExample: \"(1) Build in-house fulfilment centres, (2) Acquire a regional logistics firm, (3) Re-negotiate existing contracts, (4) Hybrid — partial build plus outsource peak capacity.\"",
+      label: "What are the real choices available to us — including doing nothing or delaying action?",
+      placeholder: "List every serious option on the table. Include the status quo. Don't pre-filter — even options that seem unlikely may matter.\n\nExample: \"(1) Direct subsidiary in Singapore, (2) Acquire a regional player, (3) Strategic partnership with a local firm, (4) Delay 12 months and gather more data, (5) Licence our technology to an APAC operator.\"",
     },
     {
-      key: "uncertainty",
-      label: "What do you not know that most affects this decision?",
-      placeholder: "What are the key unknowns, risks, or variables outside your control that could make the right answer different?\n\nExample: \"We don't know whether customer demand will sustain at current levels. We're also uncertain whether we can hire operations talent fast enough. Regulatory changes in two markets could shift our cost structure.\"",
+      key: "regret",
+      label: "What could make us regret this decision in the future?",
+      placeholder: "Think forward: what risks, assumptions, blind spots, or stakeholder conflicts could come back to haunt this decision? Be honest about what you don't know.\n\nExample: \"If demand doesn't materialise, we've committed $25M we can't recover. If we pick the wrong partner, we lose 2 years and our reputation. We're also assuming regulatory stability — which is uncertain. The board may lose confidence if milestones slip.\"",
     },
     {
-      key: "success",
-      label: "What does a great outcome look like — and what would a poor one cost you?",
-      placeholder: "Describe what success looks like in concrete terms: financial, strategic, operational. Then describe what a bad decision would cost.\n\nExample: \"Success = logistics cost per unit drops 25% within 18 months, NPS improves, no customer SLA breach during transition. Failure = >$15M written off, 6-month operational disruption, competitor takes market share during our distraction.\"",
+      key: "alignment",
+      label: "Who needs to be aligned for this decision to succeed — and what constraints or realities must we respect?",
+      placeholder: "Name the key stakeholders, decision-makers, and influencers. Then list the hard constraints — budget, regulation, capability, political realities — that bound the solution space.\n\nExample: \"Board must approve >$10M. CFO needs a credible payback model. Legal must clear regulatory exposure. Hard constraints: $25M Year 1 cap, no more than 30 new hires, must comply with APAC data residency laws.\"",
     },
   ];
 
