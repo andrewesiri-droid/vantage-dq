@@ -9742,29 +9742,40 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   // ── AI Generate ───────────────────────────────────────────────────────────
   const generateNodes = () => {
     setGenerating(true);
+
     const focusDecs = decisions.filter(d => d.tier === "focus").map(d => d.label).join(", ");
-    const strats = strategies.map(s => s.name).join(", ");
-    const existing = nodes.map(n => n.type + ": " + n.label).join("; ");
+    const stratNames = strategies.map(s => s.name).join(", ");
+    const issuesSummary = issues.slice(0,8).map(i => i.text?.slice(0,60)).filter(Boolean).join("; ");
+    const existing = nodes.map(n => n.label).join(", ");
 
     const prompt =
-      "Build an influence diagram for this decision using Decision Quality methodology.\n" +
+      "Build a Decision Quality influence diagram. The diagram must show the causal chain from decisions through uncertainties to value outcomes.\n\n" +
+      "Context:\n" +
       "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
-      "Focus decisions: " + (focusDecs || "none") + "\n" +
-      "Strategies: " + (strats || "none") + "\n" +
-      "Existing nodes (do not duplicate): " + (existing || "none") + "\n\n" +
-      "Include all four DQ node types:\n" +
-      "- decision: controllable choices the decision maker can make\n" +
-      "- uncertainty: unknown external variables that affect outcomes\n" +
-      "- deterministic: calculated values like revenue, cost, NPV\n" +
-      "- value: terminal outcome nodes like total NPV or strategic value\n" +
-      "Value nodes must be terminal — they cannot influence other nodes.\n" +
-      "No circular dependencies.\n\n" +
+      "Decision options (Focus Decisions): " + (focusDecs || "none") + "\n" +
+      "Strategies being evaluated: " + (stratNames || "none") + "\n" +
+      "Key issues: " + (issuesSummary || "none") + "\n" +
+      "Nodes already in diagram (do not duplicate): " + (existing || "none") + "\n\n" +
+      "Rules for a proper DQ influence diagram:\n" +
+      "1. DECISION nodes (rectangles): the controllable choices — use the Focus Decisions above\n" +
+      "2. UNCERTAINTY nodes (ovals): external unknowns that affect outcomes — things we cannot control\n" +
+      "3. DETERMINISTIC nodes (rounded rectangles): calculated intermediate values — revenue, cost, production, market share\n" +
+      "4. VALUE nodes (hexagons): the terminal outcomes we care about — NPV, total value, strategic position. These have NO outgoing edges.\n\n" +
+      "Layout convention — assign a column (1-5) to each node for left-to-right flow:\n" +
+      "Column 1: Decision nodes (leftmost — these we control)\n" +
+      "Column 2: Direct uncertainty nodes (what we don't know)\n" +
+      "Column 3: Intermediate calculated nodes (what the decisions + uncertainties drive)\n" +
+      "Column 4: Near-terminal nodes (aggregated results)\n" +
+      "Column 5: Value nodes (rightmost — ultimate outcomes)\n\n" +
+      "Generate 8-15 nodes with meaningful edges showing causality.\n" +
+      "Every decision node must have at least one outgoing edge.\n" +
+      "Every value node must have at least one incoming edge.\n" +
+      "Use short, specific labels (2-5 words max).\n\n" +
       "Return a JSON object with no markdown and no explanation.\n" +
-      "Keys required:\n" +
-      "nodes: array of objects each with type (decision or uncertainty or deterministic or value), label (short name), description (one sentence), impact (High or Medium or Low), control (High or Medium or Low)\n" +
-      "edges: array of objects each with from (node label), to (node label), label (relationship verb like drives or affects or determines)\n" +
-      "insight: one sentence about the decision structure\n" +
-      "missingNodes: array of strings naming what else should be added";
+      "nodes: array of objects each with label (string), type (decision or uncertainty or deterministic or value), description (one sentence), column (integer 1-5), row (integer 1-4 — vertical position within the column)\n" +
+      "edges: array of objects each with from (exact node label), to (exact node label), label (causal verb: drives, determines, affects, limits, enables)\n" +
+      "insight: one sentence summary of the key causal story\n" +
+      "missingNodes: array of strings";
 
     aiCall(prompt, (r) => {
       let result = r;
@@ -9772,7 +9783,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
         const m = (r._raw||"").match(/\{[\s\S]*\}/);
         if (!m) { setGenerating(false); onAIMsg({role:"ai",text:"No JSON returned. Try again."}); return; }
         try { result = JSON.parse(m[0]); }
-        catch(e) { setGenerating(false); onAIMsg({role:"ai",text:"Could not parse response. Try again."}); return; }
+        catch(e) { setGenerating(false); onAIMsg({role:"ai",text:"Could not parse. Try again."}); return; }
       }
       if (!result || result.error) {
         onAIMsg({ role:"ai", text: "Error: " + (result?.error||"No response") });
@@ -9787,28 +9798,57 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
         setGenerating(false); return;
       }
 
-      const newNodes = rawNodes.map((n, i) => ({
-        id: uid("n"), type: n.type || "uncertainty",
-        label: n.label || "Node "+(i+1),
-        description: n.description || "",
-        owner: n.owner || "", assumptions: "", tags: [],
-        impact: n.impact || "Medium", control: n.control || "Low",
-        x: 150 + (i % 4) * 260, y: 100 + Math.floor(i / 4) * 180,
-      }));
+      // Layout: column-based DQ positions
+      const COL_X = { 1: 60, 2: 340, 3: 620, 4: 880, 5: 1140 };
+      const ROW_H = 180;
+      const colCounters = {};
 
+      const newNodes = rawNodes.map((n) => {
+        const col = Math.min(5, Math.max(1, n.column || 3));
+        const row = Math.min(4, Math.max(1, n.row || (colCounters[col] = (colCounters[col]||0)+1)));
+        colCounters[col] = Math.max(colCounters[col]||0, row);
+        return {
+          id: uid("n"),
+          type: n.type || "uncertainty",
+          label: n.label || "Node",
+          description: n.description || "",
+          owner: "", assumptions: "", tags: [],
+          impact: n.impact || "Medium",
+          control: n.type === "decision" ? "High" : n.type === "value" ? "Low" : "Low",
+          x: COL_X[col] + (Math.random() * 20 - 10),
+          y: (row - 1) * ROW_H + 80 + (Math.random() * 10),
+        };
+      });
+
+      // Edge matching — fuzzy: exact → startsWith → includes
       const allNodes = [...nodes, ...newNodes];
-      const normalize = s => (s||"").toLowerCase().trim();
+      const norm = s => (s||"").toLowerCase().trim();
+      const findNode = label => {
+        const ln = norm(label);
+        return allNodes.find(n => norm(n.label) === ln)
+            || allNodes.find(n => norm(n.label).startsWith(ln.slice(0,10)))
+            || allNodes.find(n => ln.startsWith(norm(n.label).slice(0,10)))
+            || allNodes.find(n => norm(n.label).includes(ln.slice(0,8)))
+            || allNodes.find(n => ln.includes(norm(n.label).slice(0,8)));
+      };
+
       const newEdges = rawEdges.map(e => {
-        const src = allNodes.find(n => normalize(n.label) === normalize(e.from));
-        const tgt = allNodes.find(n => normalize(n.label) === normalize(e.to));
-        return src && tgt ? { id:uid("e"), from:src.id, to:tgt.id, label:e.label||"influences" } : null;
+        const src = findNode(e.from);
+        const tgt = findNode(e.to);
+        return src && tgt && src.id !== tgt.id
+          ? { id:uid("e"), from:src.id, to:tgt.id, label:e.label||"influences" }
+          : null;
       }).filter(Boolean);
 
-      setNodes(prev => [...prev, ...newNodes]);
-      setEdges(prev => [...prev, ...newEdges]);
+      // Deduplicate edges
+      const edgeKeys = new Set(edges.map(e => e.from+"_"+e.to));
+      const dedupedEdges = newEdges.filter(e => !edgeKeys.has(e.from+"_"+e.to));
 
-      const msg = result.insight || ("Added "+newNodes.length+" nodes"+(newEdges.length?" and "+newEdges.length+" links.":"."));
-      const missing = result.missingNodes?.length ? " Consider adding: "+result.missingNodes.join(", ")+"." : "";
+      setNodes(prev => [...prev, ...newNodes]);
+      setEdges(prev => [...prev, ...dedupedEdges]);
+
+      const msg = result.insight || ("Added "+newNodes.length+" nodes and "+dedupedEdges.length+" connections.");
+      const missing = result.missingNodes?.length ? " Consider adding: "+result.missingNodes.slice(0,3).join(", ")+"." : "";
       onAIMsg({ role:"ai", text: msg + missing });
       setGenerating(false);
     });
