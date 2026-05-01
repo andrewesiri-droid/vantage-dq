@@ -9708,6 +9708,242 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
 }
 
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   PROJECTOR VIEW — Room-facing display for Workshop Mode
+   Opens in a separate browser window. Reads state from localStorage.
+   Participants can vote on canvas items from their phones/devices.
+───────────────────────────────────────────────────────────────────────────── */
+function ProjectorView() {
+  const WS_KEY = "vantage_workshop_state";
+  const PROJ_TAGS = [
+    {id:"issue",      label:"Issue",       color:"#dc2626", bg:"rgba(220,38,38,.12)"},
+    {id:"uncertainty",label:"Uncertainty", color:"#d97706", bg:"rgba(217,119,6,.12)"},
+    {id:"assumption", label:"Assumption",  color:"#7c3aed", bg:"rgba(124,58,237,.12)"},
+    {id:"opportunity",label:"Opportunity", color:"#059669", bg:"rgba(5,150,105,.12)"},
+    {id:"action",     label:"Action",      color:"#2563eb", bg:"rgba(37,99,235,.12)"},
+    {id:"question",   label:"Question",    color:"#0891b2", bg:"rgba(8,145,178,.12)"},
+  ];
+
+  const [wsState, setWsState]   = useState(null);
+  const [votedIds, setVotedIds] = useState(new Set());
+  const prevTs = useRef(0);
+
+  useEffect(() => {
+    const poll = () => {
+      try {
+        const raw = localStorage.getItem(WS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed.ts !== prevTs.current) {
+          prevTs.current = parsed.ts;
+          setWsState(parsed);
+        }
+      } catch(e) {}
+    };
+    poll();
+    const id = setInterval(poll, 500);
+    return () => clearInterval(id);
+  }, []);
+
+  const castVote = (itemId) => {
+    if (votedIds.has(itemId)) return;
+    setVotedIds(prev => new Set([...prev, itemId]));
+    try {
+      localStorage.setItem(WS_KEY + "_vote", JSON.stringify({ itemId, ts: Date.now() }));
+    } catch(e) {}
+  };
+
+  if (!wsState) return (
+    <div style={{ position:"fixed", inset:0, background:"#0a0d14",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif", color:"#f1f5f9" }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ fontSize:64, marginBottom:24, opacity:.2 }}>⊡</div>
+        <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:28,
+          fontWeight:700, marginBottom:12 }}>Waiting for workshop…</div>
+        <div style={{ fontSize:15, color:"#64748b", lineHeight:1.6 }}>
+          Open Workshop Mode in Vantage DQ<br/>then click <strong style={{color:"#818cf8"}}>⊡ Projector</strong>
+        </div>
+      </div>
+    </div>
+  );
+
+  const { phase, timerSeconds, timerRunning, canvasItems, phaseData, decision } = wsState;
+  const totalPhases = 10;
+  const timerColor = timerSeconds < 60 ? "#dc2626" : timerSeconds < 180 ? "#f59e0b" : "#22c55e";
+  const fmtTime = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+  const phaseDuration = phaseData?.duration || 15;
+  const timerPct = Math.min(100, (timerSeconds / (phaseDuration * 60)) * 100);
+  const visibleItems = [...(canvasItems||[])]
+    .filter(x => x.tag !== "action")
+    .sort((a,b) => (b.votes||0) - (a.votes||0))
+    .slice(0, 18);
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#0a0d14",
+      fontFamily:"'IBM Plex Sans','Helvetica Neue',sans-serif",
+      color:"#f1f5f9", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=Libre+Baskerville:wght@700&display=swap');
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes livePulse{0%,100%{opacity:.4}50%{opacity:1}}
+        @keyframes timerWarn{0%,100%{opacity:1}50%{opacity:.5}}
+        *{box-sizing:border-box;margin:0;padding:0}
+      `}</style>
+
+      {/* Phase progress strip */}
+      <div style={{ display:"flex", height:5, flexShrink:0 }}>
+        {Array.from({length:totalPhases}, (_,i) => (
+          <div key={i} style={{ flex:1,
+            background: i < phase ? "#22c55e" : i===phase ? timerColor : "rgba(255,255,255,.05)",
+            transition:"background .4s", borderRight:"1px solid #0a0d14" }}/>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div style={{ padding:"22px 56px 18px", display:"flex",
+        alignItems:"center", gap:40, flexShrink:0,
+        borderBottom:"1px solid rgba(255,255,255,.05)" }}>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#334155",
+            textTransform:"uppercase", letterSpacing:2, marginBottom:8 }}>
+            Phase {phase+1} / {totalPhases}
+          </div>
+          <div style={{ fontFamily:"'Libre Baskerville',serif",
+            fontSize:40, fontWeight:700, color:"#f1f5f9", lineHeight:1.1, marginBottom:10 }}>
+            {phaseData?.label || ""}
+          </div>
+          <div style={{ fontSize:16, color:"#64748b", lineHeight:1.55, maxWidth:620 }}>
+            {phaseData?.objective || ""}
+          </div>
+        </div>
+
+        {/* Big timer */}
+        <div style={{ flexShrink:0, position:"relative", width:160, height:160 }}>
+          <svg width={160} height={160} style={{ transform:"rotate(-90deg)", position:"absolute", inset:0 }}>
+            <circle cx={80} cy={80} r={68} fill="none" stroke="rgba(255,255,255,.05)" strokeWidth={7}/>
+            <circle cx={80} cy={80} r={68} fill="none" stroke={timerColor} strokeWidth={7}
+              strokeLinecap="round"
+              strokeDasharray={`${2*Math.PI*68}`}
+              strokeDashoffset={`${2*Math.PI*68*(1-timerPct/100)}`}
+              style={{transition:"stroke-dashoffset .5s,stroke .5s"}}/>
+          </svg>
+          <div style={{ position:"absolute", inset:0,
+            display:"flex", flexDirection:"column",
+            alignItems:"center", justifyContent:"center", gap:4 }}>
+            <div style={{ fontFamily:"'Libre Baskerville',serif",
+              fontSize:38, fontWeight:700, color:timerColor, letterSpacing:-1,
+              animation:timerSeconds<60&&timerRunning?"timerWarn 1s infinite":"none" }}>
+              {fmtTime(timerSeconds)}
+            </div>
+            <div style={{ fontSize:10, color:"#334155", textTransform:"uppercase",
+              letterSpacing:1 }}>
+              {timerRunning?"running":"paused"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Decision context */}
+      {decision && (
+        <div style={{ padding:"8px 56px", borderBottom:"1px solid rgba(255,255,255,.03)",
+          flexShrink:0, display:"flex", gap:12, alignItems:"center" }}>
+          <span style={{ fontSize:9, color:"#1e293b", fontWeight:700,
+            textTransform:"uppercase", letterSpacing:1.5, flexShrink:0 }}>Decision</span>
+          <span style={{ fontSize:12, color:"#475569", lineHeight:1.4 }}>
+            {decision.slice(0,140)}{decision.length>140?"…":""}
+          </span>
+        </div>
+      )}
+
+      {/* Canvas items */}
+      <div style={{ flex:1, overflowY:"auto", padding:"20px 56px 24px" }}>
+        {visibleItems.length === 0 ? (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+            height:"100%", flexDirection:"column", gap:14, opacity:.2 }}>
+            <div style={{ fontSize:56 }}>◎</div>
+            <div style={{ fontFamily:"'Libre Baskerville',serif",
+              fontSize:22, color:"#64748b", textAlign:"center" }}>
+              Canvas items will appear here as the facilitator adds them
+            </div>
+          </div>
+        ) : (
+          <div style={{ columns: visibleItems.length > 8 ? 3 : visibleItems.length > 4 ? 2 : 1,
+            columnGap:14 }}>
+            {visibleItems.map((item, i) => {
+              const tag = PROJ_TAGS.find(t=>t.id===item.tag) || PROJ_TAGS[0];
+              const hasVoted = votedIds.has(item.id);
+              return (
+                <div key={item.id}
+                  style={{ breakInside:"avoid", marginBottom:10, padding:"14px 16px",
+                    borderRadius:10, background:tag.bg,
+                    border:`1px solid ${tag.color}25`,
+                    display:"flex", gap:12, alignItems:"center",
+                    animation:`fadeIn .25s ease ${Math.min(i*0.05,0.5)}s both` }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:8, fontWeight:700, color:tag.color,
+                      textTransform:"uppercase", letterSpacing:.8, marginBottom:5 }}>
+                      {tag.label}
+                    </div>
+                    <div style={{ fontSize:15, color:"#e2e8f0", lineHeight:1.45 }}>
+                      {item.text}
+                    </div>
+                  </div>
+                  <button onClick={() => castVote(item.id)}
+                    style={{ flexShrink:0, width:52, padding:"8px 4px",
+                      border:`1.5px solid ${hasVoted?tag.color:"rgba(255,255,255,.1)"}`,
+                      borderRadius:8, cursor:hasVoted?"default":"pointer",
+                      background:hasVoted?tag.color+"22":"transparent",
+                      display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+                      transition:"all .2s" }}>
+                    <span style={{ fontSize:18, color:hasVoted?tag.color:"#475569" }}>
+                      {hasVoted?"▲":"△"}
+                    </span>
+                    <span style={{ fontSize:16, fontWeight:700,
+                      fontFamily:"'Libre Baskerville',serif",
+                      color:hasVoted?tag.color:"#64748b" }}>
+                      {item.votes||0}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding:"10px 56px", borderTop:"1px solid rgba(255,255,255,.03)",
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        flexShrink:0, background:"#080b10" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ width:6, height:6, borderRadius:"50%", background:"#22c55e",
+            animation:"livePulse 2s infinite" }}/>
+          <span style={{ fontSize:10, color:"#1e293b", fontWeight:700, letterSpacing:1 }}>
+            VANTAGE DQ · LIVE SESSION
+          </span>
+        </div>
+        <div style={{ fontSize:11, color:"#1e293b" }}>
+          {canvasItems?.length||0} items · tap △ to vote
+        </div>
+        <div style={{ display:"flex", gap:6 }}>
+          {PROJ_TAGS.filter(t=>t.id!=="action").map(t => {
+            const count = (canvasItems||[]).filter(x=>x.tag===t.id).length;
+            if (!count) return null;
+            return (
+              <span key={t.id} style={{ fontSize:9, fontWeight:700, color:t.color,
+                padding:"2px 7px", background:t.bg, borderRadius:4 }}>
+                {t.label} {count}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssues, onStrategies, onExit, aiCall, aiBusy, onAIMsg }) {
 
   // ── PHASES ────────────────────────────────────────────────────────────────
@@ -9840,6 +10076,42 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
   const [newAction, setNewAction]       = useState({text:"",owner:"",due:""});
   const [showActions, setShowActions]   = useState(false);
   const [tensionInput, setTensionInput] = useState("");
+
+  const [projectorOpen, setProjectorOpen] = useState(false);
+
+  // ── PROJECTOR SYNC via localStorage ─────────────────────────────────────
+  const WS_KEY = "vantage_workshop_state";
+
+  useEffect(() => {
+    const state = {
+      phase, timerSeconds, timerRunning,
+      canvasItems, phaseData: PHASES[phase],
+      tensions, actions, participants,
+      decision: problem?.decisionStatement || "",
+    };
+    try { localStorage.setItem(WS_KEY, JSON.stringify(state)); } catch(e) {}
+  }, [phase, timerSeconds, timerRunning, canvasItems, tensions, actions, participants]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== WS_KEY + "_vote") return;
+      try {
+        const { itemId } = JSON.parse(e.newValue || "{}");
+        if (itemId) setCanvasItems(prev =>
+          prev.map(x => x.id===itemId ? {...x, votes:(x.votes||0)+1} : x)
+        );
+      } catch(ex) {}
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+
+  const openProjector = () => {
+    const base = window.location.href.split("?")[0];
+    window.open(base + "?ws_projector=1", "vantage_projector",
+      "width=1280,height=800,menubar=no,toolbar=no,location=no,scrollbars=no");
+    setProjectorOpen(true);
+  };
 
   // ── TIMER ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -10082,6 +10354,14 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
               background:showParking?"rgba(255,255,255,.08)":"transparent",
               color:"#94a3b8", cursor:"pointer" }}>
             🅿 {parkingLot.length}
+          </button>
+          <button onClick={openProjector}
+            style={{ padding:"4px 12px", fontSize:10, fontWeight:700, fontFamily:"inherit",
+              border:"1px solid rgba(99,102,241,.5)", borderRadius:5,
+              background: projectorOpen?"rgba(99,102,241,.15)":"transparent",
+              color:projectorOpen?"#818cf8":"#6366f1", cursor:"pointer",
+              display:"flex", alignItems:"center", gap:5 }}>
+            ⊡ Projector
           </button>
           <button onClick={onExit}
             style={{ padding:"4px 10px", fontSize:10, fontWeight:600, fontFamily:"inherit",
@@ -16892,6 +17172,12 @@ function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, onNew
 
 /* ── MAIN APP ─────────────────────────────────────────────────────────────── */
 export default function App() {
+  // ── Projector mode: render room-facing view when ?ws_projector=1 ──────────
+  if (typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("ws_projector") === "1") {
+    return <ProjectorView/>;
+  }
+
   const [module, setModule]               = useState("problem");
   const [problem, setProblem]             = useState(defaultProblem);
   const [issues, setIssues]               = useState(defaultIssues);
