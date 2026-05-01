@@ -8751,10 +8751,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
           </div>
         )}
 
-      </div>
-
-
-      {/* ── ANALYSIS VIEW ── */}
+        {/* ── ANALYSIS VIEW ── */}
         {view === "analysis" && (
           <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
             <div style={{ maxWidth: 760, margin: "0 auto" }}>
