@@ -4130,32 +4130,58 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
 
   const aiValidate = () => {
     setValidating(true);
-    const tableDesc = nowDecisions.map(d=>`"${d.label}": [${d.choices.join(" / ")}]`).join("\n");
-    const stratDesc = strategies.map(s=>{
-      const path = nowDecisions.map(d=>{ const i=s.selections[d.id]; return i!==undefined?`${d.label}:${d.choices[i]}`:"MISSING"; }).join(", ");
-      return `${s.name}: ${path}`;
+    const tableDesc = nowDecisions.map(d => d.label + ": [" + d.choices.join(" / ") + "]").join("\n");
+    const stratDesc = strategies.map((s, i) => {
+      const path = nowDecisions.map(d => {
+        const idx = s.selections?.[d.id];
+        return idx !== undefined ? d.label + ":" + d.choices[idx] : d.label + ":MISSING";
+      }).join(", ");
+      return (i+1) + ". " + s.name +
+        (s.objective ? " | Goal: " + s.objective : "") +
+        (s.description ? " | Logic: " + s.description : "") +
+        " | Choices: " + path;
     }).join("\n");
-    aiCall(`You are a DQ expert. Validate these strategies for coherence, completeness, and distinctiveness.
-Decision: "${problem.decisionStatement}"
-Decisions:\n${tableDesc}
-Strategies:\n${stratDesc}
 
-Return ONLY JSON:
-{"overall":"pass|warn|fail","qualityScore":75,"completenessScores":[{"strategy":"name","score":0-100,"missing":["decision"]}],"coherenceIssues":[{"strategy":"name","issue":"description","severity":"critical|warning"}],"distinctiveness":"high|medium|low","distinctivenessNote":"explanation","dominatedStrategies":["strategy name if dominated"],"missingDimensions":["important evaluation dimension not yet in table"],"tradeOffInsights":["key trade-off observation"],"validationFlags":[{"type":"insufficient_alternatives|non_distinct|solution_locking|missing_dimensions|no_tradeoff|assumption_confusion|uncertainty_gap|dominated|overcomplexity","severity":"critical|warning|info","message":"specific issue"}],"facilitatorQuestions":["strategic question for the team"],"recommendations":["rec 1","rec 2"],"downstreamRecommendations":[{"module":"Scenario Planning","reason":"why"}]}`,
-    (r) => {
-      let result = r;
-      if (r && r._raw) {
-        try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
-        catch(e) { setValidating(false); onAIMsg({role:"ai",text:"Analysis failed to parse. Try again."}); return; }
+    aiCall(
+      "You are a DQ expert evaluating a strategy table. " +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + ". " +
+      "Available decisions: " + tableDesc + ". " +
+      "Strategies:\n" + stratDesc + "\n\n" +
+      "Evaluate for: (1) completeness -- does each strategy make a choice on every decision? " +
+      "(2) coherence -- do the choices within each strategy make sense together? " +
+      "(3) distinctiveness -- are strategies genuinely different or just variations? " +
+      "(4) missing alternatives -- what important strategic directions are absent? " +
+      "Return ONLY valid JSON: " +
+      '{"overall":"pass|warn|fail","qualityScore":75,' +
+      '"completenessScores":[{"strategy":"name","score":80,"missing":["decision label if missing"]}],' +
+      '"coherenceIssues":[{"strategy":"name","issue":"specific incoherence","severity":"critical|warning"}],' +
+      '"distinctiveness":"high|medium|low","distinctivenessNote":"explanation of how different the strategies really are",' +
+      '"dominatedStrategies":["strategy name that is strictly worse than another"],' +
+      '"missingAlternatives":["important strategic direction not represented"],' +
+      '"tradeOffInsights":["key trade-off the team should discuss"],' +
+      '"validationFlags":[{"type":"non_distinct|solution_locking|missing_dimensions|dominated|overcomplexity","severity":"critical|warning|info","message":"specific observation"}],' +
+      '"facilitatorQuestions":["question to challenge the team"],' +
+      '"recommendations":["specific improvement to make"],' +
+      '"executiveSummary":"2-3 sentence plain English assessment of the strategy table quality"}',
+      (r) => {
+        let result = r;
+        if (r && r._raw) {
+          try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
+          catch(e) { setValidating(false); onAIMsg({role:"ai", text:"Analysis could not be parsed. Try again."}); return; }
+        }
+        if (!result || result.error) {
+          setValidating(false);
+          onAIMsg({role:"ai", text:"Analysis failed: " + (result?.error || "unknown error")});
+          return;
+        }
+        setValidation(result);
+        const score = result.qualityScore != null ? " Quality: " + result.qualityScore + "/100." : "";
+        const dist  = result.distinctiveness ? " Distinctiveness: " + result.distinctiveness + "." : "";
+        const summ  = result.executiveSummary || result.recommendations?.[0] || "";
+        onAIMsg({ role:"ai", text: "Strategy Analysis complete." + score + dist + (summ ? " " + summ : "") });
+        setValidating(false);
       }
-      if (!result || result.error) { setValidating(false); return; }
-      setValidation(result);
-      const score = result.qualityScore ? ` Quality score: ${result.qualityScore}/100.` : "";
-      const dist  = result.distinctiveness ? ` Distinctiveness: ${result.distinctiveness}.` : "";
-      const rec   = result.recommendations?.[0] ? ` ${result.recommendations[0]}` : "";
-      onAIMsg({ role:"ai", text:`Strategy Analysis complete.${score}${dist}${rec}` });
-      setValidating(false);
-    });
+    );
   };
 
   const activeSData = strategies.find(s=>s.id===activeS);
@@ -4272,7 +4298,7 @@ Return ONLY JSON:
     return nowDecisions.length > 0 ? Math.round((filled/nowDecisions.length)*100) : 0;
   };
 
-  const MODES = [{ id:"builder",label:"Builder" },{ id:"workshop",label:"Workshop" },{ id:"review",label:"Review" },{ id:"analysis",label:"Strategy Analysis" }];
+  const MODES = [{ id:"builder",label:"Builder" },{ id:"workshop",label:"Workshop" },{ id:"review",label:"Review" },{ id:"compare",label:"Compare & Contrast" },{ id:"analysis",label:"Strategy Analysis" }];
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
@@ -4803,6 +4829,233 @@ Return ONLY JSON:
         )}
 
         {/* ══ ANALYSIS MODE ══ */}
+        {/* ── COMPARE & CONTRAST ──────────────────────────────────────── */}
+        {mode==="compare" && (
+          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
+            <div style={{ maxWidth:960, margin:"0 auto" }}>
+
+              {strategies.length < 2 ? (
+                <div style={{ padding:"48px 32px", textAlign:"center",
+                  border:`1.5px dashed ${DS.canvasBdr}`, borderRadius:10, color:DS.inkTer }}>
+                  <div style={{ fontSize:28, marginBottom:12, opacity:.4 }}>⊞</div>
+                  <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>Need at least 2 strategies</div>
+                  <div style={{ fontSize:12, lineHeight:1.6 }}>Add strategies in the Builder tab first.</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                    fontWeight:700, color:DS.ink, marginBottom:4 }}>Compare & Contrast</div>
+                  <div style={{ fontSize:12, color:DS.inkTer, marginBottom:24 }}>
+                    Side-by-side comparison of all strategies across every decision dimension.
+                  </div>
+
+                  {/* ── DECISION CHOICES GRID ── */}
+                  <div style={{ marginBottom:28, overflowX:"auto" }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                      textTransform:"uppercase", letterSpacing:.6, marginBottom:12 }}>
+                      Decision Choices by Strategy
+                    </div>
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding:"8px 12px", textAlign:"left",
+                            background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                            fontSize:10, fontWeight:700, color:DS.inkTer,
+                            textTransform:"uppercase", letterSpacing:.5, minWidth:160 }}>
+                            Decision
+                          </th>
+                          {strategies.map((s,i) => {
+                            const col = DS.s[i%DS.s.length];
+                            return (
+                              <th key={s.id} style={{ padding:"8px 12px", textAlign:"center",
+                                background:col.soft, border:`1px solid ${DS.canvasBdr}`,
+                                fontSize:11, fontWeight:700, color:col.fill, minWidth:140 }}>
+                                {s.name}
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {nowDecisions.map((d, di) => (
+                          <tr key={d.id} style={{ background:di%2===0?DS.canvas:DS.canvasAlt }}>
+                            <td style={{ padding:"10px 12px",
+                              border:`1px solid ${DS.canvasBdr}`,
+                              fontWeight:600, color:DS.ink }}>
+                              {d.label}
+                              <div style={{ fontSize:10, color:DS.inkTer, marginTop:2,
+                                fontWeight:400 }}>
+                                {d.choices.join(" / ")}
+                              </div>
+                            </td>
+                            {strategies.map((s, si) => {
+                              const sel = s.selections?.[d.id];
+                              const idxs = Array.isArray(sel) ? sel : sel !== undefined ? [sel] : [];
+                              const chosen = idxs.map(i => d.choices[i]).filter(Boolean);
+                              const col = DS.s[si%DS.s.length];
+                              // Check if this choice differs from others (highlight divergence)
+                              const allChoices = strategies.map(st2 => {
+                                const s2sel = st2.selections?.[d.id];
+                                const s2idxs = Array.isArray(s2sel) ? s2sel : s2sel !== undefined ? [s2sel] : [];
+                                return s2idxs.sort().join(",");
+                              });
+                              const isUnique = allChoices.filter(x => x === idxs.sort().join(",")).length === 1;
+                              return (
+                                <td key={s.id} style={{ padding:"10px 12px",
+                                  textAlign:"center",
+                                  border:`1px solid ${DS.canvasBdr}`,
+                                  background:chosen.length===0?"#fff8f8":isUnique?col.soft+"80":"transparent" }}>
+                                  {chosen.length > 0 ? (
+                                    <div>
+                                      <span style={{ fontSize:11, fontWeight:700, color:col.fill }}>
+                                        {chosen.join(" + ")}
+                                      </span>
+                                      {isUnique && (
+                                        <div style={{ fontSize:8, color:col.fill,
+                                          marginTop:2, fontWeight:600 }}>unique</div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize:10, color:DS.danger }}>—</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* ── STRATEGY PROFILES ── */}
+                  <div style={{ marginBottom:28 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                      textTransform:"uppercase", letterSpacing:.6, marginBottom:12 }}>
+                      Strategy Profiles
+                    </div>
+                    <div style={{ display:"grid",
+                      gridTemplateColumns:`repeat(${Math.min(strategies.length,3)},1fr)`,
+                      gap:14 }}>
+                      {strategies.map((s, si) => {
+                        const col = DS.s[si%DS.s.length];
+                        const completeness = nowDecisions.length > 0
+                          ? Math.round((Object.keys(s.selections||{}).filter(k =>
+                              nowDecisions.find(d=>d.id===k)).length / nowDecisions.length) * 100)
+                          : 0;
+                        return (
+                          <div key={s.id} style={{ padding:"16px 18px",
+                            border:`1.5px solid ${col.line}`,
+                            borderRadius:10, background:col.soft }}>
+                            <div style={{ display:"flex", alignItems:"center",
+                              gap:8, marginBottom:10 }}>
+                              <div style={{ width:10, height:10, borderRadius:"50%",
+                                background:col.fill, flexShrink:0 }}/>
+                              <div style={{ fontSize:13, fontWeight:700, color:DS.ink }}>
+                                {s.name}
+                              </div>
+                              <div style={{ marginLeft:"auto", fontSize:10, fontWeight:700,
+                                color:completeness===100?DS.success:completeness>50?DS.warning:DS.danger }}>
+                                {completeness}%
+                              </div>
+                            </div>
+                            {s.objective && (
+                              <div style={{ fontSize:11, color:DS.ink,
+                                lineHeight:1.5, marginBottom:8,
+                                fontStyle:"italic" }}>"{s.objective}"</div>
+                            )}
+                            {s.description && (
+                              <div style={{ fontSize:11, color:DS.inkSub,
+                                lineHeight:1.5, marginBottom:8 }}>{s.description}</div>
+                            )}
+                            {/* Key choices */}
+                            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                              {nowDecisions.map(d => {
+                                const sel = s.selections?.[d.id];
+                                const idxs = Array.isArray(sel) ? sel : sel !== undefined ? [sel] : [];
+                                const chosen = idxs.map(i => d.choices[i]).filter(Boolean);
+                                return chosen.length > 0 ? (
+                                  <div key={d.id} style={{ fontSize:10, color:DS.inkSub,
+                                    display:"flex", gap:6 }}>
+                                    <span style={{ color:DS.inkTer, flexShrink:0 }}>{d.label}:</span>
+                                    <span style={{ fontWeight:600, color:col.fill }}>
+                                      {chosen.join(" + ")}
+                                    </span>
+                                  </div>
+                                ) : null;
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ── DIVERGENCE SUMMARY ── */}
+                  <div style={{ padding:"14px 18px",
+                    background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
+                    borderRadius:8, marginBottom:20 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:DS.accent,
+                      textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                      Divergence Analysis
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      {nowDecisions.map(d => {
+                        const uniqueChoices = new Set(strategies.map(s => {
+                          const sel = s.selections?.[d.id];
+                          const idxs = Array.isArray(sel) ? sel : sel !== undefined ? [sel] : [];
+                          return idxs.sort().join(",");
+                        }));
+                        const diverged = uniqueChoices.size > 1;
+                        const allMissing = strategies.every(s => {
+                          const sel = s.selections?.[d.id];
+                          return sel === undefined;
+                        });
+                        return (
+                          <div key={d.id} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                            <div style={{ width:8, height:8, borderRadius:"50%", flexShrink:0,
+                              background:allMissing?DS.danger:diverged?DS.success:DS.inkDis }}/>
+                            <div style={{ fontSize:11, color:DS.ink, flex:1 }}>
+                              <span style={{ fontWeight:600 }}>{d.label}:</span>{" "}
+                              {allMissing ? (
+                                <span style={{ color:DS.danger }}>Not selected in any strategy</span>
+                              ) : diverged ? (
+                                <span style={{ color:DS.success }}>
+                                  Strategies diverge — genuinely different choices ({uniqueChoices.size} distinct paths)
+                                </span>
+                              ) : (
+                                <span style={{ color:DS.inkTer }}>
+                                  All strategies make the same choice — not a differentiator
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ marginTop:10, fontSize:11, color:DS.accent, fontStyle:"italic" }}>
+                      {(() => {
+                        const divergingCount = nowDecisions.filter(d => {
+                          const choices = new Set(strategies.map(s => {
+                            const sel = s.selections?.[d.id];
+                            const idxs = Array.isArray(sel) ? sel : sel !== undefined ? [sel] : [];
+                            return idxs.sort().join(",");
+                          }));
+                          return choices.size > 1;
+                        }).length;
+                        if (nowDecisions.length === 0) return "Add decisions to see divergence analysis.";
+                        if (divergingCount === 0) return "⚠ Strategies make identical choices on every decision — they may not be genuinely distinct.";
+                        if (divergingCount === nowDecisions.length) return "✓ Strategies diverge on every decision — high distinctiveness.";
+                        return `Strategies diverge on ${divergingCount} of ${nowDecisions.length} decisions. Consider whether the ${nowDecisions.length-divergingCount} shared decisions are truly given or could be differentiated.`;
+                      })()}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {mode==="analysis" && (
           <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
             <div style={{ maxWidth:820, margin:"0 auto" }}>
