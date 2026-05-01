@@ -8189,14 +8189,52 @@ Return ONLY valid JSON:
 
   // Platform completion snapshot
   const completionItems = [
-    { label:"Problem Definition",     done: problem.decisionStatement?.length > 20,    note:`${problem.owner||"No owner set"}` },
-    { label:"Issues Raised",          done: issues.length > 0,                          note:`${issues.length} issues · ${issues.filter(i=>i.severity==="Critical").length} critical` },
-    { label:"Decision Hierarchy",     done: focusDecisions.length > 0,                  note:`${focusDecisions.length} focus decisions · ${criteria.length} criteria` },
-    { label:"Strategy Table",         done: strategies.some(s=>Object.keys(s.selections||{}).length>0), note:`${strategies.length} strategies` },
-    { label:"Qualitative Assessment", done: Object.keys(assessmentScores).length > 0,   note:`${Object.keys(assessmentScores).length} scores recorded` },
-    { label:"DQ Scorecard",           done: Object.values(dqScores).some(s=>s>0),       note:Object.values(dqScores).some(s=>s>0)?`Overall: ${Math.round(DQ_ELEMENTS.reduce((s,e)=>s+(dqScores[e.key]||0),0)/DQ_ELEMENTS.length)}/100`:"Not scored" },
+    { id:"problem",    label:"Problem Definition",     module:"problem",    tier:"core",     required:true,
+      done: problem.decisionStatement?.length > 20,
+      note: problem.decisionStatement?.length > 20 ? (problem.owner ? "Owner: "+problem.owner : "⚠ No owner") : "⚠ Not defined",
+      impact:"Executive summary, board narrative" },
+    { id:"issues",     label:"Issue Raising",          module:"issues",     tier:"core",     required:true,
+      done: issues.length >= 3,
+      note: issues.length+" issues · "+issues.filter(i=>i.severity==="Critical").length+" critical",
+      impact:"Risk register, open risks" },
+    { id:"hierarchy",  label:"Decision Hierarchy",     module:"hierarchy",  tier:"core",     required:true,
+      done: focusDecisions.length > 0 && criteria.length > 0,
+      note: focusDecisions.length+" focus decisions · "+criteria.length+" criteria",
+      impact:"Decision framing, strategy comparison" },
+    { id:"strategy",   label:"Strategy Table",         module:"strategy",   tier:"core",     required:true,
+      done: strategies.length >= 2 && strategies.some(s=>Object.keys(s.selections||{}).length>0),
+      note: strategies.length+" strategies"+(strategies.length<2?" ⚠ need ≥2":""),
+      impact:"Strategy comparisons, recommendation" },
+    { id:"assessment", label:"Qualitative Assessment", module:"assessment", tier:"core",     required:true,
+      done: Object.keys(assessmentScores).length > 0,
+      note: (()=>{ const t=strategies.length*criteria.length; const s=Object.keys(assessmentScores).length; return t>0?s+"/"+t+" cells scored":"Not started"; })(),
+      impact:"Strategy scores, recommendation rationale" },
+    { id:"scorecard",  label:"DQ Scorecard",           module:"scorecard",  tier:"core",     required:false,
+      done: Object.values(dqScores).some(s=>s>0),
+      note: Object.values(dqScores).some(s=>s>0) ? "Overall: "+Math.round(DQ_ELEMENTS.reduce((s,e)=>s+(dqScores[e.key]||0),0)/DQ_ELEMENTS.length)+"/100" : "Not scored",
+      impact:"DQ chain analysis, readiness verdict" },
+    { id:"stakeholders",label:"Stakeholder Alignment", module:"stakeholders",tier:"enriches",required:false,
+      done: (stakeholders||[]).length > 0,
+      note: (stakeholders||[]).length+" stakeholders"+((stakeholders||[]).filter(s=>s.alignment==="blocker").length>0?" · "+(stakeholders||[]).filter(s=>s.alignment==="blocker").length+" blocker(s)":""),
+      impact:"Stakeholder messages, commitment assessment" },
+    { id:"scenarios",  label:"Scenario Planning",      module:"scenarios",  tier:"enriches", required:false,
+      done: (scenarioData?.scenarios||[]).length > 0,
+      note: (scenarioData?.scenarios||[]).length>0 ? scenarioData.scenarios.length+" scenarios · "+Object.keys(scenarioData.perfMatrix||{}).length+" ratings" : "Not completed",
+      impact:"Stress-test results, robustness analysis" },
+    { id:"voi",        label:"Value of Information",   module:"voi",        tier:"enriches", required:false,
+      done: (voiItems||[]).some(x=>x.classification),
+      note: (voiItems||[]).filter(x=>x.classification).length+" items classified",
+      impact:"Information action list (do now / do not)" },
+    { id:"timeline",   label:"Risk Timeline",          module:"timeline",   tier:"enriches", required:false,
+      done: (timelineEvents||[]).length > 0,
+      note: (timelineEvents||[]).length+" events · "+(timelineEvents||[]).filter(e=>e.type==="decision_gate").length+" gates",
+      impact:"Decision gates, risk register timeline" },
   ];
-  const completionPct = Math.round((completionItems.filter(i=>i.done).length / completionItems.length) * 100);
+  const coreItems    = completionItems.filter(i => i.tier==="core" && i.required);
+  const enrichItems  = completionItems.filter(i => i.tier==="enriches");
+  const enrichedCount = enrichItems.filter(i=>i.done).length;
+  const completionPct = Math.round((coreItems.filter(i=>i.done).length / coreItems.length)*100);
+  const overallReadiness = completionPct===100?"ready":completionPct>=80?"almost":completionPct>=60?"partial":"incomplete";
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
@@ -8327,25 +8365,185 @@ Return ONLY valid JSON:
 
           {/* Export formats */}
           {!executivePack ? (
-            <div style={{ padding:"48px 40px", textAlign:"center", border:`1.5px dashed ${DS.canvasMid}`,
-              borderRadius:10, color:DS.inkTer }}>
-              <div style={{ fontSize:32, marginBottom:12 }}>📋</div>
-              <div style={{ fontSize:14, marginBottom:6, color:DS.ink, fontWeight:600 }}>
-                Generate the Executive Package
-              </div>
-              <div style={{ fontSize:12, marginBottom:20, lineHeight:1.6 }}>
-                Produces a complete decision brief, board narrative, stakeholder messages,
-                risk register, and next steps — ready to copy or present.
-              </div>
-              <Btn variant="primary" icon="spark" size="lg" onClick={generatePack}
-                disabled={aiBusy||generating||completionPct<50}>
-                {generating?"Building…":"Generate Executive Package"}
-              </Btn>
-              {completionPct < 50 && (
-                <div style={{ fontSize:11, color:DS.danger, marginTop:10 }}>
-                  Complete at least 3 modules before generating the package.
+            <div>
+              {/* ── READINESS HEADER ── */}
+              <div style={{ padding:"18px 20px", borderRadius:10, marginBottom:20,
+                background: overallReadiness==="ready" ? DS.successSoft
+                          : overallReadiness==="almost" ? "#fffbeb"
+                          : DS.canvasAlt,
+                border:`1.5px solid ${overallReadiness==="ready" ? DS.successLine
+                                    : overallReadiness==="almost" ? "#fde68a"
+                                    : DS.canvasBdr}`,
+                display:"flex", alignItems:"center", gap:16 }}>
+                <div style={{ fontFamily:"'Libre Baskerville',serif",
+                  fontSize:48, fontWeight:700, lineHeight:1,
+                  color:overallReadiness==="ready" ? DS.success
+                      : overallReadiness==="almost" ? "#d97706"
+                      : DS.inkDis }}>
+                  {completionPct}%
                 </div>
-              )}
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:DS.ink, marginBottom:4 }}>
+                    {overallReadiness==="ready" ? "Ready to generate the executive package"
+                   : overallReadiness==="almost" ? "Almost ready — one core module remaining"
+                   : overallReadiness==="partial" ? "Partially ready — package will be thin"
+                   : "Core modules incomplete — generate anyway or complete first"}
+                  </div>
+                  <div style={{ height:6, background:"rgba(0,0,0,.06)", borderRadius:3,
+                    overflow:"hidden", marginBottom:6 }}>
+                    <div style={{ height:"100%", width:completionPct+"%",
+                      borderRadius:3, transition:"width .4s",
+                      background:overallReadiness==="ready" ? DS.success
+                               : overallReadiness==="almost" ? "#d97706" : DS.accent }}/>
+                  </div>
+                  <div style={{ fontSize:11, color:DS.inkTer }}>
+                    {coreItems.filter(i=>i.done).length}/{coreItems.length} core modules complete
+                    {enrichedCount > 0 ? " · " + enrichedCount + "/" + enrichItems.length + " enrichment modules complete" : ""}
+                  </div>
+                </div>
+                <div style={{ flexShrink:0 }}>
+                  <button onClick={generatePack}
+                    disabled={aiBusy||generating||completionPct<40}
+                    style={{ padding:"10px 22px", fontSize:13, fontWeight:700,
+                      fontFamily:"inherit", borderRadius:8,
+                      border:"none", cursor:completionPct>=40?"pointer":"not-allowed",
+                      background:completionPct>=40 ? "linear-gradient(135deg,#2563eb,#4f46e5)"
+                               : DS.canvasBdr,
+                      color:completionPct>=40?"#fff":DS.inkDis,
+                      opacity:aiBusy||generating?0.6:1 }}>
+                    {generating ? "Building package…" : "Generate Package →"}
+                  </button>
+                  {completionPct < 40 && (
+                    <div style={{ fontSize:10, color:DS.danger, marginTop:5,
+                      textAlign:"center" }}>
+                      Complete ≥2 core modules
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── CORE MODULES ── */}
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:DS.ink,
+                  marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+                  Core Modules
+                  <span style={{ fontSize:10, fontWeight:400, color:DS.inkTer }}>
+                    — required for a meaningful executive package
+                  </span>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {coreItems.map(item => (
+                    <div key={item.id} style={{ display:"flex", alignItems:"center",
+                      gap:12, padding:"10px 14px", borderRadius:8,
+                      background:item.done ? DS.successSoft : DS.canvas,
+                      border:`1px solid ${item.done ? DS.successLine : DS.canvasBdr}` }}>
+                      <div style={{ width:20, height:20, borderRadius:5, flexShrink:0,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        background:item.done ? DS.success : DS.canvasBdr }}>
+                        {item.done
+                          ? <Svg path={ICONS.check} size={11} color="#fff" sw={2.5}/>
+                          : <span style={{ fontSize:10, color:DS.inkDis }}>○</span>
+                        }
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <span style={{ fontSize:12, fontWeight:700,
+                            color:item.done ? DS.ink : DS.inkTer }}>{item.label}</span>
+                          <span style={{ fontSize:10,
+                            color:item.done ? DS.inkSub : DS.warning }}>
+                            {item.note}
+                          </span>
+                        </div>
+                        <div style={{ fontSize:10, color:DS.inkDis, marginTop:1 }}>
+                          Feeds: {item.impact}
+                        </div>
+                      </div>
+                      {!item.done && (
+                        <span style={{ fontSize:10, fontWeight:700, color:DS.warning,
+                          padding:"2px 8px", borderRadius:4, background:DS.warnSoft,
+                          border:`1px solid ${DS.warnLine}`, flexShrink:0,
+                          cursor:"default" }}>
+                          Incomplete
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── ENRICHMENT MODULES ── */}
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:DS.ink,
+                  marginBottom:6, display:"flex", alignItems:"center", gap:8 }}>
+                  Enrichment Modules
+                  <span style={{ fontSize:10, fontWeight:400, color:DS.inkTer }}>
+                    — add depth if completed; package still generates without them
+                  </span>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                  {enrichItems.map(item => (
+                    <div key={item.id} style={{ display:"flex", alignItems:"center",
+                      gap:10, padding:"9px 12px", borderRadius:7,
+                      background:item.done ? DS.accentSoft : DS.canvas,
+                      border:`1px solid ${item.done ? DS.accentLine : DS.canvasBdr}`,
+                      opacity:item.done ? 1 : 0.6 }}>
+                      <div style={{ width:18, height:18, borderRadius:4, flexShrink:0,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        background:item.done ? DS.accent : DS.canvasBdr }}>
+                        {item.done
+                          ? <Svg path={ICONS.check} size={10} color="#fff" sw={2.5}/>
+                          : <span style={{ fontSize:9, color:DS.inkDis }}>–</span>
+                        }
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:11, fontWeight:700,
+                          color:item.done ? DS.ink : DS.inkTer,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {item.label}
+                        </div>
+                        <div style={{ fontSize:9, color:DS.inkDis, marginTop:1,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {item.done ? item.note : "Adds: " + item.impact}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── WHAT THE PACKAGE WILL INCLUDE ── */}
+              <div style={{ padding:"14px 16px", background:DS.canvasAlt,
+                border:`1px solid ${DS.canvasBdr}`, borderRadius:8 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:DS.inkSub,
+                  marginBottom:10 }}>
+                  What the generated package will include
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                  {[
+                    { label:"Executive summary",     present: problem.decisionStatement?.length > 20 },
+                    { label:"Board narrative",        present: strategies.length > 0 },
+                    { label:"Strategy comparison",    present: strategies.length >= 2 },
+                    { label:"Decision brief",         present: !!brief },
+                    { label:"Risk register",          present: issues.length > 0 },
+                    { label:"Stakeholder messages",   present: (stakeholders||[]).length > 0 },
+                    { label:"Scenario stress results",present: (scenarioData?.scenarios||[]).length > 0 },
+                    { label:"VoI action list",        present: (voiItems||[]).some(x=>x.classification) },
+                    { label:"DQ chain analysis",      present: Object.values(dqScores).some(s=>s>0) },
+                    { label:"Next steps & owners",    present: problem.owner?.length > 2 },
+                  ].map(row => (
+                    <div key={row.label} style={{ display:"flex", alignItems:"center",
+                      gap:7, fontSize:11 }}>
+                      <span style={{ color:row.present ? DS.success : DS.inkDis,
+                        fontSize:12, flexShrink:0 }}>
+                        {row.present ? "✓" : "–"}
+                      </span>
+                      <span style={{ color:row.present ? DS.inkSub : DS.inkDis }}>
+                        {row.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
