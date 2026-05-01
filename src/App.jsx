@@ -19470,20 +19470,64 @@ function AppMain() {
   };
 
   // ── Presence: broadcast current module ────────────────────────────────────
+  // ── REALTIME PRESENCE via Supabase ──────────────────────────────────────
+  // Writes current user's presence to the decision row every 15s.
+  // Reads back all presence from the same row to show collaborators.
   useEffect(() => {
     if (!currentUser || !decisionId || !_SB_URL) return;
     const name = currentUser.user_metadata?.name || currentUser.email?.split("@")[0] || "Anonymous";
-    const presenceKey = "presence_" + decisionId;
-    const myPresence = { id: currentUser.id, name, email: currentUser.email, module, lastSeen: Date.now() };
-    try {
-      // Store presence in sessionStorage
-      const all = JSON.parse(sessionStorage.getItem(presenceKey)||"{}");
-      all[currentUser.id] = myPresence;
-      sessionStorage.setItem(presenceKey, JSON.stringify(all));
-      // Read all presence
-      const active = Object.values(all).filter(p => Date.now() - p.lastSeen < 30000);
-      setPresence(active);
-    } catch(e) {}
+    const myId = currentUser.id;
+
+    const writeAndRead = async () => {
+      try {
+        // Read current presence from DB
+        const r = await fetch(
+          _SB_URL + "/rest/v1/decisions?id=eq." + decisionId + "&select=presence",
+          { headers: _sbHeaders() }
+        );
+        const rows = await r.json();
+        const existing = (rows?.[0]?.presence) || {};
+
+        // Write our presence
+        const now = Date.now();
+        existing[myId] = { id:myId, name, email:currentUser.email, module, lastSeen:now };
+
+        // Remove stale entries (>45s)
+        Object.keys(existing).forEach(k => {
+          if (now - (existing[k].lastSeen||0) > 45000) delete existing[k];
+        });
+
+        // Patch presence back
+        await fetch(
+          _SB_URL + "/rest/v1/decisions?id=eq." + decisionId,
+          { method:"PATCH", headers:_sbHeaders(), body:JSON.stringify({ presence: existing }) }
+        );
+
+        // Show all active users (including self)
+        const active = Object.values(existing).filter(p => now - p.lastSeen < 45000);
+        setPresence(active);
+      } catch(e) {}
+    };
+
+    writeAndRead();
+    const interval = setInterval(writeAndRead, 15000);
+
+    // Clean up: remove our presence when leaving
+    return () => {
+      clearInterval(interval);
+      if (!_SB_URL || !decisionId) return;
+      fetch(
+        _SB_URL + "/rest/v1/decisions?id=eq." + decisionId + "&select=presence",
+        { headers: _sbHeaders() }
+      ).then(r => r.json()).then(rows => {
+        const existing = (rows?.[0]?.presence) || {};
+        delete existing[myId];
+        fetch(
+          _SB_URL + "/rest/v1/decisions?id=eq." + decisionId,
+          { method:"PATCH", headers:_sbHeaders(), body:JSON.stringify({ presence: existing }) }
+        ).catch(()=>{});
+      }).catch(()=>{});
+    };
   }, [module, currentUser, decisionId]);
 
 
