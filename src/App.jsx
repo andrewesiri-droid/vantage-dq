@@ -5575,94 +5575,77 @@ function ModuleQualitativeAssessment({
     }
     setAssessing(true);
 
-    // Build numbered lists so the model can use index-based matching
     const critLines = criteria.map((cr, i) =>
-      "CRITERION_" + (i+1) + ": " + cr.label +
-      (cr.description ? " (" + cr.description.slice(0,60) + ")" : "")
+      (i+1) + "=" + cr.label
     ).join(", ");
 
     const stratLines = strategies.map((s, i) =>
-      "STRATEGY_" + (i+1) + ": " + s.name +
-      (s.objective ? " — " + s.objective.slice(0,60) : "")
+      (i+1) + "=" + s.name
     ).join(", ");
 
     const totalCells = strategies.length * criteria.length;
 
     const prompt =
-      "You are a Decision Quality expert scoring strategies against evaluation criteria.\n\n" +
-      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n\n" +
-      "Criteria: " + critLines + "\n\n" +
-      "Strategies: " + stratLines + "\n\n" +
-      "Instructions:\n" +
-      "- Score EVERY strategy against EVERY criterion. You must return exactly " + totalCells + " score objects.\n" +
-      "- Scores are integers 1 to 5. Use the full range — be differentiated, not everything 3.\n" +
-      "- For each score use strategyIndex (1 to " + strategies.length + ") and criterionIndex (1 to " + criteria.length + ").\n" +
-      "- Also include strategyName and criterionName exactly as given above.\n\n" +
-      "Return a JSON object (no markdown, no explanation) with:\n" +
-      "scores: array of " + totalCells + " objects each with strategyIndex, criterionIndex, strategyName, criterionName, score, rationale\n" +
-      "insight: one sentence summarising the key pattern across strategies";
+      "Score each strategy against each criterion for this decision.\n" +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
+      "Criteria (by number): " + critLines + "\n" +
+      "Strategies (by number): " + stratLines + "\n\n" +
+      "Return a JSON object. The object must have one key called scores.\n" +
+      "scores is an array of exactly " + totalCells + " objects.\n" +
+      "Each object has: sI (strategy number 1-" + strategies.length + "), cI (criterion number 1-" + criteria.length + "), v (score 1-5), r (one sentence rationale).\n" +
+      "Use the full range 1-5. Do not give everything the same score.\n" +
+      "No markdown. No explanation. Only the JSON object.";
 
     aiCall(prompt, (r) => {
-      console.log("[QA] callback r keys:", r ? Object.keys(r) : "null");
       let result = r;
       if (r && r._raw) {
-        const m = (r._raw || "").match(/\{[\s\S]*\}/);
-        if (m) {
-          try { result = JSON.parse(m[0]); }
-          catch(e) {
-            try { result = JSON.parse(m[0].replace(/[\x00-\x1f]/g," ").replace(/,(\s*[}\]])/g,"$1")); }
-            catch(e2) { setAssessing(false); onAIMsg({role:"ai",text:"Could not parse scores. Please try again."}); return; }
-          }
-        } else {
-          setAssessing(false);
-          onAIMsg({role:"ai", text:"AI returned no JSON. Please try again."});
-          return;
-        }
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (m) { try { result = JSON.parse(m[0]); } catch(e) { setAssessing(false); return; } }
+        else { setAssessing(false); onAIMsg({role:"ai",text:"No JSON returned. Try again."}); return; }
       }
-      if (!result || result.error) {
+      if (!result || result.error) { setAssessing(false); return; }
+
+      // Handle different response shapes
+      let scoreArr = result.scores || result.Scores || result.SCORES;
+      if (!scoreArr && Array.isArray(result)) scoreArr = result;
+      if (!scoreArr) {
+        // Try finding any array in the result
+        const arrKey = Object.keys(result).find(k => Array.isArray(result[k]));
+        if (arrKey) scoreArr = result[arrKey];
+      }
+
+      if (!scoreArr || !scoreArr.length) {
         setAssessing(false);
-        onAIMsg({role:"ai", text:"Scoring failed: " + (result?.error||"unknown")});
+        onAIMsg({role:"ai", text:"AI returned no scores array. Please try again."});
         return;
       }
+
       const newScores = { ...scores };
       let filled = 0;
-      (result.scores || []).forEach(cell => {
-        // Primary: index match
-        const si = typeof cell.strategyIndex === "number" ? cell.strategyIndex - 1 : -1;
-        const ci = typeof cell.criterionIndex === "number" ? cell.criterionIndex - 1 : -1;
-        let strat = si >= 0 && si < strategies.length ? strategies[si] : null;
-        let crit  = ci >= 0 && ci < criteria.length  ? criteria[ci]    : null;
-        // Fallback: name match
-        if (!strat && cell.strategyName) {
-          const sn = cell.strategyName.toLowerCase().replace(/strategy_\d+:\s*/i,"").trim();
-          strat = strategies.find(s => s.name.toLowerCase().trim() === sn)
-               || strategies.find(s => s.name.toLowerCase().includes(sn.slice(0,12)))
-               || strategies.find(s => sn.includes(s.name.toLowerCase().slice(0,12)));
-        }
-        if (!crit && cell.criterionName) {
-          const cn = cell.criterionName.toLowerCase().replace(/criterion_\d+:\s*/i,"").trim();
-          crit = criteria.find(cr => cr.label.toLowerCase().trim() === cn)
-              || criteria.find(cr => cr.label.toLowerCase().includes(cn.slice(0,12)))
-              || criteria.find(cr => cn.includes(cr.label.toLowerCase().slice(0,12)));
-        }
-        if (strat && crit && typeof cell.score === "number" && cell.score >= 1 && cell.score <= 5) {
+      scoreArr.forEach(cell => {
+        // sI/cI are the compact keys; also support strategyIndex/criterionIndex
+        const si = (typeof cell.sI==="number" ? cell.sI : typeof cell.strategyIndex==="number" ? cell.strategyIndex : 0) - 1;
+        const ci = (typeof cell.cI==="number" ? cell.cI : typeof cell.criterionIndex==="number" ? cell.criterionIndex : 0) - 1;
+        const strat = si >= 0 && si < strategies.length ? strategies[si] : null;
+        const crit  = ci >= 0 && ci < criteria.length  ? criteria[ci]    : null;
+        const score = typeof cell.v==="number" ? cell.v : typeof cell.score==="number" ? cell.score : 0;
+        if (strat && crit && score >= 1 && score <= 5) {
           newScores[scoreKey(strat.id, crit.id)] = {
             ...getCell(strat.id, crit.id),
-            score: cell.score,
-            rationale: cell.rationale || "",
-            confidence: cell.confidence || "moderate",
+            score,
+            rationale: cell.r || cell.rationale || "",
+            confidence: "moderate",
           };
           filled++;
         }
       });
+
       onScores(newScores);
       const total = strategies.length * criteria.length;
-      console.log("[QA] filled", filled, "of", total, "cells");
       onAIMsg({ role:"ai", text:
-        (result.insight ? result.insight + " " : "") +
-        (filled === total ? "All " + total + " cells scored."
-          : filled > 0 ? "Scored " + filled + " of " + total + " cells."
-          : "No cells matched. Please try again.")
+        filled === total ? "All " + total + " cells scored." :
+        filled > 0 ? "Scored " + filled + " of " + total + " cells." :
+        "Scores returned but none matched. Please try again."
       });
       setAssessing(false);
     });
@@ -8139,33 +8122,42 @@ function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholde
   const aiAnalyse = () => {
     if (!stakeholders.length) return;
     setAnalysing(true);
-    const shSummary = stakeholders.map(s =>
-      s.name + " [" + s.role + ", " + s.influence + " influence, " + s.alignment + "]: " +
-      (s.concerns||"no concerns noted")
+    const shLines = stakeholders.map((s, i) =>
+      (i+1) + ". " + s.name + " [" + s.role + ", " + s.influence + " influence, " + s.alignment + "]: " +
+      (s.concerns || "no concerns noted")
     ).join("\n");
-    aiCall(
-      "You are a Decision Quality expert assessing stakeholder alignment risk. " +
-      "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
-      "Stakeholder map:\n" + shSummary + "\n\n" +
-      "Assess: (1) overall alignment risk, (2) who must move before commitment, " +
-      "(3) hidden tensions between stakeholder groups, (4) missing voices, (5) DQ commitment score. " +
-      "Return ONLY JSON: " +
-      '{"alignmentScore":72,"alignmentVerdict":"ready|at_risk|blocked",' +
-      '"criticalUnaligned":["name or role"],' +
-      '"hiddenTensions":[{"between":["A","B"],"tension":"what they disagree on","severity":"critical|warning"}],' +
-      '"missingVoices":["who is not represented"],' +
-      '"engagementPriority":[{"name":"stakeholder","action":"specific action","urgency":"immediate|soon|monitor"}],' +
-      '"commitmentReadiness":"2-sentence verdict on whether the team can commit"}',
-      (r) => {
-        let result = r;
-        if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
-        if (!result||result.error){setAnalysing(false);return;}
-        setAnalysis(result);
-        onAIMsg({role:"ai", text: "Alignment score: " + (result.alignmentScore||"?") + "/100. " + (result.commitmentReadiness||"")});
-        setAnalysing(false);
-        setView("analysis");
+
+    const prompt =
+      "You are a Decision Quality expert assessing stakeholder alignment.\n" +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
+      "Stakeholders:\n" + shLines + "\n\n" +
+      "Assess the alignment landscape. Return a JSON object with no markdown and no explanation.\n" +
+      "Required keys:\n" +
+      "alignmentScore: integer 0-100\n" +
+      "alignmentVerdict: one of ready, at_risk, or blocked\n" +
+      "criticalUnaligned: array of names who must move before commitment\n" +
+      "hiddenTensions: array of objects each with between (array of 2 names), tension (string), severity (critical or warning)\n" +
+      "missingVoices: array of strings naming who is not represented\n" +
+      "engagementPriority: array of objects each with name (string), action (string), urgency (immediate or soon or monitor)\n" +
+      "commitmentReadiness: string of 1-2 sentences on whether the team can commit";
+
+    aiCall(prompt, (r) => {
+      let result = r;
+      if (r && r._raw) {
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (m) { try { result = JSON.parse(m[0]); } catch(e) { setAnalysing(false); return; } }
+        else { setAnalysing(false); return; }
       }
-    );
+      if (!result || result.error) { setAnalysing(false); return; }
+      setAnalysis(result);
+      onAIMsg({role:"ai", text:
+        "Alignment score: " + (result.alignmentScore||"?") + "/100. " +
+        "Verdict: " + (result.alignmentVerdict||"?") + ". " +
+        (result.commitmentReadiness||"")
+      });
+      setAnalysing(false);
+      setView("analysis");
+    });
   };
 
   // Computed
