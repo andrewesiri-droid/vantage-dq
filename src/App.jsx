@@ -3904,7 +3904,9 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
     const used = strategies.map(s=>s.colorIdx);
     const colorIdx = [0,1,2,3,4,5].find(i=>!used.includes(i)) ?? strategies.length%6;
     const ns = { id:uid("s"), colorIdx, name:DS.sNames[colorIdx]||`S${strategies.length+1}`,
-      description:"", selections:{}, rationale:{} };
+      description:"", objective:"", selections:{}, rationale:{},
+      keyAssumptions:"", keyUncertainties:"", majorRisks:"",
+      resourceRequirements:"", timeHorizon:"", flexibility:"", dependencies:"" };
     onChange([...strategies, ns]);
     setActiveS(ns.id);
   };
@@ -3937,7 +3939,7 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
       "Decision: "+(problem?.decisionStatement||"Not defined")+". Existing (do not duplicate): "+existingNames+". "+
       "DECISIONS — use exact option index (0,1,2...) in selections:\n"+decMenu+"\n\n"+
       "Return ONLY JSON:\n"+
-      '{"strategies":[{"name":"Bold Growth","objective":"Maximise market capture","rationale":"Why these choices cohere","selections":{"D1":0,"D2":1},"riskProfile":"High risk"}],"insight":"observation"}\n'+
+      '{"strategies":[{"name":"Bold Growth","objective":"Maximise market capture","rationale":"Why these choices cohere","selections":{"D1":0,"D2":1},"keyAssumptions":"What must be true","keyUncertainties":"What could shift this","majorRisks":"What could go wrong","timeHorizon":"Short/medium/long term","flexibility":"High/Medium/Low"}],"insight":"observation","validationFlags":["flag if any DQ issue"]}\n'+
       "IMPORTANT: selections keys are D1, D2, D3... matching decision numbers. Use integer index.",
     (r)=>{
       let result=r;
@@ -3974,7 +3976,7 @@ Decisions:\n${tableDesc}
 Strategies:\n${stratDesc}
 
 Return ONLY JSON:
-{"overall":"pass|warn|fail","completenessScores":[{"strategy":"name","score":0-100,"missing":["decision"]}],"coherenceIssues":[{"strategy":"name","issue":"description","severity":"critical|warning"}],"distinctiveness":"high|medium|low","distinctivenessNote":"explanation","recommendations":["rec 1","rec 2"]}`,
+{"overall":"pass|warn|fail","qualityScore":75,"completenessScores":[{"strategy":"name","score":0-100,"missing":["decision"]}],"coherenceIssues":[{"strategy":"name","issue":"description","severity":"critical|warning"}],"distinctiveness":"high|medium|low","distinctivenessNote":"explanation","dominatedStrategies":["strategy name if dominated"],"missingDimensions":["important evaluation dimension not yet in table"],"tradeOffInsights":["key trade-off observation"],"validationFlags":[{"type":"insufficient_alternatives|non_distinct|solution_locking|missing_dimensions|no_tradeoff|assumption_confusion|uncertainty_gap|dominated|overcomplexity","severity":"critical|warning|info","message":"specific issue"}],"facilitatorQuestions":["strategic question for the team"],"recommendations":["rec 1","rec 2"],"downstreamRecommendations":[{"module":"Scenario Planning","reason":"why"}]}`,
     (r) => {
       setValidation(r);
       onAIMsg({ role:"ai", text:`Validation: ${r.overall}. Distinctiveness: ${r.distinctiveness}. ${r.recommendations?.[0]||""}` });
@@ -4096,7 +4098,7 @@ Return ONLY JSON:
     return nowDecisions.length > 0 ? Math.round((filled/nowDecisions.length)*100) : 0;
   };
 
-  const MODES = [{ id:"builder",label:"Builder" },{ id:"workshop",label:"Workshop" },{ id:"review",label:"Review" }];
+  const MODES = [{ id:"builder",label:"Builder" },{ id:"workshop",label:"Workshop" },{ id:"review",label:"Review" },{ id:"analysis",label:"Strategy Analysis" }];
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
@@ -4123,9 +4125,17 @@ Return ONLY JSON:
         </div>
 
         {validation && (
-          <Badge variant={validation.overall==="pass"?"green":validation.overall==="warn"?"warn":"danger"}>
-            {validation.overall==="pass"?"✓ Valid":validation.overall==="warn"?"⚠ Warnings":"✗ Issues"}
-          </Badge>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <Badge variant={validation.overall==="pass"?"green":validation.overall==="warn"?"warn":"danger"}>
+              {validation.overall==="pass"?"✓ Valid":validation.overall==="warn"?"⚠ Warnings":"✗ Issues"}
+            </Badge>
+            {validation.qualityScore!=null && (
+              <span style={{ fontSize:11, fontWeight:700,
+                color:validation.qualityScore>=70?"#059669":validation.qualityScore>=50?"#d97706":"#dc2626" }}>
+                {validation.qualityScore}/100
+              </span>
+            )}
+          </div>
         )}
         <Btn variant="secondary" icon="spark" size="sm" onClick={aiValidate} disabled={aiBusy||validating}>
           {validating?"Validating…":"Validate"}
@@ -4344,6 +4354,52 @@ Return ONLY JSON:
                                           borderRadius:5,color:DS.ink,outline:"none",resize:"none",
                                           lineHeight:1.5,boxSizing:"border-box" }}/>
                                     </div>
+                                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                                      <div>
+                                        <div style={{ fontSize:8,fontWeight:700,color:col.fill,
+                                          textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Key Assumptions</div>
+                                        <textarea value={s.keyAssumptions||""}
+                                          onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,keyAssumptions:e.target.value}:x))}
+                                          placeholder="What must be true for success?" rows={2}
+                                          style={{ width:"100%",fontSize:11,padding:"6px 8px",fontFamily:"inherit",
+                                            background:"rgba(255,255,255,.8)",border:`1px solid ${col.line}`,
+                                            borderRadius:5,color:DS.ink,outline:"none",resize:"none",
+                                            lineHeight:1.5,boxSizing:"border-box" }}/>
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize:8,fontWeight:700,color:col.fill,
+                                          textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Key Uncertainties</div>
+                                        <textarea value={s.keyUncertainties||""}
+                                          onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,keyUncertainties:e.target.value}:x))}
+                                          placeholder="What could shift this strategy?" rows={2}
+                                          style={{ width:"100%",fontSize:11,padding:"6px 8px",fontFamily:"inherit",
+                                            background:"rgba(255,255,255,.8)",border:`1px solid ${col.line}`,
+                                            borderRadius:5,color:DS.ink,outline:"none",resize:"none",
+                                            lineHeight:1.5,boxSizing:"border-box" }}/>
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize:8,fontWeight:700,color:col.fill,
+                                          textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Major Risks</div>
+                                        <textarea value={s.majorRisks||""}
+                                          onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,majorRisks:e.target.value}:x))}
+                                          placeholder="What could go wrong?" rows={2}
+                                          style={{ width:"100%",fontSize:11,padding:"6px 8px",fontFamily:"inherit",
+                                            background:"rgba(255,255,255,.8)",border:`1px solid ${col.line}`,
+                                            borderRadius:5,color:DS.ink,outline:"none",resize:"none",
+                                            lineHeight:1.5,boxSizing:"border-box" }}/>
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize:8,fontWeight:700,color:col.fill,
+                                          textTransform:"uppercase",letterSpacing:.5,marginBottom:3 }}>Flexibility</div>
+                                        <textarea value={s.flexibility||""}
+                                          onChange={e=>onChange(strategies.map(x=>x.id===s.id?{...x,flexibility:e.target.value}:x))}
+                                          placeholder="High / Medium / Low and why" rows={2}
+                                          style={{ width:"100%",fontSize:11,padding:"6px 8px",fontFamily:"inherit",
+                                            background:"rgba(255,255,255,.8)",border:`1px solid ${col.line}`,
+                                            borderRadius:5,color:DS.ink,outline:"none",resize:"none",
+                                            lineHeight:1.5,boxSizing:"border-box" }}/>
+                                      </div>
+                                    </div>
                                   </div>
                                 )}
                               </div>
@@ -4561,6 +4617,273 @@ Return ONLY JSON:
             </SectionCard>
           </div>
         )}
+
+        {/* ══ ANALYSIS MODE ══ */}
+        {mode==="analysis" && (
+          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
+            <div style={{ maxWidth:820, margin:"0 auto" }}>
+
+              {/* Header */}
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                    fontWeight:700, color:DS.ink, marginBottom:3 }}>Strategy Analysis</div>
+                  <div style={{ fontSize:12, color:DS.inkTer }}>
+                    Trade-off comparison, dominance analysis, and DQ quality scoring.
+                  </div>
+                </div>
+                <Btn variant="primary" size="sm" onClick={aiValidate}
+                  disabled={aiBusy||validating||strategies.length===0}>
+                  {validating?"Analysing…":validation?"Re-run Analysis":"Run DQ Analysis"}
+                </Btn>
+              </div>
+
+              {/* No analysis yet */}
+              {!validation && !validating && (
+                <div style={{ padding:"48px 32px", textAlign:"center",
+                  border:`1.5px dashed ${DS.canvasBdr}`, borderRadius:10, color:DS.inkTer }}>
+                  <div style={{ fontSize:28, marginBottom:12, opacity:.4 }}>⚖</div>
+                  <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>
+                    Analysis not yet run
+                  </div>
+                  <div style={{ fontSize:12, lineHeight:1.6, maxWidth:400, margin:"0 auto" }}>
+                    Add your strategies and run DQ Analysis to get quality scoring,
+                    trade-off insights, dominance analysis, and improvement recommendations.
+                  </div>
+                </div>
+              )}
+
+              {validating && (
+                <div style={{ textAlign:"center", padding:"48px", color:DS.inkTer }}>
+                  <div style={{ fontSize:12 }}>Analysing strategy table quality…</div>
+                </div>
+              )}
+
+              {validation && !validating && (
+                <div>
+                  {/* Quality score + distinctiveness */}
+                  <div style={{ display:"flex", gap:12, marginBottom:20 }}>
+                    <div style={{ flex:1, padding:"16px 18px", background:DS.canvas,
+                      border:`1px solid ${DS.canvasBdr}`, borderRadius:10 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                        textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>Table Quality</div>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+                        <span style={{ fontFamily:"'Libre Baskerville',serif", fontSize:40,
+                          fontWeight:700, lineHeight:1,
+                          color:validation.qualityScore>=70?"#059669":validation.qualityScore>=50?"#d97706":"#dc2626" }}>
+                          {validation.qualityScore||"?"}
+                        </span>
+                        <span style={{ fontSize:13, color:DS.inkTer }}>/100</span>
+                      </div>
+                      <div style={{ height:6, background:DS.canvasBdr, borderRadius:3,
+                        overflow:"hidden", marginTop:8 }}>
+                        <div style={{ height:"100%", borderRadius:3,
+                          background:validation.qualityScore>=70?"#059669":validation.qualityScore>=50?"#d97706":"#dc2626",
+                          width:(validation.qualityScore||0)+"%", transition:"width .6s" }}/>
+                      </div>
+                    </div>
+                    <div style={{ flex:1, padding:"16px 18px", background:DS.canvas,
+                      border:`1px solid ${DS.canvasBdr}`, borderRadius:10 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                        textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>Distinctiveness</div>
+                      <div style={{ fontSize:22, fontWeight:700,
+                        color:validation.distinctiveness==="high"?"#059669":validation.distinctiveness==="medium"?"#d97706":"#dc2626",
+                        marginBottom:6, textTransform:"capitalize" }}>
+                        {validation.distinctiveness||"—"}
+                      </div>
+                      <div style={{ fontSize:11, color:DS.inkSub, lineHeight:1.5 }}>
+                        {validation.distinctivenessNote}
+                      </div>
+                    </div>
+                    <div style={{ flex:1, padding:"16px 18px", background:DS.canvas,
+                      border:`1px solid ${DS.canvasBdr}`, borderRadius:10 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                        textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>Status</div>
+                      <div style={{ fontSize:22, fontWeight:700, marginBottom:6,
+                        color:validation.overall==="pass"?"#059669":validation.overall==="warn"?"#d97706":"#dc2626",
+                        textTransform:"capitalize" }}>
+                        {validation.overall==="pass"?"✓ Valid":validation.overall==="warn"?"⚠ Needs Work":"✗ Issues"}
+                      </div>
+                      <div style={{ fontSize:11, color:DS.inkSub }}>
+                        {strategies.length} strateg{strategies.length!==1?"ies":"y"} · {nowDecisions.length} decision{nowDecisions.length!==1?"s":""}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Validation flags */}
+                  {(validation.validationFlags||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:10 }}>
+                        Validation Flags
+                      </div>
+                      {validation.validationFlags.map((f,i)=>{
+                        const fc = {critical:{bg:"#fef2f2",border:"#fecaca",text:"#dc2626",icon:"⛔"},warning:{bg:"#fffbeb",border:"#fde68a",text:"#d97706",icon:"⚠"},info:{bg:"#eff6ff",border:"#bfdbfe",text:"#2563eb",icon:"ℹ"}}[f.severity||"info"]||{bg:"#eff6ff",border:"#bfdbfe",text:"#2563eb",icon:"ℹ"};
+                        return (
+                          <div key={i} style={{ marginBottom:8, padding:"10px 14px",
+                            background:fc.bg, border:`1px solid ${fc.border}`, borderRadius:7 }}>
+                            <div style={{ display:"flex", gap:8 }}>
+                              <span>{fc.icon}</span>
+                              <div>
+                                <div style={{ fontSize:11, fontWeight:700, color:fc.text,
+                                  marginBottom:3 }}>
+                                  {(f.type||"").replace(/_/g," ")}
+                                </div>
+                                <div style={{ fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                                  {f.message}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Dominated strategies */}
+                  {(validation.dominatedStrategies||[]).length > 0 && (
+                    <div style={{ marginBottom:20, padding:"12px 14px",
+                      background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#dc2626", marginBottom:6 }}>
+                        ⚠ Potentially Dominated Strategies
+                      </div>
+                      <div style={{ fontSize:11, color:DS.ink, lineHeight:1.6 }}>
+                        {validation.dominatedStrategies.join(", ")} may be inferior across most dimensions. Consider removing or significantly differentiating.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Trade-off insights */}
+                  {(validation.tradeOffInsights||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:10 }}>
+                        ⚖ Trade-Off Insights
+                      </div>
+                      {validation.tradeOffInsights.map((t,i)=>(
+                        <div key={i} style={{ marginBottom:6, padding:"8px 12px",
+                          background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
+                          borderRadius:6, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                          {i+1}. {typeof t==="string"?t:JSON.stringify(t)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Missing dimensions */}
+                  {(validation.missingDimensions||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        ◻ Missing Evaluation Dimensions
+                      </div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                        {validation.missingDimensions.map((d,i)=>(
+                          <span key={i} style={{ padding:"4px 10px", borderRadius:5, fontSize:11,
+                            background:"#fffbeb", border:"1px solid #fde68a", color:"#92400e" }}>
+                            + {typeof d==="string"?d:JSON.stringify(d)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Completeness scores */}
+                  {(validation.completenessScores||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:10 }}>
+                        Completeness by Strategy
+                      </div>
+                      {validation.completenessScores.map((cs,i)=>{
+                        const strat = strategies.find(s=>s.name===cs.strategy);
+                        const col = strat ? DS.s[strat.colorIdx] : DS.s[0];
+                        return (
+                          <div key={i} style={{ marginBottom:8, padding:"10px 14px",
+                            background:DS.canvas, border:`1px solid ${DS.canvasBdr}`, borderRadius:7 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:cs.missing?.length?6:0 }}>
+                              <div style={{ width:8, height:8, borderRadius:"50%",
+                                background:col.fill, flexShrink:0 }}/>
+                              <span style={{ fontSize:12, fontWeight:700, color:DS.ink, flex:1 }}>
+                                {cs.strategy}
+                              </span>
+                              <span style={{ fontSize:13, fontWeight:700,
+                                color:cs.score>=80?"#059669":cs.score>=50?"#d97706":"#dc2626" }}>
+                                {cs.score}%
+                              </span>
+                            </div>
+                            <div style={{ height:4, background:DS.canvasBdr, borderRadius:2,
+                              overflow:"hidden", marginBottom:cs.missing?.length?6:0 }}>
+                              <div style={{ height:"100%", width:(cs.score||0)+"%",
+                                background:cs.score>=80?"#059669":cs.score>=50?"#d97706":"#dc2626",
+                                borderRadius:2, transition:"width .4s" }}/>
+                            </div>
+                            {cs.missing?.length > 0 && (
+                              <div style={{ fontSize:10, color:DS.inkTer }}>
+                                Missing: {cs.missing.join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Facilitator questions */}
+                  {(validation.facilitatorQuestions||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        🎙 Facilitator Questions
+                      </div>
+                      {validation.facilitatorQuestions.map((q,i)=>(
+                        <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                          background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                          borderRadius:5, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                          {i+1}. {typeof q==="string"?q:JSON.stringify(q)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  {(validation.recommendations||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        → Recommendations
+                      </div>
+                      {validation.recommendations.map((r,i)=>(
+                        <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                          background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
+                          borderRadius:5, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                          {i+1}. {typeof r==="string"?r:JSON.stringify(r)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Downstream recommendations */}
+                  {(validation.downstreamRecommendations||[]).length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                        → Recommended Next Modules
+                      </div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                        {validation.downstreamRecommendations.map((r,i)=>(
+                          <div key={i} style={{ padding:"8px 12px", background:DS.canvas,
+                            border:`1px solid ${DS.canvasBdr}`, borderRadius:7, fontSize:11 }}>
+                            <div style={{ fontWeight:700, color:DS.ink, marginBottom:2 }}>
+                              {typeof r==="string"?r:(r.module||"")}
+                            </div>
+                            {r.reason && (
+                              <div style={{ fontSize:10, color:DS.inkTer }}>{r.reason}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
