@@ -11165,6 +11165,8 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
   const [fillingScenarios, setFillingScenarios] = useState(false);
   const [scenarioMode, setScenarioMode] = useState(null);
   const [multiScenarios, setMultiScenarios] = useState([]);
+  const [stressAnalysis, setStressAnalysis] = useState(null);
+  const [stressing, setStressing]           = useState(false);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const addUnc = () => setUncs(prev => [...prev, {
@@ -11335,7 +11337,47 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
   };
 
   // ── Robustness scoring ────────────────────────────────────────────────────
-  const robustness = strategies.map(s=>{
+  const runStressAnalysis = () => {
+    if (!strategies.length || !scenarios.length) return;
+    setStressing(true);
+    const matrixSummary = strategies.map(s =>
+      s.name + ": " + scenarios.map(sc => {
+        const cell = perfMatrix[s.id + "_" + sc.id] || {};
+        return sc.name + "=" + (cell.rating || "unrated") + (cell.note ? " (" + cell.note.slice(0,40) + ")" : "");
+      }).join("; ")
+    ).join("\n");
+    const scenSummary = scenarios.map(sc =>
+      sc.name + " — " + (sc.narrative || sc.pos)
+    ).join("\n");
+    aiCall(
+      "You are a senior decision analyst performing a scenario stress-test. " +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
+      "Scenarios:\n" + scenSummary + "\n\n" +
+      "Strategy performance matrix:\n" + matrixSummary + "\n\n" +
+      "Return ONLY JSON: " +
+      '{"strategyProfiles":[{"name":"strategy name","robustness":"robust|conditional|fragile|niche","winsIn":["scenario name"],"failsIn":["scenario name"],"failureCondition":"specific conditions","hedgeValue":"what it protects against"}],' +
+      '"correlatedFailures":[{"strategies":["A","B"],"sharedFailScenario":"scenario name","implication":"why this matters"}],' +
+      '"mostDangerousScenario":{"name":"scenario","reason":"why most strategies struggle","earlyWarnings":["observable signal"]},' +
+      '"recommendation":{"strategy":"name","rationale":"2-3 sentences","conditions":"when to switch","hedgeAction":"action reducing exposure regardless of strategy"},' +
+      '"keyInsight":"single most important takeaway"}',
+      (r) => {
+        let result = r;
+        if (r && r._raw) {
+          try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
+          catch(e) { setStressing(false); return; }
+        }
+        if (!result || result.error) { setStressing(false); return; }
+        setStressAnalysis(result);
+        onAIMsg({ role:"ai", text:
+          "Stress analysis complete. " + (result.keyInsight || "") +
+          (result.mostDangerousScenario ? " Most dangerous scenario: " + result.mostDangerousScenario.name : "")
+        });
+        setStressing(false);
+      }
+    );
+  };
+
+    const robustness = strategies.map(s=>{
     const counts={thrives:0,survives:0,struggles:0};
     scenarios.forEach(sc=>{
       const cell=perfMatrix[s.id+"_"+sc.id];
@@ -11375,6 +11417,11 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
           {view==="scenarios" && (
             <Btn variant="secondary" size="sm" onClick={fillScenarioNarratives} disabled={aiBusy||fillingScenarios}>
               {fillingScenarios?"Filling…":"AI Fill Narratives"}
+            </Btn>
+          )}
+          {view==="insights" && Object.keys(perfMatrix).length>0 && (
+            <Btn variant="secondary" size="sm" onClick={runStressAnalysis} disabled={aiBusy||stressing}>
+              {stressing?"Analysing…":"✦ Stress Analysis"}
             </Btn>
           )}
           {view==="test" && strategies.length>0 && scenarios.length>0 && (
@@ -11710,10 +11757,63 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
         {/* ── STEP 4: TEST STRATEGIES ── */}
         {view==="test" && (
           <div>
-            <div style={{fontSize:12,color:DS.inkSub,marginBottom:16,lineHeight:1.6}}>
-              How does each strategy perform across your four scenarios?
-              Use <strong>AI Fill Matrix</strong> or click to rate each cell manually.
+            <div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:16,flexWrap:"wrap"}}>
+              <div style={{fontSize:12,color:DS.inkSub,lineHeight:1.6,flex:1}}>
+                Rate each strategy across every future scenario.
+                <strong> Thrives</strong> = strategy excels in this future.
+                <strong> Survives</strong> = acceptable performance.
+                <strong> Struggles</strong> = material failure or disadvantage.
+              </div>
+              {Object.keys(perfMatrix).length > 0 && (
+                <button onClick={runStressAnalysis}
+                  disabled={aiBusy||stressing}
+                  style={{fontSize:11,fontWeight:700,fontFamily:"inherit",padding:"6px 12px",
+                    border:"1px solid "+DS.canvasBdr,borderRadius:6,cursor:"pointer",
+                    background:DS.accentSoft,color:DS.accent,whiteSpace:"nowrap",flexShrink:0}}>
+                  {stressing?"Analysing…":"✦ Stress-Test Analysis"}
+                </button>
+              )}
             </div>
+
+            {/* Per-scenario winner summary */}
+            {scenarios.length > 0 && Object.keys(perfMatrix).length > 0 && (
+              <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+                {scenarios.map(sc => {
+                  const ranked = strategies.map(s => {
+                    const cell = perfMatrix[s.id+"_"+sc.id]||{};
+                    const score = {thrives:3,survives:2,struggles:0}[cell.rating]||1;
+                    return {...s, score, rating:cell.rating};
+                  }).sort((a,b)=>b.score-a.score);
+                  const leader = ranked[0];
+                  const allStruggle = ranked.every(s=>s.rating==="struggles");
+                  const anyRated = ranked.some(s=>s.rating);
+                  const col = leader ? DS.s[leader.colorIdx] : null;
+                  return (
+                    <div key={sc.id} style={{padding:"8px 12px",borderRadius:7,flex:1,minWidth:120,
+                      background:allStruggle?"#fef2f2":col?.soft||DS.canvasAlt,
+                      border:"1px solid "+(allStruggle?"#fecaca":col?.line||DS.canvasBdr)}}>
+                      <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,
+                        textTransform:"uppercase",letterSpacing:.4,marginBottom:3}}>
+                        {sc.name}
+                      </div>
+                      {!anyRated ? (
+                        <div style={{fontSize:10,color:DS.inkDis}}>Not rated</div>
+                      ) : allStruggle ? (
+                        <div style={{fontSize:10,fontWeight:700,color:"#dc2626"}}>⚠ All struggle</div>
+                      ) : (
+                        <div style={{fontSize:11,fontWeight:700,color:col?.fill||DS.ink}}>
+                          {leader.name}
+                          <span style={{fontSize:9,fontWeight:400,color:DS.inkTer,marginLeft:4}}>
+                            {leader.rating}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {strategies.length===0?(
               <div style={{color:DS.inkTer,fontSize:13,padding:20,textAlign:"center"}}>
                 Build strategies in Module 04 first.
@@ -11790,63 +11890,179 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
         {/* ── STEP 5: ROBUSTNESS INSIGHTS ── */}
         {view==="insights" && (
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:DS.ink,marginBottom:4}}>Strategy Robustness</div>
-            <div style={{fontSize:11,color:DS.inkTer,marginBottom:16}}>
-              Ranked by performance across all four scenarios.
-            </div>
-            {robustness.map((s,i)=>{
-              const col=DS.s?.[s.colorIdx]||{fill:"#6b7280",soft:"#f9fafb"};
-              const isTop=i===0;
-              const classification = s.counts.thrives>=3?"Robust":s.counts.struggles>=2?"Fragile":s.counts.struggles===0?"Hedge":"Conditional";
-              const classColor = {Robust:DS.success,Fragile:DS.danger,Hedge:DS.accent,Conditional:DS.warning}[classification];
-              return (
-                <div key={s.id} style={{padding:"16px 18px",marginBottom:10,
-                  background:isTop?col.soft:DS.canvas,
-                  border:"1px solid "+(isTop?col.fill:DS.canvasBdr),
-                  borderRadius:10,borderLeft:"4px solid "+col.fill}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
-                    <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:22,fontWeight:700,color:col.fill,width:28}}>{i+1}</div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:14,fontWeight:700,color:DS.ink}}>{s.name}</div>
-                      {s.objective&&<div style={{fontSize:11,color:DS.inkTer,marginTop:1}}>{s.objective}</div>}
-                    </div>
-                    <span style={{padding:"3px 10px",background:classColor+"20",color:classColor,
-                      borderRadius:5,fontSize:10,fontWeight:700,border:"1px solid "+classColor+"40"}}>
-                      {classification}
-                    </span>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:20,fontWeight:700,color:col.fill,fontFamily:"'Libre Baskerville',serif"}}>{s.score}%</div>
-                      <div style={{fontSize:9,color:DS.inkTer}}>robust</div>
+
+            {/* SURVIVAL MAP */}
+            {scenarios.length > 0 && strategies.length > 0 && Object.keys(perfMatrix).length > 0 && (
+              <div style={{marginBottom:24}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:DS.ink,marginBottom:2}}>Strategy Survival Map</div>
+                    <div style={{fontSize:11,color:DS.inkTer}}>
+                      Read across rows — where does each strategy thrive or fail? Read down columns — which future is most dangerous?
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {RATINGS.map(r=>(
-                      <span key={r.id} style={{padding:"2px 8px",fontSize:10,background:r.bg,
-                        border:"1px solid "+r.border,borderRadius:4,color:r.color,fontWeight:700}}>
-                        {r.icon} {s.counts[r.id]} {r.label}
-                      </span>
-                    ))}
-                    {s.filled<scenarios.length&&(
-                      <span style={{padding:"2px 8px",fontSize:10,background:DS.canvasAlt,
-                        border:"1px solid "+DS.canvasBdr,borderRadius:4,color:DS.inkTer}}>
-                        {scenarios.length-s.filled} unrated
-                      </span>
+                  {Object.keys(perfMatrix).length > 0 && (
+                    <button onClick={runStressAnalysis} disabled={aiBusy||stressing}
+                      style={{fontSize:11,fontWeight:700,fontFamily:"inherit",padding:"6px 12px",
+                        border:"1px solid "+(stressAnalysis?DS.accentLine:DS.canvasBdr),
+                        borderRadius:6,cursor:"pointer",flexShrink:0,
+                        background:stressAnalysis?DS.accentSoft:"transparent",
+                        color:stressAnalysis?DS.accent:DS.inkTer}}>
+                      {stressing?"Analysing…":stressAnalysis?"↻ Re-run Stress Test":"✦ Run Stress-Test Analysis"}
+                    </button>
+                  )}
+                </div>
+                {/* Scenario column headers */}
+                <div style={{display:"grid",gridTemplateColumns:"160px repeat("+scenarios.length+",1fr)",gap:3,marginBottom:3}}>
+                  <div/>
+                  {scenarios.map(sc => {
+                    const q = QUADRANTS.find(q=>q.pos===sc.pos);
+                    const allR = strategies.map(s=>(perfMatrix[s.id+"_"+sc.id]||{}).rating);
+                    const wc = allR.filter(r=>r==="struggles").length;
+                    const bc = allR.filter(r=>r==="thrives").length;
+                    return (
+                      <div key={sc.id} style={{padding:"8px 8px",background:DS.ink,borderRadius:7,textAlign:"center"}}>
+                        <div style={{fontSize:11,fontWeight:700,color:"#f0f2f8",marginBottom:3}}>{sc.name}</div>
+                        {q&&(<div style={{fontSize:8,color:"#6e7d9e",marginBottom:4}}>{u1?.label}: {q.ax1} · {u2?.label}: {q.ax2}</div>)}
+                        <div style={{display:"flex",justifyContent:"center",gap:4}}>
+                          {wc>0&&<span style={{fontSize:9,fontWeight:700,color:"#dc2626",background:"rgba(220,38,38,.15)",padding:"1px 5px",borderRadius:3}}>{wc} struggle</span>}
+                          {bc>0&&<span style={{fontSize:9,fontWeight:700,color:"#22c55e",background:"rgba(34,197,94,.15)",padding:"1px 5px",borderRadius:3}}>{bc} thrive</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Strategy rows */}
+                {robustness.map((s,si) => {
+                  const col = DS.s?.[s.colorIdx]||{fill:"#6b7280",soft:"#f9fafb",line:"#e5e7eb"};
+                  const cls = s.counts.thrives>=Math.ceil(scenarios.length*0.6)?"Robust"
+                    :s.counts.struggles>=Math.ceil(scenarios.length*0.5)?"Fragile"
+                    :s.counts.struggles===0?"Hedge":"Conditional";
+                  const clsCol = {Robust:DS.success,Fragile:DS.danger,Hedge:DS.accent,Conditional:DS.warning}[cls];
+                  return (
+                    <div key={s.id} style={{display:"grid",gridTemplateColumns:"160px repeat("+scenarios.length+",1fr)",gap:3,marginBottom:3}}>
+                      <div style={{padding:"10px 12px",background:col.soft,border:"1px solid "+col.line,borderRadius:7,borderLeft:"4px solid "+col.fill,display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                        <div style={{fontSize:11,fontWeight:700,color:col.fill,marginBottom:3}}>{s.name}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:4}}>
+                          <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:clsCol+"20",color:clsCol,border:"1px solid "+clsCol+"40"}}>{cls}</span>
+                          <span style={{fontSize:10,fontWeight:700,color:col.fill}}>{s.score}%</span>
+                        </div>
+                      </div>
+                      {scenarios.map(sc => {
+                        const cell = perfMatrix[s.id+"_"+sc.id]||{};
+                        const rating = RATINGS.find(r=>r.id===cell.rating);
+                        return (
+                          <div key={sc.id} style={{padding:"8px",borderRadius:7,background:rating?.bg||DS.canvasAlt,border:"1px solid "+(rating?.border||DS.canvasBdr),display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3}}>
+                            {rating?(
+                              <>
+                                <span style={{fontSize:14,fontWeight:700,color:rating.color}}>{rating.icon}</span>
+                                <span style={{fontSize:9,fontWeight:700,color:rating.color}}>{rating.label}</span>
+                                {cell.note&&<div style={{fontSize:8,color:DS.inkTer,textAlign:"center",lineHeight:1.3}}>{cell.note.slice(0,50)}{cell.note.length>50?"…":""}</div>}
+                              </>
+                            ):(
+                              <span style={{fontSize:10,color:DS.inkDis}}>—</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+                <div style={{display:"flex",gap:12,marginTop:8,justifyContent:"flex-end"}}>
+                  {RATINGS.map(r=>(
+                    <div key={r.id} style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:11,color:r.color}}>{r.icon}</span>
+                      <span style={{fontSize:10,color:DS.inkTer}}>{r.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ROBUSTNESS RANKING */}
+            <div style={{marginBottom:stressAnalysis?20:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:DS.ink,marginBottom:10}}>Robustness Ranking</div>
+              {robustness.map((s,i)=>{
+                const col=DS.s?.[s.colorIdx]||{fill:"#6b7280",soft:"#f9fafb"};
+                const isTop=i===0;
+                const cls=s.counts.thrives>=Math.ceil(scenarios.length*0.6)?"Robust":s.counts.struggles>=Math.ceil(scenarios.length*0.5)?"Fragile":s.counts.struggles===0?"Hedge":"Conditional";
+                const clsCol={Robust:DS.success,Fragile:DS.danger,Hedge:DS.accent,Conditional:DS.warning}[cls];
+                const sp=stressAnalysis?.strategyProfiles?.find(p=>p.name===s.name);
+                return (
+                  <div key={s.id} style={{padding:"12px 16px",marginBottom:8,background:isTop?col.soft:DS.canvas,border:"1px solid "+(isTop?col.fill:DS.canvasBdr),borderRadius:10,borderLeft:"4px solid "+col.fill}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5}}>
+                      <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:18,fontWeight:700,color:col.fill,width:22}}>{i+1}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:700,color:DS.ink}}>{s.name}</div>
+                        {s.objective&&<div style={{fontSize:10,color:DS.inkTer,marginTop:1}}>{s.objective.slice(0,70)}</div>}
+                      </div>
+                      <span style={{padding:"2px 8px",background:clsCol+"20",color:clsCol,borderRadius:5,fontSize:10,fontWeight:700,border:"1px solid "+clsCol+"40"}}>{cls}</span>
+                      <span style={{fontFamily:"'Libre Baskerville',serif",fontSize:16,fontWeight:700,color:col.fill}}>{s.score}%</span>
+                    </div>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:sp?6:0}}>
+                      {RATINGS.map(r=>(<span key={r.id} style={{padding:"2px 7px",fontSize:10,background:r.bg,border:"1px solid "+r.border,borderRadius:4,color:r.color,fontWeight:700}}>{r.icon} {s.counts[r.id]} {r.label}</span>))}
+                    </div>
+                    {sp&&sp.failureCondition&&(
+                      <div style={{padding:"6px 9px",background:"rgba(0,0,0,.03)",borderRadius:5,border:"1px solid "+DS.canvasBdr,fontSize:11,color:DS.ink,lineHeight:1.5}}>
+                        <span style={{fontWeight:700,color:DS.danger}}>Fails when: </span>{sp.failureCondition}
+                      </div>
                     )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
 
-            {/* Signposts summary */}
+            {/* STRESS ANALYSIS RESULTS */}
+            {stressAnalysis && (
+              <div style={{marginBottom:16}}>
+                {stressAnalysis.keyInsight&&(
+                  <div style={{padding:"14px 16px",background:DS.ink,borderRadius:9,marginBottom:12}}>
+                    <div style={{fontSize:9,fontWeight:700,color:"#6e7d9e",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>✦ Key Insight</div>
+                    <div style={{fontSize:12,color:"#f0f2f8",lineHeight:1.6,fontWeight:600}}>{stressAnalysis.keyInsight}</div>
+                  </div>
+                )}
+                {stressAnalysis.mostDangerousScenario&&(
+                  <div style={{padding:"12px 14px",background:"#fef2f2",border:"2px solid #fecaca",borderRadius:8,marginBottom:10}}>
+                    <div style={{fontSize:9,fontWeight:700,color:"#dc2626",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>⚠ Most Dangerous Scenario</div>
+                    <div style={{fontSize:12,fontWeight:700,color:DS.ink,marginBottom:3}}>{stressAnalysis.mostDangerousScenario.name}</div>
+                    <div style={{fontSize:11,color:DS.inkSub,lineHeight:1.5,marginBottom:stressAnalysis.mostDangerousScenario.earlyWarnings?.length?8:0}}>{stressAnalysis.mostDangerousScenario.reason}</div>
+                    {(stressAnalysis.mostDangerousScenario.earlyWarnings||[]).map((w,i)=>(
+                      <div key={i} style={{fontSize:10,color:DS.ink,marginBottom:2,paddingLeft:8,borderLeft:"2px solid #fecaca"}}>{w}</div>
+                    ))}
+                  </div>
+                )}
+                {(stressAnalysis.correlatedFailures||[]).length>0&&(
+                  <div style={{padding:"10px 14px",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:7,marginBottom:10}}>
+                    <div style={{fontSize:9,fontWeight:700,color:DS.warning,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>⚠ Correlated Failures</div>
+                    {stressAnalysis.correlatedFailures.map((cf,i)=>(
+                      <div key={i} style={{fontSize:11,color:DS.ink,marginBottom:5,lineHeight:1.5}}>
+                        <strong>{(cf.strategies||[]).join(" & ")}</strong> both fail in <strong>{cf.sharedFailScenario}</strong>
+                        {cf.implication&&<div style={{fontSize:10,color:DS.inkSub,marginTop:1}}>→ {cf.implication}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {stressAnalysis.recommendation&&(
+                  <div style={{padding:"12px 16px",background:DS.accentSoft,border:"2px solid "+DS.accent,borderRadius:8}}>
+                    <div style={{fontSize:9,fontWeight:700,color:DS.accent,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>✦ Stress-Test Recommendation</div>
+                    <div style={{fontSize:13,fontWeight:700,color:DS.ink,marginBottom:3}}>{stressAnalysis.recommendation.strategy}</div>
+                    <div style={{fontSize:11,color:DS.inkSub,lineHeight:1.6,marginBottom:stressAnalysis.recommendation.hedgeAction?8:0}}>{stressAnalysis.recommendation.rationale}</div>
+                    {stressAnalysis.recommendation.hedgeAction&&(
+                      <div style={{padding:"6px 9px",background:"rgba(37,99,235,.08)",border:"1px solid rgba(37,99,235,.2)",borderRadius:4,fontSize:11,color:DS.ink}}>
+                        <strong style={{color:DS.accent}}>Hedge action: </strong>{stressAnalysis.recommendation.hedgeAction}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {scenarios.some(s=>s.earlyWarningIndicators)&&(
-              <div style={{marginTop:20,padding:"16px 18px",background:DS.accentSoft,
-                border:"1px solid "+DS.accentLine,borderRadius:10}}>
-                <div style={{fontSize:11,fontWeight:700,color:DS.accent,marginBottom:10}}>
-                  ⚡ Early Warning Indicators — Watch for these signposts
-                </div>
+              <div style={{padding:"12px 16px",background:DS.accentSoft,border:"1px solid "+DS.accentLine,borderRadius:9}}>
+                <div style={{fontSize:11,fontWeight:700,color:DS.accent,marginBottom:8}}>⚡ Early Warning Indicators</div>
                 {scenarios.filter(s=>s.earlyWarningIndicators).map(s=>(
-                  <div key={s.id} style={{marginBottom:8}}>
-                    <div style={{fontSize:10,fontWeight:700,color:DS.ink,marginBottom:2}}>{s.name}:</div>
+                  <div key={s.id} style={{marginBottom:6}}>
+                    <div style={{fontSize:10,fontWeight:700,color:DS.ink,marginBottom:1}}>{s.name}:</div>
                     <div style={{fontSize:11,color:DS.inkSub,lineHeight:1.5}}>{s.earlyWarningIndicators}</div>
                   </div>
                 ))}
@@ -11858,6 +12074,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
     </div>
   );
 }
+
 
 
 function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCall, aiBusy, onAIMsg }) {
@@ -11875,6 +12092,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
   const [view, setView]         = useState("screening"); // screening | options | recommendation
   const [items, setItems]       = useState([]);
   const [analysing, setAnalysing] = useState(false);
+  const [showPrimer, setShowPrimer] = useState(true);
 
   // Seed from influence diagram
   useEffect(() => {
@@ -11983,6 +12201,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
           isDecisionCritical:match.isDecisionCritical,
           classification:match.classification||"",
           voiNote:match.voiNote||"",
+          decisionPivot:match.decisionPivot||x.decisionPivot||"",
           costToLearn:match.costToLearn||x.costToLearn,
           timeToLearn:match.timeToLearn||x.timeToLearn,
           informationOptions:x.informationOptions.length>0?x.informationOptions:[{
@@ -12019,13 +12238,68 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
             <div style={{fontSize:9,color:DS.inkTer,textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Module 11</div>
             <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:18,fontWeight:700,color:DS.ink}}>Value of Information</div>
           </div>
+          <button onClick={()=>setShowPrimer(p=>!p)}
+            style={{fontSize:10,fontWeight:700,fontFamily:"inherit",padding:"4px 10px",
+              border:"1px solid "+DS.canvasBdr,borderRadius:5,background:"transparent",
+              color:DS.inkTer,cursor:"pointer"}}>
+            {showPrimer?"Hide":"What is VoI?"}
+          </button>
           <Btn variant="secondary" size="sm" onClick={addItem}>+ Add Uncertainty</Btn>
           <Btn variant="primary" size="sm" onClick={analyseVoI} disabled={aiBusy||analysing||!items.length}>
             {analysing?"Analysing…":"AI Analyse VoI"}
           </Btn>
         </div>
+
+        {/* VoI Primer */}
+        {showPrimer && (
+          <div style={{margin:"0 0 0 0",padding:"14px 20px",background:"#1e2433",
+            borderTop:"1px solid #3d4d6b"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#6e7d9e",letterSpacing:.8,
+              textTransform:"uppercase",marginBottom:10}}>
+              What is Value of Information?
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+              {[
+                {
+                  q:"Would knowing this change our decision?",
+                  a:"If learning the answer wouldn't change which strategy you choose, the information has no value — regardless of cost or ease.",
+                  icon:"◎", color:"#2563eb",
+                },
+                {
+                  q:"Can we find out before we must decide?",
+                  a:"Information you can't get before the decision deadline has zero practical value, even if it would change the answer.",
+                  icon:"◈", color:"#7c3aed",
+                },
+                {
+                  q:"Is finding out worth the cost and delay?",
+                  a:"Even high-value information may not be worth pursuing if the research cost exceeds the value of getting a better decision.",
+                  icon:"◉", color:"#059669",
+                },
+              ].map((item,i)=>(
+                <div key={i} style={{padding:"10px 12px",background:"rgba(255,255,255,.04)",
+                  border:"1px solid rgba(255,255,255,.08)",borderRadius:7}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                    <span style={{fontSize:14,color:item.color}}>{item.icon}</span>
+                    <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",lineHeight:1.3}}>{item.q}</div>
+                  </div>
+                  <div style={{fontSize:10,color:"#64748b",lineHeight:1.5}}>{item.a}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{padding:"8px 12px",background:"rgba(37,99,235,.1)",
+              border:"1px solid rgba(37,99,235,.2)",borderRadius:6,
+              fontSize:10,color:"#93b4fd",lineHeight:1.5}}>
+              <strong style={{color:"#60a5fa"}}>The VoI score</strong> combines four signals: how much it would change the decision if known (Decision Impact), how uncertain it is today (Current Uncertainty), whether you can resolve it before the deadline (Resolvability), and whether new information is likely to shift the preferred alternative (Change Probability). High score = worth pursuing. Low score = accept and move on.
+            </div>
+          </div>
+        )}
+
         <div style={{padding:"0 20px 8px",display:"flex",gap:2}}>
-          {[{id:"screening",label:"1. Screening"},{id:"options",label:"2. Information Options"},{id:"recommendation",label:"3. Recommendations"}].map(v=>(
+          {[
+            {id:"screening",   label:"1. Screen Uncertainties"},
+            {id:"options",     label:"2. Information Options"},
+            {id:"recommendation",label:"3. Recommendations"},
+          ].map(v=>(
             <button key={v.id} onClick={()=>setView(v.id)}
               style={{padding:"5px 12px",fontSize:11,fontWeight:700,fontFamily:"inherit",
                 cursor:"pointer",border:"none",borderRadius:5,
@@ -12042,84 +12316,90 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
         {/* ── STEP 1: SCREENING ── */}
         {view==="screening" && (
           <div>
-            <div style={{fontSize:12,color:DS.inkSub,marginBottom:16,lineHeight:1.6,maxWidth:700}}>
-              Score each uncertainty on four dimensions. The VoI score identifies which uncertainties deserve further analysis.
-              <strong> Key principle: more data is not always better</strong> — information only has value if it can change the decision.
-            </div>
-
             {items.length===0?(
               <div style={{textAlign:"center",padding:"40px",color:DS.inkTer,border:"1.5px dashed "+DS.canvasBdr,borderRadius:10}}>
                 <div style={{fontSize:28,marginBottom:8,opacity:.4}}>◎</div>
                 <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>No uncertainties loaded</div>
                 <div style={{fontSize:12,marginBottom:16,lineHeight:1.6}}>
-                  Build the <strong>Influence Diagram</strong> (Module 09) with uncertainty nodes — they auto-populate here.
-                  Or add manually.
+                  Build the <strong>Influence Diagram</strong> (Module 09) with uncertainty nodes — they auto-populate here. Or add manually.
                 </div>
                 <Btn variant="secondary" onClick={addItem}>+ Add Uncertainty</Btn>
               </div>
             ):(
-              <table style={{width:"100%",borderCollapse:"collapse"}}>
-                <thead>
-                  <tr>
-                    {["#","Uncertainty","Decision Impact","Current Uncertainty","Resolvability","Change Probability","VoI Score",""].map(h=>(
-                      <th key={h} style={{padding:"8px 10px",background:DS.ink,color:"#fff",
-                        fontSize:9,fontWeight:700,textAlign:"left",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedItems.map((x,i)=>{
-                    const pct = Math.min(100,Math.round(x.voiScore/36*100));
-                    const scoreColor = pct>=70?"#059669":pct>=40?"#d97706":"#6b7280";
-                    return (
-                      <tr key={x.id} style={{borderTop:"1px solid "+DS.canvasBdr,background:i%2===0?DS.canvas:DS.canvasAlt}}>
-                        <td style={{padding:"8px 10px",fontSize:11,color:DS.inkTer,fontWeight:700}}>{i+1}</td>
-                        <td style={{padding:"8px 10px",minWidth:180}}>
-                          <input value={x.label} onChange={e=>updateItem(x.id,{label:e.target.value})}
-                            style={{width:"100%",fontSize:12,fontWeight:700,color:DS.ink,
-                              background:"transparent",border:"none",outline:"none",fontFamily:"inherit"}}/>
-                          <div style={{fontSize:9,color:DS.inkTer,marginTop:1}}>From: {x.source}</div>
-                        </td>
-                        {[
-                          {key:"decisionImpact",opts:DECISION_IMPACT,label:"If known, would it change the decision?"},
-                          {key:"currentUncertainty",opts:["High","Medium","Low"],label:"How uncertain is this today?"},
-                          {key:"resolvability",opts:RESOLVABILITY,label:"How feasible to obtain before deadline?"},
-                          {key:"changeProbability",opts:["High","Medium","Low"],label:"Probability new info changes the preferred alternative?"},
-                        ].map(f=>{
-                          const val = x[f.key];
-                          const color = val==="High"||val==="Easy"?"#059669":val==="Medium"||val==="Moderate"?"#d97706":val==="Low"?"#6b7280":"#dc2626";
-                          return (
-                            <td key={f.key} style={{padding:"8px 10px"}}>
-                              <select value={val} onChange={e=>updateItem(x.id,{[f.key]:e.target.value})}
-                                style={{fontSize:11,padding:"3px 6px",border:"1px solid "+DS.canvasBdr,
-                                  borderRadius:4,background:DS.canvas,color,fontFamily:"inherit",fontWeight:600}}>
-                                {f.opts.map(o=><option key={o}>{o}</option>)}
-                              </select>
-                            </td>
-                          );
-                        })}
-                        <td style={{padding:"8px 10px",minWidth:80}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <div style={{flex:1,height:6,background:DS.canvasBdr,borderRadius:3,overflow:"hidden"}}>
-                              <div style={{width:pct+"%",height:"100%",background:scoreColor,borderRadius:3}}/>
-                            </div>
-                            <span style={{fontSize:10,fontWeight:700,color:scoreColor,minWidth:28}}>{pct}%</span>
+              <div>
+                {/* Column guide */}
+                <div style={{display:"grid",gridTemplateColumns:"180px repeat(4,1fr) 80px 30px",
+                  gap:0,marginBottom:2,padding:"0 0 6px 0",
+                  borderBottom:"1px solid "+DS.canvasBdr}}>
+                  <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,letterSpacing:.5,textTransform:"uppercase",padding:"0 8px"}}>Uncertainty</div>
+                  {[
+                    {label:"Decision Impact",   tip:"If we knew this, would it change which strategy we choose?"},
+                    {label:"Current Uncertainty",tip:"How unknown is this today — do we have any data at all?"},
+                    {label:"Resolvability",      tip:"Can we get a reliable answer before the decision deadline?"},
+                    {label:"Change Probability", tip:"How likely is new information to actually shift the preferred alternative?"},
+                  ].map(col=>(
+                    <div key={col.label} title={col.tip}
+                      style={{fontSize:9,fontWeight:700,color:DS.inkTer,letterSpacing:.3,
+                        textTransform:"uppercase",padding:"0 6px",cursor:"help",lineHeight:1.3}}>
+                      {col.label}
+                      <span style={{display:"block",fontSize:8,fontWeight:400,color:DS.inkDis,
+                        marginTop:1,fontStyle:"italic"}}>{col.tip.slice(0,40)}…</span>
+                    </div>
+                  ))}
+                  <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,letterSpacing:.3,textTransform:"uppercase",padding:"0 6px"}}>VoI Score</div>
+                  <div/>
+                </div>
+
+                {sortedItems.map((x,i)=>{
+                  const pct = Math.min(100,Math.round(x.voiScore/36*100));
+                  const scoreColor = pct>=70?"#059669":pct>=40?"#d97706":"#6b7280";
+                  const scoreBg    = pct>=70?"#ecfdf5":pct>=40?"#fffbeb":"#f8fafc";
+                  return (
+                    <div key={x.id} style={{display:"grid",
+                      gridTemplateColumns:"180px repeat(4,1fr) 80px 30px",
+                      gap:0,padding:"8px 0",borderBottom:"1px solid "+DS.canvasBdr,
+                      background:i%2===0?DS.canvas:DS.canvasAlt}}>
+                      <div style={{padding:"0 8px",display:"flex",flexDirection:"column",justifyContent:"center",gap:2}}>
+                        <input value={x.label} onChange={e=>updateItem(x.id,{label:e.target.value})}
+                          style={{width:"100%",fontSize:12,fontWeight:700,color:DS.ink,
+                            background:"transparent",border:"none",outline:"none",fontFamily:"inherit"}}/>
+                        <div style={{fontSize:9,color:DS.inkTer}}>From: {x.source}</div>
+                      </div>
+                      {[
+                        {key:"decisionImpact",    opts:DECISION_IMPACT},
+                        {key:"currentUncertainty",opts:["High","Medium","Low"]},
+                        {key:"resolvability",     opts:RESOLVABILITY},
+                        {key:"changeProbability", opts:["High","Medium","Low"]},
+                      ].map(f=>{
+                        const val=x[f.key];
+                        const col=val==="High"||val==="Easy"?"#059669":val==="Medium"||val==="Moderate"?"#d97706":val==="Low"?"#6b7280":"#dc2626";
+                        return (
+                          <div key={f.key} style={{padding:"0 6px",display:"flex",alignItems:"center"}}>
+                            <select value={val} onChange={e=>updateItem(x.id,{[f.key]:e.target.value})}
+                              style={{fontSize:11,padding:"4px 6px",border:"1px solid "+DS.canvasBdr,
+                                borderRadius:4,background:DS.canvas,color:col,fontFamily:"inherit",fontWeight:600,width:"100%"}}>
+                              {f.opts.map(o=><option key={o}>{o}</option>)}
+                            </select>
                           </div>
-                        </td>
-                        <td style={{padding:"8px 10px"}}>
-                          <button onClick={()=>removeItem(x.id)}
-                            style={{background:"none",border:"none",cursor:"pointer",color:DS.inkTer,fontSize:14}}>×</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-            {items.length>0&&(
-              <div style={{marginTop:12,display:"flex",gap:8}}>
-                <Btn variant="secondary" size="sm" onClick={addItem}>+ Add</Btn>
-                <Btn variant="primary" size="sm" onClick={()=>setView("options")}>Define Information Options →</Btn>
+                        );
+                      })}
+                      <div style={{padding:"0 6px",display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{flex:1,height:6,background:DS.canvasBdr,borderRadius:3,overflow:"hidden"}}>
+                          <div style={{width:pct+"%",height:"100%",background:scoreColor,borderRadius:3}}/>
+                        </div>
+                        <span style={{fontSize:10,fontWeight:700,color:scoreColor,minWidth:28}}>{pct}%</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <button onClick={()=>removeItem(x.id)}
+                          style={{background:"none",border:"none",cursor:"pointer",color:DS.inkTer,fontSize:14}}>×</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{marginTop:12,display:"flex",gap:8}}>
+                  <Btn variant="secondary" size="sm" onClick={addItem}>+ Add</Btn>
+                  <Btn variant="primary" size="sm" onClick={()=>setView("options")}>Define Information Options →</Btn>
+                </div>
               </div>
             )}
           </div>
@@ -12129,8 +12409,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
         {view==="options" && (
           <div>
             <div style={{fontSize:12,color:DS.inkSub,marginBottom:16,lineHeight:1.6,maxWidth:700}}>
-              For each high-VoI uncertainty, define what learning option would reduce it and at what cost/time.
-              This feeds the AI recommendation on whether to pursue each study.
+              For each high-VoI uncertainty, define what learning option would reduce it and at what cost/time. This feeds the AI recommendation.
             </div>
             {sortedItems.filter(x=>x.voiScore>0).map(x=>{
               const pct=Math.min(100,Math.round(x.voiScore/36*100));
@@ -12151,29 +12430,24 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
                   </div>
                   {(x.informationOptions||[]).length===0?(
                     <div style={{fontSize:11,color:DS.inkTer,fontStyle:"italic"}}>
-                      No information options defined. Click "+ Add Option" or run AI Analyse VoI to suggest one.
+                      No information options defined. Click "+ Add Option" or run AI Analyse VoI.
                     </div>
                   ):(x.informationOptions||[]).map(opt=>(
                     <div key={opt.id} style={{padding:"10px 12px",marginBottom:8,
-                      background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,
-                      borderRadius:7}}>
+                      background:DS.canvasAlt,border:"1px solid "+DS.canvasBdr,borderRadius:7}}>
                       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:8}}>
                         <select value={opt.type||""} onChange={e=>updateInfoOption(x.id,opt.id,{type:e.target.value})}
-                          style={{fontSize:11,padding:"4px 7px",border:"1px solid "+DS.canvasBdr,
-                            borderRadius:4,fontFamily:"inherit",background:DS.canvas,color:DS.ink}}>
+                          style={{fontSize:11,padding:"4px 7px",border:"1px solid "+DS.canvasBdr,borderRadius:4,fontFamily:"inherit",background:DS.canvas,color:DS.ink}}>
                           {INFO_TYPES.map(t=><option key={t}>{t}</option>)}
                         </select>
                         <input value={opt.cost||""} onChange={e=>updateInfoOption(x.id,opt.id,{cost:e.target.value})}
                           placeholder="Cost (e.g. $50K)"
-                          style={{flex:1,minWidth:100,padding:"4px 7px",fontSize:11,fontFamily:"inherit",
-                            background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:4,color:DS.ink,outline:"none"}}/>
+                          style={{flex:1,minWidth:100,padding:"4px 7px",fontSize:11,fontFamily:"inherit",background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:4,color:DS.ink,outline:"none"}}/>
                         <input value={opt.duration||""} onChange={e=>updateInfoOption(x.id,opt.id,{duration:e.target.value})}
                           placeholder="Duration (e.g. 6 weeks)"
-                          style={{flex:1,minWidth:100,padding:"4px 7px",fontSize:11,fontFamily:"inherit",
-                            background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:4,color:DS.ink,outline:"none"}}/>
+                          style={{flex:1,minWidth:100,padding:"4px 7px",fontSize:11,fontFamily:"inherit",background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:4,color:DS.ink,outline:"none"}}/>
                         <select value={opt.accuracy||"Medium"} onChange={e=>updateInfoOption(x.id,opt.id,{accuracy:e.target.value})}
-                          style={{fontSize:11,padding:"4px 7px",border:"1px solid "+DS.canvasBdr,
-                            borderRadius:4,fontFamily:"inherit",background:DS.canvas,color:DS.ink}}>
+                          style={{fontSize:11,padding:"4px 7px",border:"1px solid "+DS.canvasBdr,borderRadius:4,fontFamily:"inherit",background:DS.canvas,color:DS.ink}}>
                           {["High","Medium","Low"].map(v=><option key={v}>{v} Accuracy</option>)}
                         </select>
                         <button onClick={()=>removeInfoOption(x.id,opt.id)}
@@ -12182,9 +12456,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
                       <textarea value={opt.description||""} onChange={e=>updateInfoOption(x.id,opt.id,{description:e.target.value})}
                         placeholder="What would this study do and what would it tell us?"
                         rows={2}
-                        style={{width:"100%",fontSize:11,padding:"5px 7px",fontFamily:"inherit",
-                          background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:5,
-                          color:DS.ink,outline:"none",resize:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
+                        style={{width:"100%",fontSize:11,padding:"5px 7px",fontFamily:"inherit",background:DS.canvas,border:"1px solid "+DS.canvasBdr,borderRadius:5,color:DS.ink,outline:"none",resize:"none",lineHeight:1.5,boxSizing:"border-box"}}/>
                     </div>
                   ))}
                 </div>
@@ -12201,63 +12473,108 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
         {/* ── STEP 3: RECOMMENDATIONS ── */}
         {view==="recommendation" && (
           <div>
-            {/* Resolve before commit */}
             {resolveFirst.length>0&&(
               <div style={{padding:"14px 16px",background:DS.accentSoft,
                 border:"2px solid "+DS.accent,borderRadius:10,marginBottom:20}}>
-                <div style={{fontSize:11,fontWeight:700,color:DS.accent,
+                <div style={{fontSize:10,fontWeight:700,color:DS.accent,
                   textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>
                   ⬆ Resolve Before Committing
                 </div>
                 {resolveFirst.map((x,i)=>{
                   const opt=x.informationOptions?.[0];
                   return (
-                    <div key={x.id} style={{display:"flex",gap:10,marginBottom:6,alignItems:"flex-start"}}>
-                      <span style={{fontSize:11,fontWeight:700,color:DS.accent,minWidth:16}}>{i+1}.</span>
-                      <div>
-                        <span style={{fontSize:12,fontWeight:700,color:DS.ink}}>{x.label}</span>
-                        {opt&&<span style={{fontSize:11,color:DS.inkSub}}> — {opt.description||opt.type}</span>}
-                        {(opt?.cost||opt?.duration)&&<span style={{fontSize:10,color:DS.inkTer}}> ({[opt.cost,opt.duration].filter(Boolean).join(", ")})</span>}
+                    <div key={x.id} style={{marginBottom:8}}>
+                      <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:x.decisionPivot?3:0}}>
+                        <span style={{fontSize:11,fontWeight:700,color:DS.accent,minWidth:16}}>{i+1}.</span>
+                        <div>
+                          <span style={{fontSize:12,fontWeight:700,color:DS.ink}}>{x.label}</span>
+                          {opt&&<span style={{fontSize:11,color:DS.inkSub}}> — {opt.description||opt.type}</span>}
+                          {(opt?.cost||opt?.duration)&&<span style={{fontSize:10,color:DS.inkTer}}> ({[opt.cost,opt.duration].filter(Boolean).join(", ")})</span>}
+                        </div>
                       </div>
+                      {x.decisionPivot&&(
+                        <div style={{marginLeft:24,padding:"5px 9px",background:"rgba(37,99,235,.08)",
+                          border:"1px solid rgba(37,99,235,.2)",borderRadius:4,
+                          fontSize:10,color:DS.ink,lineHeight:1.5}}>
+                          <strong style={{color:DS.accent}}>Decision pivot: </strong>{x.decisionPivot}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             )}
 
-            {/* Full recommendation list */}
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {sortedItems.map(x=>{
                 const cls=classInfo(x.classification);
                 const opt=x.informationOptions?.[0];
+                const pct=Math.min(100,Math.round(x.voiScore/36*100));
+                const scoreColor=pct>=70?"#059669":pct>=40?"#d97706":"#6b7280";
                 return (
                   <div key={x.id} style={{padding:"14px 16px",background:cls.bg||DS.canvas,
-                    border:"1px solid "+DS.canvasBdr,borderRadius:8,
-                    display:"flex",gap:14,alignItems:"flex-start"}}>
-                    <div style={{flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                        <span style={{fontSize:12,fontWeight:700,color:DS.ink}}>{x.label}</span>
-                        {x.isDecisionCritical===true&&<span style={{fontSize:9,padding:"1px 6px",background:"#fef3c7",color:"#92400e",borderRadius:3,fontWeight:700}}>DECISION CRITICAL</span>}
-                        {x.isDecisionCritical===false&&<span style={{fontSize:9,padding:"1px 6px",background:DS.canvasAlt,color:DS.inkTer,borderRadius:3}}>Not decision-critical</span>}
+                    border:"1px solid "+DS.canvasBdr,borderRadius:8}}>
+                    <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                          <span style={{fontSize:12,fontWeight:700,color:DS.ink}}>{x.label}</span>
+                          {x.isDecisionCritical===true&&(
+                            <span style={{fontSize:9,padding:"1px 6px",background:"#fef3c7",
+                              color:"#92400e",borderRadius:3,fontWeight:700}}>
+                              DECISION CRITICAL
+                            </span>
+                          )}
+                          {x.isDecisionCritical===false&&(
+                            <span style={{fontSize:9,padding:"1px 6px",background:DS.canvasAlt,
+                              color:DS.inkTer,borderRadius:3}}>
+                              Not decision-critical
+                            </span>
+                          )}
+                          <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,color:scoreColor}}>
+                            VoI {pct}%
+                          </span>
+                        </div>
+                        {x.voiNote&&(
+                          <div style={{fontSize:11,color:DS.inkSub,lineHeight:1.5,marginBottom:6}}>
+                            {x.voiNote}
+                          </div>
+                        )}
+                        {/* Decision Pivot — the key addition */}
+                        {x.decisionPivot&&(
+                          <div style={{padding:"7px 10px",marginBottom:6,
+                            background:x.isDecisionCritical?"rgba(37,99,235,.06)":"rgba(0,0,0,.03)",
+                            border:"1px solid "+(x.isDecisionCritical?DS.accentLine:DS.canvasBdr),
+                            borderRadius:5,fontSize:11,color:DS.ink,lineHeight:1.5}}>
+                            <span style={{fontWeight:700,
+                              color:x.isDecisionCritical?DS.accent:DS.inkTer}}>
+                              Decision pivot: </span>
+                            {x.decisionPivot}
+                          </div>
+                        )}
+                        {opt&&(
+                          <div style={{fontSize:10,color:DS.inkTer}}>
+                            {opt.description||opt.type}
+                            {opt.cost?" · "+opt.cost:""}
+                            {opt.duration?" · "+opt.duration:""}
+                          </div>
+                        )}
                       </div>
-                      {x.voiNote&&<div style={{fontSize:11,color:DS.inkSub,lineHeight:1.5,marginBottom:6}}>{x.voiNote}</div>}
-                      {opt&&<div style={{fontSize:10,color:DS.inkTer}}>{opt.description||opt.type}{opt.cost?" · "+opt.cost:""}{opt.duration?" · "+opt.duration:""}</div>}
-                    </div>
-                    <div>
-                      {x.classification?(
-                        <span style={{padding:"5px 12px",background:cls.color+"20",color:cls.color,
-                          border:"1px solid "+cls.color+"40",borderRadius:6,
-                          fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>
-                          {cls.label}
-                        </span>
-                      ):(
-                        <select value={x.classification||""} onChange={e=>updateItem(x.id,{classification:e.target.value})}
-                          style={{fontSize:11,padding:"4px 7px",border:"1px solid "+DS.canvasBdr,
-                            borderRadius:5,fontFamily:"inherit",background:DS.canvas,color:DS.ink}}>
-                          <option value="">Classify…</option>
-                          {CLASSIFICATION.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
-                        </select>
-                      )}
+                      <div style={{flexShrink:0}}>
+                        {x.classification?(
+                          <span style={{padding:"5px 12px",background:cls.color+"20",color:cls.color,
+                            border:"1px solid "+cls.color+"40",borderRadius:6,
+                            fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>
+                            {cls.label}
+                          </span>
+                        ):(
+                          <select value={x.classification||""} onChange={e=>updateItem(x.id,{classification:e.target.value})}
+                            style={{fontSize:11,padding:"4px 7px",border:"1px solid "+DS.canvasBdr,
+                              borderRadius:5,fontFamily:"inherit",background:DS.canvas,color:DS.ink}}>
+                            <option value="">Classify…</option>
+                            {CLASSIFICATION.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                          </select>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -12269,6 +12586,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, aiCal
     </div>
   );
 }
+
 
 
 function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onClose, aiCall, aiBusy, onAIMsg }) {
