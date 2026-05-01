@@ -5495,7 +5495,8 @@ function ModuleQualitativeAssessment({
   const getScore = (stratId, critId) => getCell(stratId, critId).score || 0;
   const setScore = (stratId, critId, val) => {
     const existing = getCell(stratId, critId);
-    onScores({ ...scores, [scoreKey(stratId, critId)]: { ...existing, score: val } });
+    const newScore = existing.score === val ? 0 : val; // toggle off if same score clicked
+    onScores({ ...scores, [scoreKey(stratId, critId)]: { ...existing, score: newScore } });
   };
   const setCell  = (stratId, critId, field, val) => {
     const existing = getCell(stratId, critId);
@@ -5948,7 +5949,7 @@ function ModuleQualitativeAssessment({
                   return (
                     <div key={crit.id} style={{ marginBottom:3 }}>
                       <div style={{ display:"grid",
-                        gridTemplateColumns:`220px repeat(${strategies.length}, 1fr) 100px`,
+                        gridTemplateColumns:`220px repeat(${strategies.length}, minmax(150px, 1fr)) 80px`,
                         background:DS.canvas,
                         border:`1px solid ${DS.canvasBdr}`,
                         borderRadius:8, overflow:"hidden" }}>
@@ -5995,6 +5996,7 @@ function ModuleQualitativeAssessment({
                               )}
                               style={{ padding:"10px 8px", borderLeft:`1px solid ${DS.canvasBdr}`,
                                 cursor:"pointer", transition:"all .12s",
+                                userSelect:"none", WebkitUserSelect:"none",
                                 background: isSelected
                                   ? col.soft
                                   : score > 0 && isBest
@@ -6004,13 +6006,14 @@ function ModuleQualitativeAssessment({
                                 alignItems:"center", gap:6 }}>
 
                               {/* Score buttons */}
-                              <div style={{ display:"flex", gap:2 }}>
+                              <div style={{ display:"flex", gap:1 }}>
                                 {[1,2,3,4,5].map(v => (
                                   <button key={v}
                                     onClick={e => { e.stopPropagation(); setScore(s.id, crit.id, v); }}
-                                    style={{ width:24, height:24, borderRadius:4,
+                                    style={{ width:22, height:22, borderRadius:4,
                                       cursor:"pointer", fontFamily:"inherit",
-                                      fontSize:10, fontWeight:700, transition:"all .1s",
+                                      fontSize:9, fontWeight:700, transition:"all .1s",
+                                      userSelect:"none", WebkitUserSelect:"none",
                                       border:`1.5px solid ${v <= score ? col.fill : DS.canvasBdr}`,
                                       background: v <= score ? col.fill : "transparent",
                                       color: v <= score ? "#fff" : DS.inkDis }}>
@@ -6173,12 +6176,12 @@ function ModuleQualitativeAssessment({
                         style={{ padding:"8px 4px", borderRadius:6,
                           cursor:"pointer", fontFamily:"inherit", border:"1.5px solid",
                           transition:"all .1s",
-                          borderColor: v === selCell.score ? SCORE_COLORS[v] : DS.canvasBdr,
-                          background: v === selCell.score ? SCORE_BG[v] : "transparent",
+                          borderColor: v <= (selCell.score||0) ? SCORE_COLORS[selCell.score||0] : DS.canvasBdr,
+                          background: v <= (selCell.score||0) ? SCORE_BG[selCell.score||0] : "transparent",
                           display:"flex", flexDirection:"column",
                           alignItems:"center", gap:2 }}>
                         <span style={{ fontSize:13, fontWeight:700,
-                          color: v === selCell.score ? SCORE_COLORS[v] : DS.inkTer }}>
+                          color: v <= (selCell.score||0) ? SCORE_COLORS[v] : DS.inkTer }}>
                           {v}
                         </span>
                         <span style={{ fontSize:8, fontWeight:600,
