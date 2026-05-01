@@ -1926,6 +1926,8 @@ function ModuleIssueRaising({ issues, onChange, decisions, onDecisions, criteria
     onChange([...issues, {
       id: uid("iss"), text: input.trim(), category: newCat,
       severity: newSev, status:"Open", owner:"", votes:0,
+      description:"", decisionImpact:"", uncertaintyLevel:"partially-known",
+      dependencies:"", resolutionPath:"", qualityScore:null, qualityFlags:[],
     }]);
     setInput("");
   };
@@ -1959,10 +1961,10 @@ Use ALL of these DQ categories — at least one per category where relevant:
 - stakeholder-concern: concerns about specific stakeholders' alignment
 
 Return ONLY JSON:
-{"issues":[{"text":"specific issue","category":"category-key","severity":"Critical|High|Medium|Low"}]}`,
+{"issues":[{"text":"Short issue title","description":"What specifically is the issue and why does it matter?","category":"category-key","severity":"Critical|High|Medium|Low","decisionImpact":"How could this affect the decision or outcome?","uncertaintyLevel":"known|partially-known|highly-uncertain","resolutionPath":"requires-analysis|stakeholder-alignment|data-collection|scenario-testing|accept-and-monitor"}],"blindSpots":["missing issue category or area not yet surfaced"],"insight":"key observation about the issue landscape"}`,
     (r) => {
       if (r.issues) {
-        const newOnes = r.issues.map(i=>({ id:uid("iss"), ...i, status:"Open", owner:"", votes:0 }));
+        const newOnes = r.issues.map(i=>({ id:uid("iss"), ...i, status:"Open", owner:"", votes:0, description:i.description||"", decisionImpact:i.decisionImpact||"", uncertaintyLevel:i.uncertaintyLevel||"partially-known", dependencies:"", resolutionPath:i.resolutionPath||"", qualityScore:null, qualityFlags:[] }));
         onChange([...issues, ...newOnes]);
         onAIMsg({ role:"ai", text:`Generated ${newOnes.length} issues across ${new Set(newOnes.map(i=>i.category)).size} DQ categories.` });
       }
@@ -2016,6 +2018,81 @@ Return ONLY JSON:
     });
   };
 
+  // ── AI VALIDATE SINGLE ISSUE ─────────────────────────────────────────────────
+  const [validating, setValidating] = useState(null); // issue id being validated
+
+  const validateIssue = (issue) => {
+    setValidating(issue.id);
+    const allTitles = issues.filter(i=>i.id!==issue.id).map(i=>i.text).join(" | ");
+    aiCall(
+      "You are an elite DQ facilitator evaluating a single issue for quality and DQ-readiness. " +
+      "Decision context: "" + (problem?.decisionStatement||"Not defined") + "". " +
+      "Issue to evaluate: "" + issue.text + "". " +
+      "Description: "" + (issue.description||"") + "". " +
+      "Decision Impact: "" + (issue.decisionImpact||"") + "". " +
+      "Category: " + (issue.category||"unassigned") + ". " +
+      "Severity: " + (issue.severity||"Medium") + ". " +
+      "Other issues already raised: " + (allTitles.slice(0,300)||"none") + ". " +
+      "Check for these DQ issue quality problems: " +
+      "vague_issue (too general to act on), " +
+      "duplicate_issue (substantially overlaps another), " +
+      "solution_disguised (proposes a solution not an issue), " +
+      "no_decision_impact (does not affect the decision), " +
+      "low_materiality (unlikely to change the outcome), " +
+      "missing_owner (no accountability), " +
+      "category_confusion (better classified differently), " +
+      "root_cause_missing (describes symptom not root issue), " +
+      "unsupported_assertion (treats assumption as confirmed fact). " +
+      "Score issue quality 0-100: 0-40=poor, 41-70=adequate, 71-100=strong. " +
+      "Return ONLY JSON: " +
+      "{"qualityScore":75,"flags":[{"type":"vague_issue|duplicate_issue|solution_disguised|no_decision_impact|low_materiality|missing_owner|category_confusion|root_cause_missing|unsupported_assertion","severity":"critical|warning|info","message":"specific issue found","suggestion":"how to fix it"}],"improvedText":"sharper issue title if needed or null","improvedDescription":"better description if needed or null","summary":"1-sentence quality assessment"}",
+    (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setValidating(null);return;}}
+      if (!result||result.error){setValidating(null);return;}
+      upd(issue.id, "qualityScore", result.qualityScore);
+      upd(issue.id, "qualityFlags", result.flags||[]);
+      if (result.improvedText && result.improvedText !== issue.text) {
+        upd(issue.id, "_suggestedText", result.improvedText);
+      }
+      if (result.improvedDescription) {
+        upd(issue.id, "_suggestedDescription", result.improvedDescription);
+      }
+      onAIMsg({role:"ai", text: "Issue quality: " + (result.qualityScore||"?") + "/100 — " + (result.summary||"")});
+      setValidating(null);
+    });
+  };
+
+  // ── AI BLIND SPOT DETECTION ───────────────────────────────────────────────
+  const [detectingBlinds, setDetectingBlinds] = useState(false);
+  const [blindSpots, setBlindSpots]           = useState([]);
+
+  const detectBlindSpots = () => {
+    setDetectingBlinds(true);
+    const existing = issues.map(i=>i.category+": "+i.text).join("
+");
+    aiCall(
+      "You are a senior DQ facilitator. Review this issue list and identify what is MISSING. " +
+      "Decision: "" + (problem?.decisionStatement||"") + "". " +
+      "Context: "" + (problem?.context||"") + "". " +
+      "Issues raised so far:
+" + (existing||"none") + "
+
+" +
+      "Identify issue categories and themes that are under-represented or completely absent. " +
+      "Be specific — name the actual missing issues, not just categories. " +
+      "Return ONLY JSON: " +
+      "{"blindSpots":[{"category":"category-key","title":"missing issue title","why":"why this matters for the decision","severity":"Critical|High|Medium"}],"coverageAssessment":"brief assessment of issue landscape coverage","missingCategories":["category with no issues"]}",
+    (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setDetectingBlinds(false);return;}}
+      if (!result){setDetectingBlinds(false);return;}
+      setBlindSpots(result.blindSpots||[]);
+      onAIMsg({role:"ai", text: result.coverageAssessment || ("Found " + (result.blindSpots||[]).length + " potential blind spots.")});
+      setDetectingBlinds(false);
+    });
+  };
+
   // ── PROMOTE TO DECISION ──────────────────────────────────────────────────────
   const promoteToDecision = (issue, tier) => {
     const alreadyExists = decisions.find(d=>d.sourceId===issue.id);
@@ -2054,9 +2131,11 @@ Return ONLY JSON:
   const sel = issues.find(i=>i.id===selectedIssue);
 
   const TABS = [
-    { id:"raise",       label:"Raise Issues",       count: issues.length },
-    { id:"categorise",  label:"Categorise",         count: null },
-    { id:"heatmap",     label:"Heat Map",           count: null },
+    { id:"raise",       label:"1. Raise Issues",    count: issues.length },
+    { id:"categorise",  label:"2. Categorise",      count: null },
+    { id:"heatmap",     label:"3. Heat Map",        count: null },
+    { id:"blindspots",  label:"4. Blind Spots",     count: blindSpots.length||null,
+      highlight: blindSpots.length > 0 },
   ];
 
   // ── RENDER ───────────────────────────────────────────────────────────────────
@@ -2299,9 +2378,108 @@ Return ONLY JSON:
                           options={ISSUE_STATUS.map(s=>({value:s,label:s}))}/>
                       </Field>
                     </div>
+                    <Field label="Issue Description">
+                      <Textarea value={sel.description||""} rows={3}
+                        onChange={v=>upd(sel.id,"description",v)}
+                        placeholder="What specifically is the issue and why does it matter?"/>
+                    </Field>
+                    <Field label="Decision Impact">
+                      <Textarea value={sel.decisionImpact||""} rows={2}
+                        onChange={v=>upd(sel.id,"decisionImpact",v)}
+                        placeholder="How could this issue affect the decision or outcome?"/>
+                    </Field>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                      <Field label="Uncertainty Level">
+                        <Select value={sel.uncertaintyLevel||"partially-known"} onChange={v=>upd(sel.id,"uncertaintyLevel",v)}
+                          options={[
+                            {value:"known",label:"Known"},
+                            {value:"partially-known",label:"Partially Known"},
+                            {value:"highly-uncertain",label:"Highly Uncertain"},
+                          ]}/>
+                      </Field>
+                      <Field label="Resolution Path">
+                        <Select value={sel.resolutionPath||""} onChange={v=>upd(sel.id,"resolutionPath",v)}
+                          options={[
+                            {value:"",label:"Not set"},
+                            {value:"requires-analysis",label:"Requires Analysis"},
+                            {value:"stakeholder-alignment",label:"Stakeholder Alignment"},
+                            {value:"data-collection",label:"Data Collection"},
+                            {value:"scenario-testing",label:"Scenario Testing"},
+                            {value:"accept-and-monitor",label:"Accept & Monitor"},
+                          ]}/>
+                      </Field>
+                    </div>
                     <Field label="Owner">
                       <Input value={sel.owner||""} onChange={v=>upd(sel.id,"owner",v)} placeholder="Who owns this issue?"/>
                     </Field>
+                    <Field label="Dependencies">
+                      <Input value={sel.dependencies||""} onChange={v=>upd(sel.id,"dependencies",v)}
+                        placeholder="What other issues or decisions does this connect to?"/>
+                    </Field>
+
+                    {/* AI Quality Check */}
+                    <div style={{ marginBottom:12 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                          textTransform:"uppercase", letterSpacing:.5 }}>Issue Quality</div>
+                        {sel.qualityScore!=null && (
+                          <span style={{ fontSize:11, fontWeight:700,
+                            color:sel.qualityScore>=70?"#059669":sel.qualityScore>=50?"#d97706":"#dc2626" }}>
+                            {sel.qualityScore}/100
+                          </span>
+                        )}
+                        <Btn variant="secondary" size="sm"
+                          onClick={()=>validateIssue(sel)}
+                          disabled={aiBusy||validating===sel.id}>
+                          {validating===sel.id?"Checking…":"✦ AI Check"}
+                        </Btn>
+                      </div>
+                      {/* Quality bar */}
+                      {sel.qualityScore!=null && (
+                        <div style={{ height:4, background:DS.canvasBdr, borderRadius:2,
+                          overflow:"hidden", marginBottom:8 }}>
+                          <div style={{ height:"100%", borderRadius:2,
+                            width:sel.qualityScore+"%",
+                            background:sel.qualityScore>=70?"#059669":sel.qualityScore>=50?"#d97706":"#dc2626",
+                            transition:"width .4s" }}/>
+                        </div>
+                      )}
+                      {/* Quality flags */}
+                      {(sel.qualityFlags||[]).map((f,fi)=>{
+                        const fc={critical:{bg:"#fef2f2",border:"#fecaca",text:"#dc2626",icon:"⛔"},warning:{bg:"#fffbeb",border:"#fde68a",text:"#d97706",icon:"⚠"},info:{bg:"#eff6ff",border:"#bfdbfe",text:"#2563eb",icon:"ℹ"}}[f.severity]||{bg:"#eff6ff",border:"#bfdbfe",text:"#2563eb",icon:"ℹ"};
+                        return (
+                          <div key={fi} style={{ marginBottom:6, padding:"8px 10px",
+                            background:fc.bg, border:"1px solid "+fc.border, borderRadius:6 }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:fc.text, marginBottom:2 }}>
+                              {fc.icon} {f.type?.replace(/_/g," ")}
+                            </div>
+                            <div style={{ fontSize:11, color:DS.ink, lineHeight:1.5, marginBottom:3 }}>{f.message}</div>
+                            {f.suggestion && (
+                              <div style={{ fontSize:10, color:fc.text, fontStyle:"italic" }}>→ {f.suggestion}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {/* Apply suggestions */}
+                      {sel._suggestedText && sel._suggestedText !== sel.text && (
+                        <div style={{ padding:"8px 10px", background:DS.accentSoft,
+                          border:"1px solid "+DS.accentLine, borderRadius:6, marginBottom:6 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:DS.accent,
+                            textTransform:"uppercase", letterSpacing:.4, marginBottom:4 }}>
+                            Suggested improvement
+                          </div>
+                          <div style={{ fontSize:11, color:DS.ink, marginBottom:6 }}>
+                            {sel._suggestedText}
+                          </div>
+                          <button onClick={()=>{upd(sel.id,"text",sel._suggestedText);upd(sel.id,"_suggestedText",null);}}
+                            style={{ fontSize:10, color:DS.accent, background:"none",
+                              border:"none", cursor:"pointer", fontFamily:"inherit",
+                              textDecoration:"underline" }}>
+                            Apply this →
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Category description */}
                     <div style={{ padding:"10px 12px", background:cat.soft, borderRadius:7,
@@ -2625,131 +2803,105 @@ Return ONLY JSON:
           </div>
         </div>
       )}
+
+      {/* ── BLIND SPOTS VIEW ── */}
+      {view==="blindspots" && (
+        <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
+          <div style={{ maxWidth:800, margin:"0 auto" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:4 }}>
+                  Blind Spot Detection
+                </div>
+                <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
+                  AI scans your issue list and identifies what is missing — categories, risks, and decision-critical concerns not yet surfaced.
+                </div>
+              </div>
+              <Btn variant="primary" size="sm" onClick={detectBlindSpots}
+                disabled={aiBusy||detectingBlinds||issues.length<3}>
+                {detectingBlinds?"Scanning…":"🔍 Detect Blind Spots"}
+              </Btn>
+            </div>
+
+            {detectingBlinds && (
+              <div style={{ textAlign:"center", padding:"48px", color:DS.inkTer }}>
+                <div style={{ fontSize:12 }}>Scanning issue landscape for gaps…</div>
+              </div>
+            )}
+
+            {!detectingBlinds && blindSpots.length===0 && (
+              <div style={{ padding:"48px 32px", textAlign:"center",
+                border:"1.5px dashed "+DS.canvasBdr, borderRadius:10, color:DS.inkTer }}>
+                <div style={{ fontSize:28, marginBottom:12, opacity:.4 }}>🔍</div>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>
+                  {issues.length < 3 ? "Add at least 3 issues first" : "No blind spots detected yet"}
+                </div>
+                <div style={{ fontSize:12, lineHeight:1.6, maxWidth:400, margin:"0 auto" }}>
+                  {issues.length >= 3
+                    ? "Click Detect Blind Spots to scan for missing issue categories and concerns."
+                    : "Raise some issues first, then run blind spot detection."}
+                </div>
+              </div>
+            )}
+
+            {!detectingBlinds && blindSpots.length > 0 && (
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:DS.ink,
+                  marginBottom:14 }}>
+                  {blindSpots.length} potential blind spot{blindSpots.length!==1?"s":""} identified
+                </div>
+                {blindSpots.map((bs,i) => {
+                  const sevColor = {Critical:"#dc2626",High:"#f97316",Medium:"#d97706"}[bs.severity]||"#64748b";
+                  const catInfo = ISSUE_CATEGORIES.find(cat=>cat.key===bs.category);
+                  return (
+                    <div key={i} style={{ marginBottom:10, padding:"14px 16px",
+                      background:DS.canvas, border:"1px solid "+DS.canvasBdr,
+                      borderRadius:8, borderLeft:"4px solid "+sevColor }}>
+                      <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
+                            <span style={{ fontSize:12, fontWeight:700, color:DS.ink }}>{bs.title}</span>
+                            <span style={{ fontSize:9, fontWeight:700, padding:"1px 6px",
+                              background:sevColor+"18", border:"1px solid "+sevColor+"40",
+                              color:sevColor, borderRadius:3 }}>{bs.severity}</span>
+                            {catInfo && (
+                              <span style={{ fontSize:9, padding:"1px 6px",
+                                background:DS.canvasAlt, color:DS.inkTer,
+                                borderRadius:3, border:"1px solid "+DS.canvasBdr }}>
+                                {catInfo.icon} {catInfo.label}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize:11, color:DS.inkSub, lineHeight:1.6, marginBottom:8 }}>
+                            {bs.why}
+                          </div>
+                        </div>
+                        <Btn variant="secondary" size="sm"
+                          onClick={()=>{
+                            onChange([...issues, {
+                              id:uid("iss"), text:bs.title, category:bs.category||"uncertainty-external",
+                              severity:bs.severity||"Medium", status:"Open", owner:"", votes:0,
+                              description:bs.why||"", decisionImpact:"", uncertaintyLevel:"highly-uncertain",
+                              dependencies:"", resolutionPath:"", qualityScore:null, qualityFlags:[],
+                            }]);
+                            setBlindSpots(prev=>prev.filter((_,j)=>j!==i));
+                            setView("raise");
+                          }}>
+                          + Add Issue
+                        </Btn>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   MODULE 3 — DECISION HIERARCHY (six tiers + criteria)
-───────────────────────────────────────────────────────────────────────────── */
-const defaultIssues = () => ([
-  { id:uid("i"), text:"Regulatory approval timelines are uncertain and vary significantly by country", severity:"High",   category:"Regulatory",   type:"uncertainty" },
-  { id:uid("i"), text:"Local partner quality and alignment with our values is unproven",              severity:"High",   category:"Stakeholder",  type:"uncertainty" },
-  { id:uid("i"), text:"Capital requirements may exceed current budget envelope",                      severity:"High",   category:"Financial",    type:"constraint"  },
-  { id:uid("i"), text:"Competitive response from incumbents could compress margins faster than modelled", severity:"Medium", category:"Competitive",  type:"uncertainty" },
-  { id:uid("i"), text:"Our brand is largely unknown in key APAC markets",                            severity:"Medium", category:"Market",       type:"fact"        },
-  { id:uid("i"), text:"Currency exposure creates earnings volatility we have not budgeted for",      severity:"Medium", category:"Financial",    type:"risk"        },
-  { id:uid("i"), text:"Internal capability gaps in regional operations management",                  severity:"Medium", category:"Capability",   type:"assumption"  },
-  { id:uid("i"), text:"We have assumed first-mover advantage but this has not been validated",       severity:"Low",    category:"Strategy",     type:"assumption"  },
-]);
-
-const defaultDecisions = () => ([
-  { id:uid("d"), label:"Market Entry Mode", sourceId:null, choices:["Direct subsidiary","Strategic partnership","Acquire local player","Agent / reseller model"], tier:"focus", owner:"CSO", rationale:"Most consequential variable — determines capital, speed, and control" },
-  { id:uid("d"), label:"Geographic Priority", sourceId:null, choices:["Singapore first","Japan first","Australia first","Multi-market simultaneous"], tier:"focus", owner:"CEO", rationale:"Sets the operational blueprint for the full APAC build-out" },
-  { id:uid("d"), label:"Investment Level Year 1", sourceId:null, choices:["$10M conservative","$20M base case","$25M aggressive (cap)"], tier:"focus", owner:"CFO", rationale:"Capital ceiling has been board-set — choices within it are live" },
-  { id:uid("d"), label:"Technology Localisation Approach", sourceId:null, choices:["Build in-house","License local tech","Partner with regional SaaS"], tier:"focus", owner:"CTO", rationale:"Critical path dependency for any market entry within 12 months" },
-  { id:uid("d"), label:"Long-term Ownership Model", sourceId:null, choices:["Wholly-owned","JV 50/50","Majority-owned JV"], tier:"tactical", owner:"Legal", rationale:"Depends on entry mode chosen — cannot be decided in isolation" },
-  { id:uid("d"), label:"Brand Strategy in APAC", sourceId:null, choices:["Global brand unchanged","Co-brand with local partner","Standalone local brand"], tier:"tactical", owner:"CMO", rationale:"Flows from partnership model — premature to decide now" },
-  { id:uid("d"), label:"Regional HQ Location", sourceId:null, choices:["Singapore","Hong Kong","Sydney"], tier:"deferred", owner:"COO", rationale:"Defer pending regulatory clarity and partner negotiations" },
-  { id:uid("d"), label:"APAC product pricing model", sourceId:null, choices:["Mirror North America","Local market pricing","Partner-set pricing"], tier:"deferred", owner:"Head of Sales", rationale:"Requires market validation data — revisit after pilot launch" },
-  { id:uid("d"), label:"Proceed with APAC expansion", sourceId:null, choices:["Yes — board mandate confirmed"], tier:"given", owner:"Board", rationale:"Board-approved in FY25 strategic plan — not up for debate" },
-  { id:uid("d"), label:"Maximum Year 1 capital budget", sourceId:null, choices:["$25M ceiling — non-negotiable"], tier:"given", owner:"CFO", rationale:"Capital ceiling set by board. Hard constraint on all options." },
-  { id:uid("d"), label:"Target acquisition shortlist", sourceId:null, choices:["Pending M&A advisor report","Subject to valuation"], tier:"dependency", owner:"CSO", rationale:"Blocked on external M&A advisor engagement — due Q1" },
-  { id:uid("d"), label:"Regulatory approval — Japan", sourceId:null, choices:["Pending regulatory review","Timeline unknown"], tier:"dependency", owner:"Legal", rationale:"Cannot proceed with Japan-first strategy until regulatory path confirmed" },
-]);
-
-const defaultCriteria = () => ([
-  { id:uid("cr"), label:"Risk-adjusted NPV (3-year)", type:"financial", weight:"high", description:"Net present value of APAC revenues discounted by probability of execution success" },
-  { id:uid("cr"), label:"Time to first revenue", type:"financial", weight:"high", description:"Months from decision to first recognised APAC revenue" },
-  { id:uid("cr"), label:"Capital efficiency", type:"financial", weight:"high", description:"Revenue generated per dollar of Year 1 capital deployed" },
-  { id:uid("cr"), label:"Strategic flexibility", type:"strategic", weight:"medium", description:"Ability to pivot, scale, or exit the strategy without disproportionate cost" },
-  { id:uid("cr"), label:"Competitive positioning", type:"strategic", weight:"high", description:"Degree to which the strategy counters competitor's existing APAC advantage" },
-  { id:uid("cr"), label:"Execution complexity", type:"operational", weight:"medium", description:"Internal capability and bandwidth required to execute successfully" },
-  { id:uid("cr"), label:"Regulatory risk exposure", type:"risk", weight:"high", description:"Probability and magnitude of regulatory delay or block across chosen markets" },
-  { id:uid("cr"), label:"Stakeholder alignment", type:"strategic", weight:"medium", description:"Degree of internal and board alignment required to proceed confidently" },
-]);
-
-const CRITERIA_TYPES = ["financial","strategic","operational","risk","commercial","technical"];
-const CRITERIA_WEIGHTS = ["high","medium","low"];
-
-const H_TIERS = [
-  {
-    key:"given",
-    label:"Given Decisions",
-    shortLabel:"Given",
-    desc:"Already made or non-negotiable — constraints on the decision space",
-    icon:"🔒",
-    color:"#6b7280",
-    soft:"#f9fafb",
-    line:"#e5e7eb",
-    accent:"#9ca3af",
-    chromeBg:"#1c2030",
-    chromeLine:"#252b3b",
-    cap: null,
-    capLabel: null,
-  },
-  {
-    key:"focus",
-    label:"Focus Decisions",
-    shortLabel:"Focus",
-    desc:"The strategic core — decide now. Max 5 (the Focus Five).",
-    icon:"⊕",
-    color:DS.accent,
-    soft:DS.accentSoft,
-    line:DS.accentLine,
-    accent:DS.accent,
-    chromeBg:"#101a2e",
-    chromeLine:"#1d3461",
-    cap: 5,
-    capLabel: "Focus Five",
-    highlight: true,
-  },
-  {
-    key:"tactical",
-    label:"Tactical Decisions",
-    shortLabel:"Tactical",
-    desc:"Downstream from Focus — can only be made after strategic choices are set",
-    icon:"◎",
-    color:"#7c3aed",
-    soft:"#f5f3ff",
-    line:"#ddd6fe",
-    accent:"#7c3aed",
-    chromeBg:"#18102e",
-    chromeLine:"#2e1a5e",
-    cap: null,
-    capLabel: null,
-  },
-  {
-    key:"deferred",
-    label:"Deferred Decisions",
-    shortLabel:"Deferred",
-    desc:"Consciously parked — revisit when trigger condition is met",
-    icon:"◷",
-    color:DS.success,
-    soft:DS.successSoft,
-    line:DS.successLine,
-    accent:DS.success,
-    chromeBg:"#0d1e16",
-    chromeLine:"#133d28",
-    cap: null,
-    capLabel: null,
-  },
-  {
-    key:"dependency",
-    label:"Dependencies",
-    shortLabel:"Depends",
-    desc:"Blocked on external factors — decisions waiting on something outside our control",
-    icon:"⛓",
-    color:DS.warning,
-    soft:DS.warnSoft,
-    line:DS.warnLine,
-    accent:DS.warning,
-    chromeBg:"#1e1608",
-    chromeLine:"#3d2e0f",
-    cap: null,
-    capLabel: null,
-  },
-];
 
 function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria, issues, aiCall, aiBusy, onAIMsg }) {
   const [sorting, setSorting] = useState(false);
