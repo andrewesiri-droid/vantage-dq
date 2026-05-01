@@ -8799,8 +8799,8 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
               <div style={{ fontSize:28, fontWeight:700, lineHeight:1.2, marginBottom:10 }}>
                 {problem.projectName || problem.decisionStatement?.slice(0,70) || "Decision Package"}
               </div>
-              <div style={{ display:"flex", gap:24, fontSize:12, color:"#6b75a0" }}>
-                {problem.owner && <span><strong>Owner:</strong> {problem.owner}</span>}
+              <div style={{ display:"flex", gap:16, fontSize:12, color:"#6b75a0", flexWrap:"wrap" }}>
+                {problem.owner && <span style={{ wordBreak:"break-word", minWidth:0 }}><strong>Owner:</strong> {problem.owner}</span>}
                 {problem.deadline && <span><strong>Deadline:</strong> {problem.deadline}</span>}
                 <span><strong>Date:</strong> {new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</span>
               </div>
@@ -9013,7 +9013,7 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
                 {problem.owner && (
                   <div>
                     <div style={{ fontSize:9, color:DS.textTer, marginBottom:2 }}>Decision Owner</div>
-                    <div style={{ fontSize:12, fontWeight:600, color:DS.textSec }}>{problem.owner}</div>
+                    <div style={{ fontSize:12, fontWeight:600, color:DS.textSec, wordBreak:"break-word", overflowWrap:"anywhere" }}>{problem.owner}</div>
                   </div>
                 )}
               </div>
