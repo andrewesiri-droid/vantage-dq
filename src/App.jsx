@@ -1203,12 +1203,12 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                     <div style={{ fontSize:11, color:"#4c1d95", lineHeight:1.6, marginBottom:5 }}>
                       Is this <em>the</em> decision, or a sub-decision of a larger one?
                       Teams often frame a sub-decision without realising the root decision
-                      hasn&#39;t been made yet — leading to premature commitment downstream.
+                      hasn't been made yet — leading to premature commitment downstream.
                     </div>
                     <div style={{ fontSize:11, color:"#6d28d9", lineHeight:1.6 }}>
                       <strong>Ask:</strong> Could a more fundamental decision change whether
-                      this decision matters at all? e.g. &#34;Should we expand internationally?&#34;
-                      must be resolved before &#34;Which APAC market should we enter?&#34;
+                      this decision matters at all? e.g. "Should we expand internationally?"
+                      must be resolved before "Which APAC market should we enter?"
                     </div>
                   </div>
                 </div>
