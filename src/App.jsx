@@ -5009,16 +5009,33 @@ function ModuleQualitativeAssessment({
   const [activeStrat, setActiveStrat] = useState(null);
   const [weightsOpen, setWeightsOpen] = useState(false);
   const [weights, setWeights]     = useState({});       // criterionId → 1|2|3
+  const [assessing, setAssessing] = useState(false);
+  const [qaAnalysis, setQaAnalysis] = useState(null);
+  const [selectedCell, setSelectedCell] = useState(null);
+  const [analysing, setAnalysing] = useState(false);
 
   const focusDecisions = decisions.filter(d => d.tier === "focus");
 
   // ── SCORE HELPERS ────────────────────────────────────────────────────────────
-  const scoreKey  = (stratId, critId) => `${stratId}__${critId}`;
-  const getScore  = (stratId, critId) => scores[scoreKey(stratId, critId)] || 0;
-  const setScore  = (stratId, critId, val) =>
-    onScores({ ...scores, [scoreKey(stratId, critId)]: val });
-  const getWeight = (critId) => weights[critId] ?? 2;
-  const setWeight = (critId, val) => setWeights(w => ({ ...w, [critId]: val }));
+  const scoreKey    = (stratId, critId) => stratId+"__"+critId;
+  // Support both old (integer) and new (object) score formats
+  const getCell     = (stratId, critId) => {
+    const raw = scores[scoreKey(stratId, critId)];
+    if (!raw) return { score:0, rationale:"", confidence:"moderate", assumptions:"", concerns:"", disagreement:false };
+    if (typeof raw === "number") return { score:raw, rationale:"", confidence:"moderate", assumptions:"", concerns:"", disagreement:false };
+    return raw;
+  };
+  const getScore    = (stratId, critId) => getCell(stratId, critId).score || 0;
+  const setScore    = (stratId, critId, val) => {
+    const existing = getCell(stratId, critId);
+    onScores({ ...scores, [scoreKey(stratId, critId)]: { ...existing, score: val } });
+  };
+  const setCell     = (stratId, critId, field, val) => {
+    const existing = getCell(stratId, critId);
+    onScores({ ...scores, [scoreKey(stratId, critId)]: { ...existing, [field]: val } });
+  };
+  const getWeight   = (critId) => weights[critId] ?? 2;
+  const setWeight   = (critId, val) => setWeights(w => ({ ...w, [critId]: val }));
 
   // ── AI INITIAL ASSESSMENT ────────────────────────────────────────────────────
   const [assessing, setAssessing] = useState(false);
@@ -5053,7 +5070,7 @@ function ModuleQualitativeAssessment({
       "CRITERIA (score each of these):\n"+critList+"\n\n" +
       "STRATEGIES (score each of these):\n"+stratList+"\n\n" +
       "Return ONLY JSON: " +
-      '{"scores":[{"strategyName":"name","criterionName":"name","score":4,"rationale":"one sentence why"}],"insight":"key observation about the comparison"}',
+      '{"scores":[{"strategyName":"name","criterionName":"name","score":4,"rationale":"one sentence why this rating","confidence":"low|moderate|high","concerns":"any caveats"}],"insight":"key observation","validationFlags":[{"type":"no_rationale|inconsistent_logic|overconfidence|groupthink|missing_tradeoff|weak_differentiation|bias_risk","severity":"warning|info","message":"specific issue"}],"tradeOffInsights":["trade-off observation"],"missingCriteria":["criterion not yet in the table but important"]}',
     (r) => {
       let result = r;
       if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAssessing(false);return;}}
@@ -5064,12 +5081,45 @@ function ModuleQualitativeAssessment({
         const strat = strategies.find(s=>s.name.toLowerCase()===cell.strategyName?.toLowerCase());
         const crit  = criteria.find(cr=>cr.label.toLowerCase()===cell.criterionName?.toLowerCase());
         if (strat&&crit&&typeof cell.score==="number"&&cell.score>=1&&cell.score<=5) {
-          newScores[scoreKey(strat.id,crit.id)] = cell.score;
+          const existing = getCell(strat.id,crit.id);
+          newScores[scoreKey(strat.id,crit.id)] = { ...existing, score:cell.score, rationale:cell.rationale||existing.rationale||"" };
         }
       });
       onScores(newScores);
       onAIMsg({role:"ai",text:result.insight||("Initial assessment complete. "+((result.scores||[]).length)+" cells scored. Review and adjust as needed.")});
       setAssessing(false);
+    });
+  };
+
+  // ── AI ANALYSE QUALITY ───────────────────────────────────────────────────────
+  const aiAnalyseQuality = () => {
+    setAnalysing(true);
+    const cellSummary = strategies.map(s =>
+      s.name + ": " + criteria.map(cr => {
+        const cell = getCell(s.id, cr.id);
+        return cr.label + "=" + (cell.score||0) + "/5" +
+          (cell.rationale ? " [" + cell.rationale.slice(0,40) + "]" : " [no rationale]") +
+          " conf=" + cell.confidence;
+      }).join(", ")
+    ).join("\n");
+    const prompt =
+      "You are an elite DQ facilitator evaluating the quality of a qualitative assessment matrix. " +
+      "Decision: " + (problem?.decisionStatement||"not defined") + ". " +
+      "Strategies: " + strategies.map(s=>s.name).join(", ") + ". " +
+      "Criteria: " + criteria.map(c=>c.label).join(", ") + ". " +
+      "Assessments:\n" + (cellSummary||"none") + "\n\n" +
+      "Evaluate for: missing rationale, inconsistent logic, overconfidence, groupthink, " +
+      "weak differentiation, bias risk, missing trade-offs, assumption confusion. " +
+      "Return ONLY JSON: " +
+      '{"qualityScore":72,"flags":[{"type":"no_rationale|inconsistent_logic|overconfidence|groupthink|missing_tradeoff|weak_differentiation|missing_criteria|assumption_confusion|bias_risk|low_decision_value","severity":"critical|warning|info","strategy":"name or null","criterion":"name or null","message":"specific issue","suggestion":"how to fix"}],"tradeOffInsights":["cross-strategy trade-off"],"missingCriteria":["important criterion not yet in table"],"disagreementRisks":["area where stakeholders likely disagree"],"facilitatorQuestions":["probing question for the team"],"diagnosticSummary":"2-3 sentence assessment of overall quality","downstreamRecommendations":[{"module":"Scenario Planning","reason":"why"}]}';
+    aiCall(prompt, (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
+      if (!result||result.error){setAnalysing(false);return;}
+      setQaAnalysis(result);
+      onAIMsg({role:"ai", text:"Assessment quality: " + (result.qualityScore||"?") + "/100 — " + (result.diagnosticSummary||"")});
+      setAnalysing(false);
+      setView("analysis");
     });
   };
 
@@ -5173,9 +5223,10 @@ Return ONLY valid JSON:
   }));
 
   const TABS = [
-    { id:"matrix", label:"Scoring Matrix" },
-    { id:"radar",  label:"Radar Comparison" },
-    { id:"brief",  label:"Decision Brief",  highlight: !!brief },
+    { id:"matrix",   label:"Scoring Matrix" },
+    { id:"radar",    label:"Radar Comparison" },
+    { id:"brief",    label:"Decision Brief",  highlight: !!brief },
+    { id:"analysis", label:"AI Analysis",     highlight: !!qaAnalysis },
   ];
 
   const WEIGHT_LABELS = { 1:"Low", 2:"Medium", 3:"High" };
@@ -5211,6 +5262,10 @@ Return ONLY valid JSON:
           onClick={aiInitialAssessment}
           disabled={aiBusy || assessing || !strategies.length || !criteria.length}>
           {assessing ? "Assessing…" : "AI Initial Assessment"}
+        </Btn>
+        <Btn variant="secondary" size="sm" onClick={aiAnalyseQuality}
+          disabled={aiBusy || analysing || !strategies.length || !criteria.length}>
+          {analysing ? "Analysing…" : "✦ AI Analysis"}
         </Btn>
         <Btn variant="primary" size="sm" icon="spark"
           onClick={generateBrief}
@@ -5411,14 +5466,21 @@ Return ONLY valid JSON:
                         const isBest   = score > 0 && score === rowBest && strategies.length > 1;
                         return (
                           <div key={s.id}
+                            onClick={()=>setSelectedCell(
+                              selectedCell?.stratId===s.id&&selectedCell?.critId===crit.id
+                                ? null : {stratId:s.id,critId:crit.id}
+                            )}
                             style={{ padding:"12px 10px",
                               display:"flex", flexDirection:"column",
-                              alignItems:"center", justifyContent:"center", gap:8,
+                              alignItems:"center", gap:8,
                               opacity: isActive ? 1 : 0.35,
-                              background: isBest && score > 0 ? col.soft : "transparent",
+                              background: selectedCell?.stratId===s.id&&selectedCell?.critId===crit.id
+                                ? col.soft+"cc"
+                                : isBest && score > 0 ? col.soft : "transparent",
                               borderLeft:`1px solid ${DS.canvasBdr}`,
+                              cursor:"pointer",
                               transition:"all .12s" }}>
-                            <ScoreRow value={score} onChange={v => setScore(s.id, crit.id, v)} color={col.fill}/>
+                            <ScoreRow value={score} onChange={v => { setScore(s.id, crit.id, v); }} color={col.fill}/>
                             <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                               <span style={{ fontSize:12, fontWeight:700,
                                 color: score > 0 ? col.fill : DS.inkDis }}>
@@ -5430,6 +5492,76 @@ Return ONLY valid JSON:
                                   border:`1px solid ${col.line}` }}>best</span>
                               )}
                             </div>
+                            {/* Rationale + disagreement indicators */}
+                            {score > 0 && (() => {
+                              const cell = getCell(s.id, crit.id);
+                              return (
+                                <div style={{ display:"flex", gap:3, alignItems:"center" }}>
+                                  {cell.rationale && (
+                                    <span style={{ width:6, height:6, borderRadius:"50%",
+                                      background:col.fill, flexShrink:0,
+                                      title:"Has rationale" }}/>
+                                  )}
+                                  {cell.disagreement && (
+                                    <span style={{ fontSize:8, color:"#dc2626" }}>⚡</span>
+                                  )}
+                                  {cell.confidence==="low" && (
+                                    <span style={{ fontSize:8, color:"#d97706" }}>?</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          {/* Cell detail on click */}
+                            {selectedCell?.stratId===s.id && selectedCell?.critId===crit.id && (() => {
+                              const cell = getCell(s.id, crit.id);
+                              return (
+                                <div style={{ width:"100%", marginTop:6 }}
+                                  onClick={e=>e.stopPropagation()}>
+                                  <div style={{ display:"flex", gap:4, marginBottom:4 }}>
+                                    {["low","moderate","high"].map(conf=>(
+                                      <button key={conf}
+                                        onClick={()=>setCell(s.id,crit.id,"confidence",conf)}
+                                        style={{ flex:1, padding:"2px 0", fontSize:9, fontWeight:700,
+                                          fontFamily:"inherit", border:`1px solid ${conf===cell.confidence?col.fill:DS.canvasBdr}`,
+                                          borderRadius:3, cursor:"pointer",
+                                          background:conf===cell.confidence?col.soft:"transparent",
+                                          color:conf===cell.confidence?col.fill:DS.inkTer }}>
+                                        {conf}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <textarea value={cell.rationale||""}
+                                    onChange={e=>setCell(s.id,crit.id,"rationale",e.target.value)}
+                                    placeholder="Why this rating?"
+                                    rows={2}
+                                    style={{ width:"100%", fontSize:10, padding:"4px 6px",
+                                      fontFamily:"inherit", background:DS.canvas,
+                                      border:`1px solid ${DS.canvasBdr}`, borderRadius:4,
+                                      color:DS.ink, outline:"none", resize:"none",
+                                      lineHeight:1.4, boxSizing:"border-box", marginBottom:4 }}/>
+                                  <textarea value={cell.concerns||""}
+                                    onChange={e=>setCell(s.id,crit.id,"concerns",e.target.value)}
+                                    placeholder="Key concerns or caveats…"
+                                    rows={1}
+                                    style={{ width:"100%", fontSize:10, padding:"4px 6px",
+                                      fontFamily:"inherit", background:"#fffbeb",
+                                      border:"1px solid #fde68a", borderRadius:4,
+                                      color:DS.ink, outline:"none", resize:"none",
+                                      lineHeight:1.4, boxSizing:"border-box", marginBottom:4 }}/>
+                                  <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                                    <button
+                                      onClick={()=>setCell(s.id,crit.id,"disagreement",!cell.disagreement)}
+                                      style={{ fontSize:9, fontWeight:700, padding:"2px 6px",
+                                        fontFamily:"inherit", border:`1px solid ${cell.disagreement?"#dc2626":"#e5e7eb"}`,
+                                        borderRadius:3, cursor:"pointer",
+                                        background:cell.disagreement?"#fef2f2":"transparent",
+                                        color:cell.disagreement?"#dc2626":DS.inkTer }}>
+                                      {cell.disagreement?"⚡ Disagreement":"Mark disagreement"}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
@@ -5900,6 +6032,207 @@ Return ONLY valid JSON:
           )}
         </div>
       )}
+
+      {/* ══ ANALYSIS TAB ══ */}
+      {view==="analysis" && (
+        <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
+          <div style={{ maxWidth:820, margin:"0 auto" }}>
+
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:16,
+                  fontWeight:700, color:DS.ink, marginBottom:3 }}>Assessment Quality Analysis</div>
+                <div style={{ fontSize:12, color:DS.inkTer }}>
+                  AI evaluates rationale quality, bias risk, trade-off visibility, and consistency.
+                </div>
+              </div>
+              <Btn variant="primary" size="sm" onClick={aiAnalyseQuality}
+                disabled={aiBusy||analysing}>
+                {analysing?"Analysing…":qaAnalysis?"Re-run Analysis":"Run Analysis"}
+              </Btn>
+            </div>
+
+            {!qaAnalysis && !analysing && (
+              <div style={{ padding:"48px 32px", textAlign:"center",
+                border:`1.5px dashed ${DS.canvasBdr}`, borderRadius:10, color:DS.inkTer }}>
+                <div style={{ fontSize:28, marginBottom:12, opacity:.4 }}>◎</div>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>Analysis not yet run</div>
+                <div style={{ fontSize:12, lineHeight:1.6, maxWidth:380, margin:"0 auto" }}>
+                  Score some cells then run AI Analysis to get quality scoring, bias detection,
+                  trade-off insights, and improvement recommendations.
+                </div>
+              </div>
+            )}
+
+            {analysing && (
+              <div style={{ textAlign:"center", padding:"48px", color:DS.inkTer }}>
+                <div style={{ fontSize:12 }}>Evaluating assessment quality…</div>
+              </div>
+            )}
+
+            {qaAnalysis && !analysing && (
+              <div>
+                {/* Quality score */}
+                <div style={{ display:"flex", gap:16, marginBottom:20, padding:"16px 18px",
+                  background:DS.canvas, border:`1px solid ${DS.canvasBdr}`, borderRadius:10 }}>
+                  <div style={{ textAlign:"center", flexShrink:0 }}>
+                    <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:52,
+                      fontWeight:700, lineHeight:1,
+                      color:qaAnalysis.qualityScore>=70?"#059669":qaAnalysis.qualityScore>=50?"#d97706":"#dc2626" }}>
+                      {qaAnalysis.qualityScore||0}
+                    </div>
+                    <div style={{ fontSize:10, color:DS.inkTer, marginTop:4 }}>/100</div>
+                    <div style={{ fontSize:11, fontWeight:700, marginTop:6,
+                      color:qaAnalysis.qualityScore>=70?"#059669":qaAnalysis.qualityScore>=50?"#d97706":"#dc2626" }}>
+                      {qaAnalysis.qualityScore>=70?"Strong":qaAnalysis.qualityScore>=50?"Adequate":"Weak"}
+                    </div>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ height:8, background:DS.canvasBdr, borderRadius:4,
+                      overflow:"hidden", marginBottom:10 }}>
+                      <div style={{ height:"100%", borderRadius:4, transition:"width .6s",
+                        background:qaAnalysis.qualityScore>=70?"#059669":qaAnalysis.qualityScore>=50?"#d97706":"#dc2626",
+                        width:(qaAnalysis.qualityScore||0)+"%" }}/>
+                    </div>
+                    <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
+                      {qaAnalysis.diagnosticSummary}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Validation flags */}
+                {(qaAnalysis.flags||[]).length > 0 && (
+                  <div style={{ marginBottom:20 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:10 }}>
+                      Validation Flags ({qaAnalysis.flags.length})
+                    </div>
+                    {qaAnalysis.flags.map((f,i)=>{
+                      const fc = {critical:{bg:"#fef2f2",border:"#fecaca",text:"#dc2626",icon:"⛔"},warning:{bg:"#fffbeb",border:"#fde68a",text:"#d97706",icon:"⚠"},info:{bg:"#eff6ff",border:"#bfdbfe",text:"#2563eb",icon:"ℹ"}}[f.severity]||{bg:"#eff6ff",border:"#bfdbfe",text:"#2563eb",icon:"ℹ"};
+                      return (
+                        <div key={i} style={{ marginBottom:8, padding:"10px 14px",
+                          background:fc.bg, border:`1px solid ${fc.border}`, borderRadius:7 }}>
+                          <div style={{ display:"flex", gap:8 }}>
+                            <span>{fc.icon}</span>
+                            <div style={{ flex:1 }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
+                                <span style={{ fontSize:11, fontWeight:700, color:fc.text }}>
+                                  {(f.type||"").replace(/_/g," ")}
+                                </span>
+                                {(f.strategy||f.criterion) && (
+                                  <span style={{ fontSize:9, color:fc.text, padding:"0 5px",
+                                    border:`1px solid ${fc.border}`, borderRadius:3 }}>
+                                    {[f.strategy,f.criterion].filter(Boolean).join(" / ")}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize:11, color:DS.ink, lineHeight:1.5, marginBottom:f.suggestion?4:0 }}>
+                                {f.message}
+                              </div>
+                              {f.suggestion && (
+                                <div style={{ fontSize:11, color:fc.text, fontWeight:600 }}>
+                                  → {f.suggestion}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Trade-off insights */}
+                {(qaAnalysis.tradeOffInsights||[]).length > 0 && (
+                  <div style={{ marginBottom:20 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                      ⚖ Trade-Off Insights
+                    </div>
+                    {qaAnalysis.tradeOffInsights.map((t,i)=>(
+                      <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                        background:DS.accentSoft, border:`1px solid ${DS.accentLine}`,
+                        borderRadius:6, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                        {i+1}. {typeof t==="string"?t:JSON.stringify(t)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Disagreement risks */}
+                {(qaAnalysis.disagreementRisks||[]).length > 0 && (
+                  <div style={{ marginBottom:20 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                      ⚡ Likely Disagreement Areas
+                    </div>
+                    {qaAnalysis.disagreementRisks.map((r,i)=>(
+                      <div key={i} style={{ padding:"7px 10px", marginBottom:5,
+                        background:"#fef2f2", border:"1px solid #fecaca",
+                        borderRadius:5, fontSize:11, color:"#991b1b" }}>
+                        {typeof r==="string"?r:JSON.stringify(r)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Missing criteria */}
+                {(qaAnalysis.missingCriteria||[]).length > 0 && (
+                  <div style={{ marginBottom:20 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                      ◻ Suggested Missing Criteria
+                    </div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                      {qaAnalysis.missingCriteria.map((m,i)=>(
+                        <span key={i} style={{ padding:"4px 10px", borderRadius:5, fontSize:11,
+                          background:"#fffbeb", border:"1px solid #fde68a", color:"#92400e" }}>
+                          + {typeof m==="string"?m:JSON.stringify(m)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Facilitator questions */}
+                {(qaAnalysis.facilitatorQuestions||[]).length > 0 && (
+                  <div style={{ marginBottom:20 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                      🎙 Facilitator Questions
+                    </div>
+                    {qaAnalysis.facilitatorQuestions.map((q,i)=>(
+                      <div key={i} style={{ padding:"8px 12px", marginBottom:6,
+                        background:DS.canvasAlt, border:`1px solid ${DS.canvasBdr}`,
+                        borderRadius:5, fontSize:11, color:DS.ink, lineHeight:1.5 }}>
+                        {i+1}. {typeof q==="string"?q:JSON.stringify(q)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Downstream recommendations */}
+                {(qaAnalysis.downstreamRecommendations||[]).length > 0 && (
+                  <div style={{ marginBottom:20 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:DS.ink, marginBottom:8 }}>
+                      → Recommended Next Modules
+                    </div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                      {qaAnalysis.downstreamRecommendations.map((r,i)=>(
+                        <div key={i} style={{ padding:"8px 12px", background:DS.canvas,
+                          border:`1px solid ${DS.canvasBdr}`, borderRadius:7, fontSize:11 }}>
+                          <div style={{ fontWeight:700, color:DS.ink, marginBottom:2 }}>
+                            {typeof r==="string"?r:(r.module||"")}
+                          </div>
+                          {r.reason && (
+                            <div style={{ fontSize:10, color:DS.inkTer }}>{r.reason}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
