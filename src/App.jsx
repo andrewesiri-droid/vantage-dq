@@ -8569,6 +8569,7 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
   const [generating, setGenerating]     = useState(false);
   const [executivePack, setExecutivePack] = useState(null);
   const [copying, setCopying]           = useState(null);
+  const [previewing, setPreviewing]     = useState(false);
 
   const focusDecisions = decisions.filter(d=>d.tier==="focus");
 
@@ -8629,65 +8630,48 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
 
     const stressSummary = scenarioData?.stressAnalysis?.keyInsight || "";
 
-    aiCall(`You are a senior Decision Quality consultant preparing a complete executive decision package.
+    const prompt =
+      "You are a senior Decision Quality consultant preparing an executive decision package.\n" +
+      "Decision: " + (problem.decisionStatement||"Not defined") + "\n" +
+      "Owner: " + (problem.owner||"Not stated") + " | Deadline: " + (problem.deadline||"Not stated") + "\n" +
+      "Context: " + (problem.context||"Not provided") + "\n" +
+      "Success criteria: " + (problem.successCriteria||"Not stated") + "\n\n" +
+      "Issues: " + issues.length + " (" + issues.filter(i=>i.severity==="Critical").length + " critical)\n" +
+      "Focus decisions: " + focusDecisions.map(d=>d.label).join(", ") + "\n" +
+      "Strategies:\n" + strategyPaths + "\n" +
+      "Criteria: " + criteria.map(cr=>cr.label).join(", ") + "\n" +
+      "DQ Scores: " + dqSummary + "\n" +
+      (brief?.recommendedStrategyName ? "Recommended strategy: " + brief.recommendedStrategyName + "\n" : "") +
+      "Scenario stress test: " + scenarioSummary + "\n" +
+      (stressSummary ? "Stress insight: " + stressSummary + "\n" : "") +
+      "Value of information: " + voiSummary + "\n" +
+      "Stakeholder alignment: " + stakeholderSummary + "\n" +
+      "Timeline / risk gates: " + timelineSummary + "\n\n" +
+      "Produce a complete executive decision package. Be specific, direct, and authoritative.\n" +
+      "Return a JSON object with no markdown and no explanation.\n" +
+      "Keys required:\n" +
+      "executiveSummary: object with onePager (4-5 paragraph string), bulletPoints (array of 5 strings), tweetVersion (string under 280 chars)\n" +
+      "decisionPackage: object with problemStatement (string), whyNow (string), whatIsAtStake (string), constraints (string), recommendation (string), keyRisks (array of strings), successMetrics (array of strings), decisionCriteria (string)\n" +
+      "boardNarrative: string of 6-8 sentences for board presentation\n" +
+      "stakeholderMessages: object with board (string), executiveTeam (string), projectTeam (string)\n" +
+      "riskRegister: array of objects each with risk (string), likelihood (High or Medium or Low), impact (High or Medium or Low), mitigation (string)\n" +
+      "nextSteps: array of objects each with action (string), owner (string), deadline (string), dependency (string)";
 
-Decision: "${problem.decisionStatement}"
-Owner: ${problem.owner} | Deadline: ${problem.deadline}
-Context: ${problem.context}
-Success criteria: ${problem.successCriteria}
-
-Issues raised: ${issues.length} (${issues.filter(i=>i.severity==="Critical").length} critical)
-Focus decisions: ${focusDecisions.map(d=>d.label).join(", ")}
-Strategies compared:
-${strategyPaths}
-
-Criteria: ${criteria.map(c=>c.label).join(", ")}
-DQ Scores: ${dqSummary}
-${brief?.recommendedStrategyName ? `Recommended strategy: ${brief.recommendedStrategyName}` : ""}
-
-SCENARIO STRESS TEST: ${scenarioSummary}
-${stressSummary ? "Stress-test insight: " + stressSummary : ""}
-VALUE OF INFORMATION: ${voiSummary}
-STAKEHOLDER ALIGNMENT: ${stakeholderSummary}
-TIMELINE / RISK GATES: ${timelineSummary}
-
-Produce a complete executive decision package. Be specific, direct, and authoritative.
-
-Return ONLY valid JSON:
-{
-  "executiveSummary": {
-    "onePager": "Complete executive summary in 4-5 paragraphs -- situation, decision, alternatives, recommendation, next step",
-    "bulletPoints": ["Key point 1", "Key point 2", "Key point 3", "Key point 4", "Key point 5"],
-    "tweetVersion": "The decision in 280 characters or fewer"
-  },
-  "decisionPackage": {
-    "problemStatement": "Crisp 2-sentence problem statement",
-    "whyNow": "Why this decision cannot be deferred",
-    "whatIsAtStake": "What is won or lost by this decision",
-    "constraints": "Hard constraints in one sentence",
-    "recommendation": "The recommended course of action in 2 sentences",
-    "keyRisks": ["Risk 1", "Risk 2", "Risk 3"],
-    "successMetrics": ["Metric 1", "Metric 2", "Metric 3"],
-    "decisionCriteria": "How the recommendation was evaluated"
-  },
-  "boardNarrative": "A board-ready narrative -- 6-8 sentences covering the situation, the options considered, the recommended direction, the key trade-off, the critical assumption, and the requested action from the board",
-  "stakeholderMessages": {
-    "board": "2-sentence message for the board",
-    "executiveTeam": "2-sentence message for the exec team",
-    "projectTeam": "2-sentence message for the execution team"
-  },
-  "riskRegister": [
-    {"risk": "risk description", "likelihood": "High|Medium|Low", "impact": "High|Medium|Low", "mitigation": "mitigation action"}
-  ],
-  "nextSteps": [
-    {"action": "specific next action", "owner": "role", "deadline": "timeframe", "dependency": "what it depends on"}
-  ]
-}`,
-    (r) => {
-      if (!r.error) {
-        setExecutivePack(r);
-        onAIMsg({ role:"ai", text:"Executive package generated. All export formats are now available." });
+    aiCall(prompt, (r) => {
+      let result = r;
+      if (r && r._raw) {
+        const m = (r._raw||"").match(/\{[\s\S]*\}/);
+        if (!m) { setGenerating(false); onAIMsg({role:"ai",text:"Package failed to parse. Try again."}); return; }
+        try { result = JSON.parse(m[0]); }
+        catch(e) { setGenerating(false); onAIMsg({role:"ai",text:"Package could not be parsed. Try again."}); return; }
       }
+      if (!result || result.error) {
+        setGenerating(false);
+        onAIMsg({role:"ai", text:"Package generation failed: "+(result?.error||"unknown error")});
+        return;
+      }
+      setExecutivePack(result);
+      onAIMsg({ role:"ai", text:"Executive package generated. All export formats are now available." });
       setGenerating(false);
     });
   };
@@ -8771,6 +8755,187 @@ Return ONLY valid JSON:
         }
       `}</style>
 
+      {/* ── PREVIEW OVERLAY ── */}
+      {previewing && executivePack && (
+        <div style={{ position:"fixed", inset:0, zIndex:1000, background:"rgba(0,0,0,.55)",
+          display:"flex", flexDirection:"column", alignItems:"center",
+          overflowY:"auto", padding:"24px 16px" }}>
+          {/* Preview toolbar */}
+          <div style={{ width:"100%", maxWidth:860, display:"flex",
+            alignItems:"center", gap:10, marginBottom:16, flexShrink:0 }}>
+            <div style={{ flex:1, fontSize:14, fontWeight:700, color:"#fff" }}>
+              Print Preview — {problem.projectName||problem.decisionStatement?.slice(0,50)||"Decision Package"}
+            </div>
+            <button onClick={()=>{
+                const orig = document.title;
+                document.title = (problem.projectName||problem.decisionStatement||"VantageDQ") + " — Decision Package";
+                window.print();
+                document.title = orig;
+              }}
+              style={{ padding:"8px 20px", fontSize:13, fontWeight:700,
+                fontFamily:"inherit", border:"none", borderRadius:7,
+                background:DS.accent, color:"#fff", cursor:"pointer" }}>
+              🖨 Print / Save as PDF
+            </button>
+            <button onClick={()=>setPreviewing(false)}
+              style={{ padding:"8px 16px", fontSize:13, fontWeight:700,
+                fontFamily:"inherit", border:"1px solid rgba(255,255,255,.3)",
+                borderRadius:7, background:"rgba(255,255,255,.1)",
+                color:"#fff", cursor:"pointer" }}>
+              ✕ Close
+            </button>
+          </div>
+
+          {/* Document page */}
+          <div style={{ width:"100%", maxWidth:860, background:"#fff",
+            borderRadius:8, boxShadow:"0 8px 40px rgba(0,0,0,.4)",
+            padding:"40px 52px", fontFamily:"'Georgia',serif",
+            color:"#1a1a2e", lineHeight:1.7 }}>
+
+            {/* Cover */}
+            <div style={{ borderBottom:"3px solid #0d1020", paddingBottom:24, marginBottom:32 }}>
+              <div style={{ fontSize:11, letterSpacing:2, textTransform:"uppercase",
+                color:"#6b75a0", marginBottom:8 }}>Vantage DQ · Executive Decision Package</div>
+              <div style={{ fontSize:28, fontWeight:700, lineHeight:1.2, marginBottom:10 }}>
+                {problem.projectName || problem.decisionStatement?.slice(0,70) || "Decision Package"}
+              </div>
+              <div style={{ display:"flex", gap:24, fontSize:12, color:"#6b75a0" }}>
+                {problem.owner && <span><strong>Owner:</strong> {problem.owner}</span>}
+                {problem.deadline && <span><strong>Deadline:</strong> {problem.deadline}</span>}
+                <span><strong>Date:</strong> {new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</span>
+              </div>
+            </div>
+
+            {/* Executive Summary */}
+            {executivePack.executiveSummary?.onePager && (
+              <div style={{ marginBottom:32 }}>
+                <div style={{ fontSize:14, fontWeight:700, textTransform:"uppercase",
+                  letterSpacing:1, marginBottom:12, color:"#2563eb" }}>Executive Summary</div>
+                <div style={{ fontSize:13, lineHeight:1.8, whiteSpace:"pre-line" }}>
+                  {executivePack.executiveSummary.onePager}
+                </div>
+              </div>
+            )}
+
+            {/* Bullet points */}
+            {(executivePack.executiveSummary?.bulletPoints||[]).length > 0 && (
+              <div style={{ marginBottom:32, padding:"16px 20px",
+                background:"#f8faff", borderLeft:"4px solid #2563eb", borderRadius:"0 6px 6px 0" }}>
+                <div style={{ fontSize:12, fontWeight:700, textTransform:"uppercase",
+                  letterSpacing:.8, marginBottom:10, color:"#2563eb" }}>Key Points</div>
+                {executivePack.executiveSummary.bulletPoints.map((pt,i) => (
+                  <div key={i} style={{ fontSize:13, marginBottom:6,
+                    display:"flex", gap:10, alignItems:"flex-start" }}>
+                    <span style={{ color:"#2563eb", fontWeight:700, flexShrink:0 }}>•</span>
+                    <span>{pt}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Recommendation */}
+            {executivePack.decisionPackage?.recommendation && (
+              <div style={{ marginBottom:32 }}>
+                <div style={{ fontSize:14, fontWeight:700, textTransform:"uppercase",
+                  letterSpacing:1, marginBottom:12, color:"#2563eb" }}>Recommendation</div>
+                <div style={{ fontSize:14, fontWeight:600, lineHeight:1.7,
+                  padding:"14px 18px", background:"#eff6ff",
+                  borderRadius:6, border:"1px solid #bfdbfe" }}>
+                  {executivePack.decisionPackage.recommendation}
+                </div>
+              </div>
+            )}
+
+            {/* Board narrative */}
+            {executivePack.boardNarrative && (
+              <div style={{ marginBottom:32 }}>
+                <div style={{ fontSize:14, fontWeight:700, textTransform:"uppercase",
+                  letterSpacing:1, marginBottom:12, color:"#2563eb" }}>Board Narrative</div>
+                <div style={{ fontSize:13, lineHeight:1.8, fontStyle:"italic" }}>
+                  {executivePack.boardNarrative}
+                </div>
+              </div>
+            )}
+
+            {/* Key risks */}
+            {(executivePack.decisionPackage?.keyRisks||[]).length > 0 && (
+              <div style={{ marginBottom:32 }}>
+                <div style={{ fontSize:14, fontWeight:700, textTransform:"uppercase",
+                  letterSpacing:1, marginBottom:12, color:"#2563eb" }}>Key Risks</div>
+                {executivePack.decisionPackage.keyRisks.map((r,i) => (
+                  <div key={i} style={{ fontSize:13, marginBottom:5,
+                    display:"flex", gap:10 }}>
+                    <span style={{ color:"#dc2626", flexShrink:0 }}>▲</span>{r}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Risk register */}
+            {(executivePack.riskRegister||[]).length > 0 && (
+              <div style={{ marginBottom:32 }}>
+                <div style={{ fontSize:14, fontWeight:700, textTransform:"uppercase",
+                  letterSpacing:1, marginBottom:12, color:"#2563eb" }}>Risk Register</div>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                  <thead>
+                    <tr style={{ background:"#f1f5f9" }}>
+                      {["Risk","Likelihood","Impact","Mitigation"].map(h=>(
+                        <th key={h} style={{ padding:"8px 12px", textAlign:"left",
+                          fontWeight:700, borderBottom:"2px solid #e2e8f0" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {executivePack.riskRegister.map((row,i)=>(
+                      <tr key={i} style={{ borderBottom:"1px solid #e2e8f0",
+                        background: i%2===0?"#fff":"#f8fafc" }}>
+                        <td style={{ padding:"8px 12px" }}>{row.risk}</td>
+                        <td style={{ padding:"8px 12px", fontWeight:600,
+                          color:row.likelihood==="High"?"#dc2626":row.likelihood==="Medium"?"#d97706":"#059669" }}>
+                          {row.likelihood}
+                        </td>
+                        <td style={{ padding:"8px 12px", fontWeight:600,
+                          color:row.impact==="High"?"#dc2626":row.impact==="Medium"?"#d97706":"#059669" }}>
+                          {row.impact}
+                        </td>
+                        <td style={{ padding:"8px 12px" }}>{row.mitigation}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Next steps */}
+            {(executivePack.nextSteps||[]).length > 0 && (
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:14, fontWeight:700, textTransform:"uppercase",
+                  letterSpacing:1, marginBottom:12, color:"#2563eb" }}>Next Steps</div>
+                {executivePack.nextSteps.map((step,i)=>(
+                  <div key={i} style={{ marginBottom:10, padding:"10px 14px",
+                    background:"#f8faff", borderRadius:6,
+                    borderLeft:"3px solid #2563eb" }}>
+                    <div style={{ fontSize:13, fontWeight:600, marginBottom:3 }}>{step.action}</div>
+                    <div style={{ fontSize:11, color:"#6b75a0", display:"flex", gap:16 }}>
+                      {step.owner && <span>Owner: {step.owner}</span>}
+                      {step.deadline && <span>By: {step.deadline}</span>}
+                      {step.dependency && <span>Depends on: {step.dependency}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Footer */}
+            <div style={{ borderTop:"1px solid #e2e8f0", paddingTop:16, marginTop:16,
+              fontSize:10, color:"#9ca3af", display:"flex", justifyContent:"space-between" }}>
+              <span>Generated by Vantage DQ</span>
+              <span>{new Date().toLocaleDateString()}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ padding:"16px 28px", background:DS.canvas, borderBottom:`1px solid ${DS.canvasBdr}`,
         display:"flex", alignItems:"center", gap:12, flexShrink:0, flexWrap:"wrap" }}>
@@ -8781,6 +8946,11 @@ Return ONLY valid JSON:
         <Badge variant={completionPct===100?"green":completionPct>60?"warn":"default"}>
           {completionPct}% complete
         </Badge>
+        {executivePack && (
+          <Btn variant="secondary" size="sm" onClick={()=>setPreviewing(true)}>
+            👁 Preview
+          </Btn>
+        )}
         <Btn variant="secondary" size="sm" onClick={()=>{
             const el = document.getElementById("vdq-export-content");
             if (!el) return;
