@@ -3897,6 +3897,9 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null); // { stratId, decId }
+  const [checkingDistinct, setCheckingDistinct] = useState(false);
+  const [distinctResult, setDistinctResult]     = useState(null);
+  const [showDistinctPanel, setShowDistinctPanel] = useState(false);
 
   const nowDecisions = decisions.filter(d=>d.tier==="focus");
 
@@ -3961,6 +3964,61 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
       onAIMsg({role:"ai",text:result.insight||("Added "+newSs.length+" strategies with objectives, rationale and option selections.")});
       setSuggesting(false);
     });
+  };
+
+  const runDistinctCheck = () => {
+    if (strategies.length < 2) {
+      onAIMsg({ role:"ai", text:"Add at least 2 strategies to run a distinctiveness check." });
+      return;
+    }
+    setCheckingDistinct(true);
+    setShowDistinctPanel(true);
+    const stratDesc = strategies.map((s, i) => {
+      const path = nowDecisions.map(d => {
+        const v = s.selections[d.id];
+        const idxs = Array.isArray(v) ? v : (v !== undefined ? [v] : []);
+        return d.label + ": " + (idxs.length ? idxs.map(i => d.choices[i]).join("+") : "not selected");
+      }).join("; ");
+      return (i+1) + ". " + s.name +
+        (s.objective ? " | Objective: " + s.objective : "") +
+        (s.description ? " | Rationale: " + s.description : "") +
+        (s.keyAssumptions ? " | Assumptions: " + s.keyAssumptions : "") +
+        " | Decisions: " + path;
+    }).join("\n");
+    aiCall(
+      "You are a senior Decision Quality expert evaluating whether strategies are genuinely distinct. " +
+      "Decision: " + (problem?.decisionStatement || "Not defined") + "\n\nStrategies:\n" + stratDesc + "\n\n" +
+      "For each pair of strategies, assess similarity across 5 dimensions: " +
+      "(1) strategic intent/objective, (2) decision choices made, (3) underlying assumptions, " +
+      "(4) risk profile, (5) resource/capability requirements. " +
+      "Score 0=completely different, 100=identical. Flag pairs with similarity > 60. " +
+      "Return ONLY JSON:\n" +
+      '{"overallDistinctiveness":"high|medium|low","overallNote":"2-sentence summary",' +
+      '"pairs":[{"stratA":"name","stratB":"name","similarityScore":45,' +
+      '"dimensionScores":{"strategicIntent":40,"decisionChoices":30,"assumptions":60,"riskProfile":50,"resourceRequirements":45},' +
+      '"verdict":"distinct|similar|nearly_identical",' +
+      '"onlyDifference":"the one dimension where they actually differ, if similar",' +
+      '"forcingQuestion":"What would a team who believed X do vs Y?",' +
+      '"suggestion":"specific action to genuinely differentiate these two"}],' +
+      '"missingStrategicSpace":"what strategic direction is not represented",' +
+      '"dominatedStrategies":[{"name":"strategy name","dominatedBy":"strategy name","reason":"why"}],' +
+      '"recommendedAction":"single most important thing to do"}',
+      (r) => {
+        let result = r;
+        if (r && r._raw) {
+          try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
+          catch(e) { setCheckingDistinct(false); return; }
+        }
+        if (!result || result.error) { setCheckingDistinct(false); return; }
+        setDistinctResult(result);
+        onAIMsg({ role:"ai", text:
+          "Distinctiveness: " + (result.overallDistinctiveness||"?").toUpperCase() + ". " +
+          (result.overallNote || "") +
+          (result.recommendedAction ? " → " + result.recommendedAction : "")
+        });
+        setCheckingDistinct(false);
+      }
+    );
   };
 
   const aiValidate = () => {
