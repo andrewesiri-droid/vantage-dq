@@ -7629,6 +7629,18 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       desc:"A calculated relationship — revenue, cash flow, emissions",
       rule:"Calculated from inputs. Can influence value nodes.",
     },
+    constraint: {
+      label:"Constraint", color:"#64748b", bg:"#f8fafc", border:"#cbd5e1",
+      icon:"⊟", shape:"rect",
+      desc:"A limiting condition — budget cap, regulatory restriction, resource limit",
+      rule:"Constrains decisions and intermediate variables. Cannot be changed within the decision.",
+    },
+    objective: {
+      label:"Objective", color:"#0891b2", bg:"#ecfeff", border:"#a5f3fc",
+      icon:"◉", shape:"oval",
+      desc:"A value goal — maximize value, reduce risk, preserve flexibility",
+      rule:"Strategic intent. Links to value nodes. Guides decision criteria.",
+    },
   };
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -7655,6 +7667,9 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   });
   const [zoom, setZoom]             = useState(1);
   const [metaNode, setMetaNode]     = useState(null); // node being edited in metadata panel
+  const [analysing, setAnalysing]   = useState(false);
+  const [mapAnalysis, setMapAnalysis] = useState(null);
+  const [selectedEdge, setSelectedEdge] = useState(null); // edge being edited
 
   const dragRef = useRef({ dragging:false, id:null, startX:0, startY:0, origX:0, origY:0 });
 
@@ -7743,7 +7758,14 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       setLinkSource(null); return;
     }
 
-    setEdges(prev => [...prev, { id: uid("e"), from: linkSource, to: targetId, label: "influences" }]);
+    setEdges(prev => [...prev, {
+      id: uid("e"), from: linkSource, to: targetId,
+      label: "influences",
+      influenceType: "increases",
+      strength: "moderate",
+      uncertaintySensitivity: "medium",
+      timeDelay: false,
+    }]);
     setLinkSource(null);
   };
 
@@ -7755,6 +7777,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       id: uid("n"), type: addType, label,
       description: "", owner: "", assumptions: "", tags: [],
       impact: "High", control: "Low",
+      confidence: "medium", evidenceBasis: "", criticality: "medium",
       x: 200 + Math.random() * 500, y: 150 + Math.random() * 300,
     };
     setNodes(prev => [...prev, n]);
@@ -7788,6 +7811,48 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
   };
 
   // ── Validation engine ─────────────────────────────────────────────────────
+  const aiAnalyseMap = () => {
+    setAnalysing(true);
+    const nodeSummary = nodes.map(n =>
+      n.type + ": " + n.label +
+      (n.impact ? " [impact:" + n.impact + "]" : "") +
+      (n.criticality ? " [criticality:" + n.criticality + "]" : "") +
+      (n.confidence ? " [confidence:" + n.confidence + "]" : "")
+    ).join("; ");
+    const edgeSummary = edges.map(e => {
+      const f = nodes.find(n=>n.id===e.from);
+      const t = nodes.find(n=>n.id===e.to);
+      return (f?.label||"?") + " --[" + (e.influenceType||"influences") + "]--> " + (t?.label||"?") +
+        (e.strength ? " [" + e.strength + "]" : "");
+    }).join("; ");
+    const prompt =
+      "You are an elite Decision Quality systems analyst evaluating an influence diagram. " +
+      "Decision: " + (problem?.decisionStatement||"Not set") + ". " +
+      "Nodes (" + nodes.length + "): " + (nodeSummary||"none") + ". " +
+      "Edges (" + edges.length + "): " + (edgeSummary||"none") + ". " +
+      "Evaluate this influence map for causal quality, completeness, and decision relevance. " +
+      "Return ONLY JSON: " +
+      '{"qualityScore":72,' +
+      '"dimensions":{"causalClarity":7,"structuralCompleteness":6,"uncertaintyIntegration":5,"logicConsistency":7,"dependencyVisibility":6,"systemsThinkingQuality":5,"decisionRelevance":8,"relationshipTransparency":6},' +
+      '"validationFlags":[{"type":"disconnected_node|unclear_causality|assumption_as_fact|missing_driver|oversimplified|circular_logic|unsupported_relationship|uncertainty_gap|low_decision_relevance","severity":"critical|warning|info","node":"node label","message":"specific issue","suggestion":"how to fix"}],' +
+      '"criticalDrivers":["node label that most drives outcomes"],' +
+      '"missingDrivers":["suggested missing variable or relationship"],' +
+      '"uncertaintyPathways":["how uncertainty propagates through the diagram"],' +
+      '"weakLogicAreas":["area where causal reasoning is weakest"],' +
+      '"diagnosticSummary":"2-3 sentence expert assessment of the map quality",' +
+      '"facilitatorQuestions":["What variable most strongly drives outcomes?","What uncertainty affects the most downstream nodes?"],' +
+      '"downstreamRecommendations":[{"module":"Scenario Planning","reason":"why"}]}';
+    aiCall(prompt, (r) => {
+      let result = r;
+      if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
+      if (!result||result.error){setAnalysing(false);return;}
+      setMapAnalysis(result);
+      onAIMsg({ role:"ai", text:"Influence Map Analysis: " + (result.qualityScore||"?") + "/100. " + (result.diagnosticSummary||"") });
+      setAnalysing(false);
+      setView("analysis");
+    });
+  };
+
   const runValidation = () => {
     const issues_found = [];
 
@@ -7840,7 +7905,8 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       "Existing nodes (do not duplicate): " + (existing || "none") + ". " +
       "Generate a realistic influence diagram. Include all four node types: " +
       "decision nodes (controllable choices), uncertainty nodes (unknown variables), " +
-      "deterministic nodes (calculated relationships like revenue/cost), and value nodes (outcomes like NPV/market share). " +
+      "deterministic nodes (calculated relationships like revenue/cost), value nodes (outcomes like NPV/market share), " +
+      "constraint nodes (budget/regulatory limits), and objective nodes (strategic goals). " +
       "Suggest influence edges. Value nodes must be terminal — they cannot influence other nodes. " +
       "Decision nodes must have outgoing edges. No circular dependencies. " +
       'Return ONLY JSON: {"nodes":[{"type":"uncertainty","label":"Oil Price","description":"Global crude benchmark","impact":"High","control":"Low","owner":""}],' +
@@ -8076,6 +8142,10 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
             {linkMode ? (linkSource ? "→ Click target node" : "→ Click source node") : "Draw Links"}
           </Btn>
           <Btn variant="secondary" size="sm" onClick={runValidation}>Validate</Btn>
+          <Btn variant="secondary" size="sm" onClick={aiAnalyseMap}
+            disabled={aiBusy||analysing||nodes.length<3}>
+            {analysing ? "Analysing…" : "✦ AI Analysis"}
+          </Btn>
           <Btn variant="primary" icon="spark" size="sm"
             onClick={generateNodes} disabled={aiBusy || generating}>
             {generating ? "Generating…" : "AI Generate"}
@@ -8091,6 +8161,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
               { id: "matrix",   label: "Impact Matrix" },
               { id: "metadata", label: "Node Registry" },
               { id: "validate", label: "Validate" },
+              { id: "analysis", label: "AI Analysis" },
             ].map(v => (
               <button key={v.id} onClick={() => setView(v.id)}
                 style={{ padding: "5px 12px", fontSize: 11, fontWeight: 700,
@@ -8412,6 +8483,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
                       { key: "description", label: "Description", type: "textarea", placeholder: "What does this node represent? What drives it?" },
                       { key: "owner", label: "Owner", type: "text", placeholder: "Who owns this variable?" },
                       { key: "assumptions", label: "Key Assumptions", type: "textarea", placeholder: "What are we assuming about this node?" },
+                      { key: "evidenceBasis", label: "Evidence Basis", type: "textarea", placeholder: "What evidence or reasoning supports this node?" },
                     ].map(field => (
                       <div key={field.key} style={{ marginBottom: 14 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
@@ -8475,6 +8547,36 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
                         </div>
                       </div>
                     )}
+                    <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                          letterSpacing: .5, textTransform: "uppercase", marginBottom: 5 }}>
+                          Confidence Level
+                        </div>
+                        <select value={metaNodeData.confidence || "medium"}
+                          onChange={e => updateNode(metaNodeData.id, { confidence: e.target.value })}
+                          style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                            fontFamily: "inherit", background: DS.canvasAlt,
+                            border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                            color: DS.ink, outline: "none" }}>
+                          {["high","medium","low"].map(v => <option key={v} value={v}>{v.charAt(0).toUpperCase()+v.slice(1)}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: DS.inkTer,
+                          letterSpacing: .5, textTransform: "uppercase", marginBottom: 5 }}>
+                          Criticality
+                        </div>
+                        <select value={metaNodeData.criticality || "medium"}
+                          onChange={e => updateNode(metaNodeData.id, { criticality: e.target.value })}
+                          style={{ width: "100%", padding: "7px 9px", fontSize: 12,
+                            fontFamily: "inherit", background: DS.canvasAlt,
+                            border: "1px solid " + DS.canvasBdr, borderRadius: 6,
+                            color: DS.ink, outline: "none" }}>
+                          {["critical","high","medium","low"].map(v => <option key={v} value={v}>{v.charAt(0).toUpperCase()+v.slice(1)}</option>)}
+                        </select>
+                      </div>
+                    </div>
 
                     {/* Connections summary */}
                     {edges.filter(e => e.from === metaNodeData.id || e.to === metaNodeData.id).length > 0 && (
@@ -8484,6 +8586,46 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
                           textTransform: "uppercase", letterSpacing: .5, marginBottom: 8 }}>
                           Connections
                         </div>
+                        {/* Outgoing edges with influence type editing */}
+                        {edges.filter(e => e.from === metaNodeData.id).map(e => {
+                          const t = nodes.find(n => n.id === e.to);
+                          const tn = NODE_TYPES[t?.type] || NODE_TYPES.uncertainty;
+                          return t ? (
+                            <div key={e.id} style={{ marginBottom: 8, padding: "6px 8px",
+                              background: DS.canvas, borderRadius: 5,
+                              border: "1px solid " + DS.canvasBdr }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                                <span style={{ fontSize: 10, color: DS.inkTer }}>→</span>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: tn.color }}>
+                                  {tn.icon} {t.label}
+                                </span>
+                                <button onClick={() => setEdges(prev => prev.filter(x=>x.id!==e.id))}
+                                  style={{ marginLeft:"auto", background:"none", border:"none",
+                                    cursor:"pointer", color:DS.inkDis, fontSize:10 }}>✕</button>
+                              </div>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <select value={e.influenceType||"increases"}
+                                  onChange={ev => setEdges(prev=>prev.map(x=>x.id===e.id?{...x,influenceType:ev.target.value}:x))}
+                                  style={{ flex:1, padding:"3px 6px", fontSize:10, fontFamily:"inherit",
+                                    background:DS.canvasAlt, border:"1px solid "+DS.canvasBdr,
+                                    borderRadius:4, color:DS.ink, outline:"none" }}>
+                                  {["increases","decreases","enables","constrains","amplifies","delays","triggers"].map(v=>(
+                                    <option key={v}>{v}</option>
+                                  ))}
+                                </select>
+                                <select value={e.strength||"moderate"}
+                                  onChange={ev => setEdges(prev=>prev.map(x=>x.id===e.id?{...x,strength:ev.target.value}:x))}
+                                  style={{ flex:1, padding:"3px 6px", fontSize:10, fontFamily:"inherit",
+                                    background:DS.canvasAlt, border:"1px solid "+DS.canvasBdr,
+                                    borderRadius:4, color:DS.ink, outline:"none" }}>
+                                  {["weak","moderate","strong"].map(v=>(
+                                    <option key={v}>{v}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          ) : null;
+                        })}
                         {edges.filter(e => e.from === metaNodeData.id).length > 0 && (
                           <div style={{ marginBottom: 6 }}>
                             <span style={{ fontSize: 10, color: DS.inkTer }}>Influences → </span>
@@ -8609,6 +8751,276 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
 
       </div>
 
+
+      {/* ── ANALYSIS VIEW ── */}
+        {view === "analysis" && (
+          <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+            <div style={{ maxWidth: 760, margin: "0 auto" }}>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: "'Libre Baskerville',serif", fontSize: 16,
+                    fontWeight: 700, color: DS.ink, marginBottom: 3 }}>AI Influence Map Analysis</div>
+                  <div style={{ fontSize: 12, color: DS.inkTer }}>
+                    Evaluates causal clarity, structural completeness, and decision relevance.
+                  </div>
+                </div>
+                <Btn variant="primary" size="sm" onClick={aiAnalyseMap}
+                  disabled={aiBusy||analysing||nodes.length<3}>
+                  {analysing ? "Analysing…" : mapAnalysis ? "Re-run" : "Run Analysis"}
+                </Btn>
+              </div>
+
+              {!mapAnalysis && !analysing && (
+                <div style={{ padding: "48px 32px", textAlign: "center",
+                  border: "1.5px dashed " + DS.canvasBdr, borderRadius: 10, color: DS.inkTer }}>
+                  <div style={{ fontSize: 28, marginBottom: 12, opacity: .4 }}>◈</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Analysis not yet run</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.6, maxWidth: 400, margin: "0 auto" }}>
+                    Build your influence diagram then run AI Analysis to get quality scoring,
+                    critical driver identification, validation flags, and improvement recommendations.
+                  </div>
+                </div>
+              )}
+
+              {analysing && (
+                <div style={{ textAlign: "center", padding: "48px", color: DS.inkTer }}>
+                  <div style={{ fontSize: 12 }}>Analysing causal structure…</div>
+                </div>
+              )}
+
+              {mapAnalysis && !analysing && (() => {
+                const scoreColor = s => s>=80?"#059669":s>=60?"#2563eb":s>=40?"#d97706":"#dc2626";
+                const DIM_LABELS = {
+                  causalClarity:"Causal Clarity",
+                  structuralCompleteness:"Structural Completeness",
+                  uncertaintyIntegration:"Uncertainty Integration",
+                  logicConsistency:"Logic Consistency",
+                  dependencyVisibility:"Dependency Visibility",
+                  systemsThinkingQuality:"Systems Thinking",
+                  decisionRelevance:"Decision Relevance",
+                  relationshipTransparency:"Relationship Transparency",
+                };
+                const FLAG_COLORS = {
+                  critical: { bg:"#fef2f2", border:"#fecaca", text:"#dc2626", icon:"⛔" },
+                  warning:  { bg:"#fffbeb", border:"#fde68a", text:"#d97706", icon:"⚠" },
+                  info:     { bg:"#eff6ff", border:"#bfdbfe", text:"#2563eb", icon:"ℹ" },
+                };
+                return (
+                  <div>
+                    {/* Score overview */}
+                    <div style={{ display: "flex", gap: 14, marginBottom: 20,
+                      padding: "16px 18px", background: DS.canvas,
+                      border: "1px solid " + DS.canvasBdr, borderRadius: 10 }}>
+                      <div style={{ textAlign: "center", flexShrink: 0 }}>
+                        <div style={{ fontFamily: "'Libre Baskerville',serif", fontSize: 52,
+                          fontWeight: 700, lineHeight: 1,
+                          color: scoreColor(mapAnalysis.qualityScore||0) }}>
+                          {mapAnalysis.qualityScore||0}
+                        </div>
+                        <div style={{ fontSize: 10, color: DS.inkTer, marginTop: 4 }}>/100</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, marginTop: 6,
+                          color: scoreColor(mapAnalysis.qualityScore||0) }}>
+                          {(mapAnalysis.qualityScore||0)>=80?"Strong":
+                           (mapAnalysis.qualityScore||0)>=60?"Good":
+                           (mapAnalysis.qualityScore||0)>=40?"Weak":"Incomplete"}
+                        </div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ height: 8, background: DS.canvasBdr, borderRadius: 4,
+                          overflow: "hidden", marginBottom: 10 }}>
+                          <div style={{ height: "100%", borderRadius: 4,
+                            background: scoreColor(mapAnalysis.qualityScore||0),
+                            width: (mapAnalysis.qualityScore||0) + "%", transition: "width .6s" }}/>
+                        </div>
+                        <div style={{ fontSize: 12, color: DS.inkSub, lineHeight: 1.6 }}>
+                          {mapAnalysis.diagnosticSummary}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dimension scores */}
+                    {mapAnalysis.dimensions && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 10 }}>
+                          Quality Dimensions
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                          {Object.entries(mapAnalysis.dimensions).map(([dim, score]) => {
+                            const s = Math.min(10, Math.max(0, score||0));
+                            const col = scoreColor(s*10);
+                            return (
+                              <div key={dim} style={{ padding: "7px 10px", background: DS.canvasAlt,
+                                borderRadius: 6, border: "1px solid " + DS.canvasBdr }}>
+                                <div style={{ display: "flex", justifyContent: "space-between",
+                                  alignItems: "center", marginBottom: 4 }}>
+                                  <span style={{ fontSize: 10, color: DS.inkSub }}>{DIM_LABELS[dim]||dim}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: col }}>{s}/10</span>
+                                </div>
+                                <div style={{ height: 4, background: DS.canvasBdr, borderRadius: 2, overflow: "hidden" }}>
+                                  <div style={{ height: "100%", width: (s*10) + "%",
+                                    background: col, borderRadius: 2 }}/>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Critical drivers */}
+                    {(mapAnalysis.criticalDrivers||[]).length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 8 }}>
+                          ⚡ Critical Drivers
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {mapAnalysis.criticalDrivers.map((d, i) => (
+                            <span key={i} style={{ padding: "5px 12px", borderRadius: 20,
+                              background: "#eff6ff", border: "1px solid #bfdbfe",
+                              color: "#1d4ed8", fontSize: 11, fontWeight: 700 }}>
+                              {typeof d==="string"?d:JSON.stringify(d)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Validation flags */}
+                    {(mapAnalysis.validationFlags||[]).length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 10 }}>
+                          Validation Flags ({mapAnalysis.validationFlags.length})
+                        </div>
+                        {mapAnalysis.validationFlags.map((f, i) => {
+                          const fc = FLAG_COLORS[f.severity||"info"] || FLAG_COLORS.info;
+                          return (
+                            <div key={i} style={{ marginBottom: 8, padding: "10px 14px",
+                              background: fc.bg, border: "1px solid " + fc.border, borderRadius: 7 }}>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <span>{fc.icon}</span>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: fc.text }}>
+                                      {(f.type||"").replace(/_/g," ")}
+                                    </span>
+                                    {f.node && (
+                                      <span style={{ fontSize: 9, color: fc.text, padding: "0 5px",
+                                        border: "1px solid " + fc.border, borderRadius: 3 }}>
+                                        {f.node}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: 11, color: DS.ink, lineHeight: 1.5,
+                                    marginBottom: f.suggestion?4:0 }}>
+                                    {f.message}
+                                  </div>
+                                  {f.suggestion && (
+                                    <div style={{ fontSize: 11, color: fc.text, fontWeight: 600 }}>
+                                      → {f.suggestion}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Missing drivers */}
+                    {(mapAnalysis.missingDrivers||[]).length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 8 }}>
+                          ◻ Suggested Missing Drivers
+                        </div>
+                        {mapAnalysis.missingDrivers.map((d, i) => (
+                          <div key={i} style={{ padding: "7px 10px", marginBottom: 5,
+                            background: "#fffbeb", border: "1px solid #fde68a",
+                            borderRadius: 5, fontSize: 11, color: "#92400e" }}>
+                            + {typeof d==="string"?d:JSON.stringify(d)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Uncertainty pathways */}
+                    {(mapAnalysis.uncertaintyPathways||[]).length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 8 }}>
+                          ◈ Uncertainty Propagation Pathways
+                        </div>
+                        {mapAnalysis.uncertaintyPathways.map((p, i) => (
+                          <div key={i} style={{ padding: "8px 12px", marginBottom: 6,
+                            background: "#fffbeb", border: "1px solid #fde68a",
+                            borderRadius: 5, fontSize: 11, color: DS.ink, lineHeight: 1.5 }}>
+                            {i+1}. {typeof p==="string"?p:JSON.stringify(p)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Weak logic areas */}
+                    {(mapAnalysis.weakLogicAreas||[]).length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 8 }}>
+                          ⚠ Weak Logic Areas
+                        </div>
+                        {mapAnalysis.weakLogicAreas.map((a, i) => (
+                          <div key={i} style={{ padding: "8px 12px", marginBottom: 6,
+                            background: "#fef2f2", border: "1px solid #fecaca",
+                            borderRadius: 5, fontSize: 11, color: DS.ink, lineHeight: 1.5 }}>
+                            {typeof a==="string"?a:JSON.stringify(a)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Facilitator questions */}
+                    {(mapAnalysis.facilitatorQuestions||[]).length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 8 }}>
+                          🎙 Facilitator Questions
+                        </div>
+                        {mapAnalysis.facilitatorQuestions.map((q, i) => (
+                          <div key={i} style={{ padding: "8px 12px", marginBottom: 6,
+                            background: DS.canvasAlt, border: "1px solid " + DS.canvasBdr,
+                            borderRadius: 5, fontSize: 11, color: DS.ink, lineHeight: 1.5 }}>
+                            {i+1}. {typeof q==="string"?q:JSON.stringify(q)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Downstream recommendations */}
+                    {(mapAnalysis.downstreamRecommendations||[]).length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: DS.ink, marginBottom: 8 }}>
+                          → Recommended Next Modules
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {mapAnalysis.downstreamRecommendations.map((r, i) => (
+                            <div key={i} style={{ padding: "8px 12px", background: DS.canvas,
+                              border: "1px solid " + DS.canvasBdr, borderRadius: 7, fontSize: 11 }}>
+                              <div style={{ fontWeight: 700, color: DS.ink, marginBottom: 2 }}>
+                                {typeof r==="string"?r:(r.module||"")}
+                              </div>
+                              {r.reason && (
+                                <div style={{ fontSize: 10, color: DS.inkTer }}>{r.reason}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+      </div>
 
       {/* ── FINANCIAL MODEL MODAL ── */}
       {showModelModal && (
