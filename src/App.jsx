@@ -16677,11 +16677,16 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
 ───────────────────────────────────────────────────────────────────────────── */
 
 const ANALYSIS_STEPS = [
-  { id:"frame",     label:"Extracting decision frame",      icon:"◎", module:"Problem Definition" },
-  { id:"issues",    label:"Identifying issues & risks",     icon:"◈", module:"Issue Raising" },
-  { id:"hierarchy", label:"Structuring decision hierarchy", icon:"◧", module:"Decision Hierarchy" },
-  { id:"criteria",  label:"Inferring decision criteria",    icon:"◫", module:"Decision Criteria" },
-  { id:"strategy",  label:"Drafting initial strategies",    icon:"⊞", module:"Strategy Table" },
+  { id:"frame",         label:"Extracting decision frame",          icon:"◎", module:"Problem Definition" },
+  { id:"issues",        label:"Identifying issues & risks",         icon:"◈", module:"Issue Raising" },
+  { id:"brutalTruths",  label:"Surfacing brutal truths",            icon:"⚑", module:"Issue Raising" },
+  { id:"infoGaps",      label:"Mapping information gaps",           icon:"◎", module:"Issue Raising" },
+  { id:"hierarchy",     label:"Structuring decision hierarchy",     icon:"◧", module:"Decision Hierarchy" },
+  { id:"criteria",      label:"Inferring decision criteria",        icon:"◫", module:"Decision Criteria" },
+  { id:"strategy",      label:"Drafting initial strategies",        icon:"⊞", module:"Strategy Table" },
+  { id:"stakeholders",  label:"Mapping stakeholder landscape",      icon:"◉", module:"Stakeholder Alignment" },
+  { id:"uncertainties", label:"Identifying key uncertainties",      icon:"◈", module:"Scenario Planning" },
+  { id:"gameTheory",    label:"Scanning for game theory signals",   icon:"♟", module:"Game Theory" },
 ];
 
 function LoginScreen({ onLogin }) {
@@ -17051,101 +17056,136 @@ function QuickStartScreen({ onComplete, onSkip }) {
     setPhase("analysing");
     setAnalysisProgress([]);
 
-    const prompt = `You are a senior Decision Quality expert performing a deep-dive analysis of a decision problem.
+    // ── MULTI-PASS DEEP DIVE ──────────────────────────────────────────────────
+    // Each pass targets one module's exact schema. The full document is passed
+    // fresh each time so the model attends to the whole text, not a summary.
+    // Passes run sequentially; the progress bar advances after each completes.
 
-Read the following input and produce a complete structured first draft for a Decision Quality framing exercise. Be specific — extract real details from the text, not generic placeholders.
+    const docContext = `DOCUMENT:\n===\n${text}\n===\n`;
+    const tick = (id) => setAnalysisProgress(p => [...p, id]);
+    const merged = {};
 
-=== INPUT ===
-${text}
-=== END INPUT ===
-
-Return ONLY valid JSON:
-{
-  "projectName": "short project name from context",
-  "executiveSummary": "2-3 sentence summary reframed through a DQ lens",
-  "frame": {
-    "decisionStatement": "precise decision statement starting with How should we... or What is the best...",
-    "context": "business context from text",
-    "background": "relevant history or strategic context",
-    "trigger": "what precipitated this decision now",
-    "symptoms": "observable symptoms vs root decision",
-    "rootDecision": "underlying strategic choice",
-    "scopeIn": "what is in scope",
-    "scopeOut": "what should be out of scope",
-    "timeHorizon": "time horizon",
-    "deadline": "decision deadline",
-    "owner": "decision owner",
-    "stakeholders": [{"name":"name","role":"role","influence":"High|Medium|Low"}],
-    "constraints": "hard constraints",
-    "assumptions": "stated or implied assumptions",
-    "successCriteria": "what good looks like",
-    "failureConsequences": "consequences of poor decision",
-    "urgency": "High — Decide within weeks",
-    "importance": "Strategically significant",
-    "confidence": "high|medium|low",
-    "confidenceNote": "why this confidence level"
-  },
-  "issues": [
-    {
-      "text": "specific actionable issue statement",
-      "type": "Risk|Opportunity|Constraint|Assumption|Stakeholder Concern|Operational|Financial|Technical|Strategic|Regulatory|Data Gap|Open Question|Dependency",
-      "severity": "Critical|High|Medium|Low",
-      "hat": "Team / Internal|Customer / Market|Competition|Risk / Downside|Regulator / External",
-      "confidence": "high|medium|low",
-      "source": "brief phrase from input that drove this inference"
-    }
-  ],
-  "decisions": [
-    {
-      "label": "Decision label",
-      "choices": ["Option A", "Option B", "Option C"],
-      "tier": "given|focus|tactical|deferred|dependency",
-      "owner": "who owns this",
-      "rationale": "why in this tier",
-      "confidence": "high|medium|low"
-    }
-  ],
-  "criteria": [
-    {
-      "label": "criterion name",
-      "type": "financial|strategic|operational|risk|commercial|technical",
-      "weight": "high|medium|low",
-      "description": "what this measures",
-      "confidence": "high|medium|low"
-    }
-  ],
-  "strategies": [
-    {
-      "name": "Strategy name",
-      "description": "one sentence — what this strategy does",
-      "rationale": "why this is a coherent distinct direction",
-      "keyTheme": "central logic in 4-6 words",
-      "confidence": "high|medium|low"
-    }
-  ],
-  "dqObservations": ["Key DQ observation about the framing quality"],
-  "weakestLink": "Which DQ element is weakest and why",
-  "recommendedFirstStep": "Single most important thing to do first"
-}
-
-Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strategies. Be specific to the actual content.`;
-
-    const progressTimer = setInterval(() => {
-      setAnalysisProgress(p => {
-        if (p.length < ANALYSIS_STEPS.length) return [...p, ANALYSIS_STEPS[p.length].id];
-        clearInterval(progressTimer);
-        return p;
+    const runPass = (passPrompt) => new Promise(resolve => {
+      call(passPrompt, (r) => {
+        if (r && r._raw) {
+          try { resolve(JSON.parse(r._raw.replace(/```json|```/g,"").trim())); }
+          catch(e) { resolve({}); }
+        } else if (r && !r.error) {
+          resolve(r);
+        } else {
+          resolve({});
+        }
       });
-    }, 950);
-
-    call(prompt, (result) => {
-      clearInterval(progressTimer);
-      setAnalysisProgress(ANALYSIS_STEPS.map(s => s.id));
-      if (result.error || result._raw) { setPhase("input"); return; }
-      setDraft(result);
-      setAccepted({ frame:true, issues:true, decisions:true, criteria:true, strategies:true });
-      setTimeout(() => setPhase("review"), 600);
     });
+
+    // ── PASS 1: DECISION FRAME ────────────────────────────────────────────────
+    const p1 = await runPass(
+      "You are a senior DQ expert. Extract the decision frame from this document. " +
+      "Be specific — use real names, numbers, and language from the document. Never invent facts. " +
+      "If a field cannot be found, use null. Distinguish: extracted (verbatim from doc) vs inferred (reasonably implied).\n\n" +
+      docContext +
+      'Return ONLY JSON: {"projectName":"short name","executiveSummary":"2-3 sentence DQ-lens summary",' +
+      '"frame":{"decisionStatement":"open question: How should / What is the best...","context":"business context","background":"history","trigger":"what precipitated this now",' +
+      '"scopeIn":"what is in scope","scopeOut":"what is out of scope","deadline":"deadline if stated","owner":"decision owner if named",' +
+      '"constraints":"hard constraints","successCriteria":"what good looks like","urgency":"High|Medium|Low","importance":"High|Medium|Low",' +
+      '"confidence":"high|medium|low","confidenceNote":"why"},' +
+      '"dqObservations":["DQ observation about frame quality"],"weakestLink":"weakest DQ element","recommendedFirstStep":"most important next action"}'
+    );
+    Object.assign(merged, p1);
+    tick("frame");
+
+    // ── PASS 2: ISSUES (general — risks, opportunities, constraints) ──────────
+    const p2 = await runPass(
+      "You are a DQ expert. Extract all issues from this document: risks, opportunities, constraints, operational concerns, financial concerns, strategic concerns, regulatory concerns, dependencies. " +
+      "DO NOT include brutal truths or information gaps in this pass — those are separate. " +
+      "For each issue: cite the exact phrase or sentence that led to this inference in 'source'. " +
+      "Categorise precisely. Generate 8-15 issues.\n\n" +
+      docContext +
+      'Return ONLY JSON: {"issues":[{"text":"specific actionable issue","category":"uncertainty-external|uncertainty-internal|opportunity|constraint|stakeholder-concern|focus-decision|assumption","severity":"Critical|High|Medium|Low","confidence":"high|medium|low","source":"quote or phrase from document that drives this"}]}'
+    );
+    if (p2.issues) merged.issues = p2.issues;
+    tick("issues");
+
+    // ── PASS 3: BRUTAL TRUTHS + INFORMATION GAPS ─────────────────────────────
+    const p3 = await runPass(
+      "You are a DQ facilitator specialising in brutal honesty. From this document:\n" +
+      "BRUTAL TRUTHS: Things that are implied but not being said directly. Uncomfortable facts the team may be avoiding. Unspoken tensions. Things everyone knows but no one has written down. Mark with isBrutalTruth:true.\n" +
+      "INFORMATION GAPS: Things that are unknown, uncertain, or missing that would materially affect the decision. Missing data, unvalidated assumptions, untested market appetite, unresolved regulatory positions. Mark with isInfoGap:true.\n" +
+      "Be specific — use names and numbers from the document. Generate 4-8 brutal truths and 4-8 information gaps.\n\n" +
+      docContext +
+      'Return ONLY JSON: {"brutalTruths":[{"text":"the brutal truth stated plainly","severity":"Critical|High|Medium","source":"what in the document implies this"}],' +
+      '"informationGaps":[{"text":"the specific gap — what is unknown","severity":"Critical|High|Medium","decisionImpact":"how this affects the decision","source":"what in the document reveals this gap"}]}'
+    );
+    if (p3.brutalTruths) merged.brutalTruths = p3.brutalTruths;
+    if (p3.informationGaps) merged.informationGaps = p3.informationGaps;
+    tick("brutalTruths");
+    tick("infoGaps");
+
+    // ── PASS 4: DECISION HIERARCHY + CRITERIA ────────────────────────────────
+    const p4 = await runPass(
+      "You are a DQ expert. Extract the decision hierarchy and evaluation criteria from this document.\n" +
+      "DECISIONS: Identify all sub-decisions. Classify each: focus (in-scope, must be made), given (already decided/locked), deferred (depends on focus decisions), tactical (operational detail). Each focus decision needs 2-4 choices.\n" +
+      "CRITERIA: What dimensions would a team use to evaluate the strategic options? Extract from stated objectives, constraints, and trade-offs in the document. 4-7 criteria.\n\n" +
+      docContext +
+      'Return ONLY JSON: {"decisions":[{"label":"decision label","choices":["choice A","choice B","choice C"],"tier":"focus|given|deferred|tactical","owner":"owner if named","rationale":"why this tier","confidence":"high|medium|low"}],' +
+      '"criteria":[{"label":"criterion name","type":"financial|strategic|operational|risk|commercial|technical","weight":"high|medium|low","description":"what this measures","confidence":"high|medium|low"}]}'
+    );
+    if (p4.decisions) merged.decisions = p4.decisions;
+    if (p4.criteria) merged.criteria = p4.criteria;
+    tick("hierarchy");
+    tick("criteria");
+
+    // ── PASS 5: STRATEGIES ────────────────────────────────────────────────────
+    const p5 = await runPass(
+      "You are a DQ strategist. Extract or infer the strategic alternatives from this document. " +
+      "Each strategy must be genuinely distinct — different underlying logic, not just different names for the same approach. " +
+      "If strategies are not explicitly named, infer them from the options, alternatives, or paths described. Include a status quo / do nothing if relevant. " +
+      "2-5 strategies maximum.\n\n" +
+      docContext +
+      'Return ONLY JSON: {"strategies":[{"name":"Strategy name","description":"one sentence — what this strategy does and how it differs from others","objective":"what this strategy is trying to achieve","keyAssumption":"the single most important assumption this strategy depends on","confidence":"high|medium|low","isInferred":true}]}'
+    );
+    if (p5.strategies) merged.strategies = p5.strategies;
+    tick("strategy");
+
+    // ── PASS 6: STAKEHOLDERS ──────────────────────────────────────────────────
+    const p6 = await runPass(
+      "You are a DQ stakeholder analyst. Extract all stakeholders from this document — individuals, organisations, groups, regulators, partners, internal functions. " +
+      "For each: assess their alignment based on what the document says or implies. " +
+      "Distinguish: stated (document explicitly describes their position) vs inferred (implied from context).\n\n" +
+      docContext +
+      'Return ONLY JSON: {"stakeholders":[{"name":"stakeholder name","role":"their role in this decision","influence":"High|Medium|Low","alignment":"champion|neutral|skeptic|blocker","primaryConcern":"what they care about most","mustAlign":true,"confidence":"high|medium|low","isInferred":false}]}'
+    );
+    if (p6.stakeholders) merged.stakeholders = p6.stakeholders;
+    tick("stakeholders");
+
+    // ── PASS 7: UNCERTAINTIES + GAME THEORY SIGNALS ──────────────────────────
+    const p7 = await runPass(
+      "You are a DQ analyst and game theory expert. From this document:\n\n" +
+      "UNCERTAINTIES: The key unknowns that would materially affect which option is best. Different from information gaps — these are irreducible uncertainties (future states of the world, competitor behaviour, regulatory outcomes). " +
+      "These will seed the Scenario Planning and Value of Information modules. 4-8 uncertainties.\n\n" +
+      "GAME THEORY: Does this decision involve strategic interaction with other players who have their own objectives and will respond to your moves? " +
+      "Identify: the game type (Competitive, Coordination, Collaboration, Sequential, Negotiation, Deterrence, Coalition, Bidding), the key players and their moves, the most important strategic dynamic. " +
+      "Only flag if there are genuine strategic interactions — not every decision is a game theory problem.\n\n" +
+      docContext +
+      'Return ONLY JSON: {"uncertainties":[{"label":"uncertainty label","description":"what is uncertain and why it matters","decisionImpact":"how this changes which option is best","resolvable":"yes|no|partially","resolutionPath":"how you could find out, if at all","confidence":"high|medium|low"}],' +
+      '"gameTheorySignals":{"hasStrategicInteraction":true,"gameType":"Competitive|Coordination|Collaboration|Sequential|Negotiation|Deterrence|Coalition|Bidding|None",' +
+      '"rationale":"why this game type","keyPlayers":[{"name":"player","objective":"what they want","keyMove":"their most important available action"}],' +
+      '"mostImportantDynamic":"the single most important strategic dynamic to understand","recommendGameTheoryAnalysis":true}}'
+    );
+    if (p7.uncertainties) merged.uncertainties = p7.uncertainties;
+    if (p7.gameTheorySignals) merged.gameTheorySignals = p7.gameTheorySignals;
+    tick("uncertainties");
+    tick("gameTheory");
+
+    // ── DONE ──────────────────────────────────────────────────────────────────
+    setAnalysisProgress(ANALYSIS_STEPS.map(s => s.id));
+    setDraft(merged);
+    setAccepted({
+      frame:true, issues:true, brutalTruths:true, infoGaps:true,
+      decisions:true, criteria:true, strategies:true,
+      stakeholders:true, uncertainties:true, gameTheory:false,
+    });
+    setTimeout(() => setPhase("review"), 400);
   };
 
   const applyDraft = () => { if (draft) onComplete(draft, accepted); };
@@ -17543,11 +17583,16 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
   // ── REVIEW ──
   if (phase === "review" && draft) {
     const sections = [
-      { key:"frame",      label:"Problem Definition",  count:null },
-      { key:"issues",     label:"Issues",              count:draft.issues?.length },
-      { key:"decisions",  label:"Decision Hierarchy",  count:draft.decisions?.length },
-      { key:"criteria",   label:"Criteria",            count:draft.criteria?.length },
-      { key:"strategies", label:"Strategies",          count:draft.strategies?.length },
+      { key:"frame",        label:"Problem Definition",  count:null,                               icon:"◎" },
+      { key:"issues",       label:"Issues",              count:draft.issues?.length,               icon:"◈" },
+      { key:"brutalTruths", label:"Brutal Truths",       count:draft.brutalTruths?.length,         icon:"⚑" },
+      { key:"infoGaps",     label:"Information Gaps",    count:draft.informationGaps?.length,      icon:"◎" },
+      { key:"decisions",    label:"Decision Hierarchy",  count:draft.decisions?.length,            icon:"◧" },
+      { key:"criteria",     label:"Criteria",            count:draft.criteria?.length,             icon:"◫" },
+      { key:"strategies",   label:"Strategies",          count:draft.strategies?.length,           icon:"⊞" },
+      { key:"stakeholders", label:"Stakeholders",        count:draft.stakeholders?.length,         icon:"◉" },
+      { key:"uncertainties",label:"Uncertainties",       count:draft.uncertainties?.length,        icon:"◈" },
+      { key:"gameTheory",   label:"Game Theory",         count:draft.gameTheorySignals?.hasStrategicInteraction?1:0, icon:"♟" },
     ];
 
     return (
@@ -17794,6 +17839,263 @@ Generate 8-12 issues, 6-10 decisions across all tiers, 4-7 criteria, 2-4 strateg
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+
+            {/* BRUTAL TRUTHS */}
+            {accepted.brutalTruths && (draft.brutalTruths?.length > 0) && (
+              <div style={{ marginBottom:16, border:`1.5px solid #fecaca`, borderRadius:8,
+                overflow:"hidden", background:"#fff5f5" }}>
+                <div style={{ padding:"10px 16px", background:"#fee2e2",
+                  borderBottom:"1px solid #fecaca", display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:14 }}>⚑</span>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#dc2626" }}>
+                    Brutal Truths — {draft.brutalTruths.length} identified
+                  </div>
+                  <div style={{ marginLeft:"auto", fontSize:10, color:"#b91c1c" }}>
+                    Things everyone knows but no one has written down
+                  </div>
+                </div>
+                <div style={{ padding:"12px 16px", display:"flex", flexDirection:"column", gap:8 }}>
+                  {draft.brutalTruths.map((bt, i) => (
+                    <div key={i} style={{ padding:"10px 14px", background:"#fff",
+                      border:"1px solid #fecaca", borderRadius:6 }}>
+                      <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                        <span style={{ fontSize:9, fontWeight:700,
+                          padding:"2px 6px", borderRadius:3,
+                          background:bt.severity==="Critical"?"#dc2626":bt.severity==="High"?"#d97706":"#6b7280",
+                          color:"#fff", flexShrink:0, marginTop:1 }}>
+                          {bt.severity}
+                        </span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5, marginBottom:4,
+                            fontWeight:600 }}>{bt.text}</div>
+                          {bt.source && (
+                            <div style={{ fontSize:10, color:"#b91c1c", fontStyle:"italic" }}>
+                              From document: "{bt.source}"
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* INFORMATION GAPS */}
+            {accepted.infoGaps && (draft.informationGaps?.length > 0) && (
+              <div style={{ marginBottom:16, border:`1.5px solid #fde68a`, borderRadius:8,
+                overflow:"hidden", background:"#fffdf0" }}>
+                <div style={{ padding:"10px 16px", background:"#fef9c3",
+                  borderBottom:"1px solid #fde68a", display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:14 }}>◎</span>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#92400e" }}>
+                    Information Gaps — {draft.informationGaps.length} identified
+                  </div>
+                  <div style={{ marginLeft:"auto", fontSize:10, color:"#92400e" }}>
+                    Unknown or unvalidated — would affect the decision if resolved
+                  </div>
+                </div>
+                <div style={{ padding:"12px 16px", display:"flex", flexDirection:"column", gap:8 }}>
+                  {draft.informationGaps.map((ig, i) => (
+                    <div key={i} style={{ padding:"10px 14px", background:"#fff",
+                      border:"1px solid #fde68a", borderRadius:6 }}>
+                      <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                        <span style={{ fontSize:9, fontWeight:700,
+                          padding:"2px 6px", borderRadius:3,
+                          background:ig.severity==="Critical"?"#dc2626":ig.severity==="High"?"#d97706":"#6b7280",
+                          color:"#fff", flexShrink:0, marginTop:1 }}>
+                          {ig.severity}
+                        </span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5,
+                            fontWeight:600, marginBottom:4 }}>{ig.text}</div>
+                          {ig.decisionImpact && (
+                            <div style={{ fontSize:11, color:"#92400e", marginBottom:3 }}>
+                              Decision impact: {ig.decisionImpact}
+                            </div>
+                          )}
+                          {ig.source && (
+                            <div style={{ fontSize:10, color:"#a16207", fontStyle:"italic" }}>
+                              From document: "{ig.source}"
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* STAKEHOLDERS */}
+            {accepted.stakeholders && (draft.stakeholders?.length > 0) && (
+              <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
+                overflow:"hidden", background:DS.canvas }}>
+                <div style={{ padding:"10px 16px", background:DS.canvasAlt,
+                  borderBottom:`1px solid ${DS.canvasBdr}` }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>
+                    ◉ Stakeholders — {draft.stakeholders.length} identified
+                  </div>
+                </div>
+                <div style={{ padding:"12px 16px", display:"grid",
+                  gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:10 }}>
+                  {draft.stakeholders.map((sh, i) => {
+                    const alCol = {champion:"#059669",neutral:"#6b7280",skeptic:"#d97706",blocker:"#dc2626"}[sh.alignment]||"#6b7280";
+                    return (
+                      <div key={i} style={{ padding:"10px 13px",
+                        border:`1px solid ${alCol}30`, borderRadius:7,
+                        background:`${alCol}08` }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5 }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:DS.ink }}>
+                            {sh.name}
+                          </div>
+                          <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px",
+                            borderRadius:3, background:alCol+"20", color:alCol }}>
+                            {sh.alignment}
+                          </span>
+                          {sh.isInferred && (
+                            <span style={{ fontSize:8, color:DS.inkDis, fontStyle:"italic" }}>inferred</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize:10, color:DS.inkSub, marginBottom:4 }}>{sh.role}</div>
+                        {sh.primaryConcern && (
+                          <div style={{ fontSize:10, color:DS.inkTer, fontStyle:"italic",
+                            lineHeight:1.4 }}>{sh.primaryConcern}</div>
+                        )}
+                        <div style={{ display:"flex", gap:4, marginTop:5 }}>
+                          <span style={{ fontSize:8, fontWeight:700, padding:"1px 5px",
+                            borderRadius:3, background:DS.canvasBdr, color:DS.inkTer }}>
+                            {sh.influence} influence
+                          </span>
+                          {sh.mustAlign && (
+                            <span style={{ fontSize:8, fontWeight:700, padding:"1px 5px",
+                              borderRadius:3, background:"#fef2f2", color:"#dc2626" }}>
+                              must align
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* UNCERTAINTIES */}
+            {accepted.uncertainties && (draft.uncertainties?.length > 0) && (
+              <div style={{ marginBottom:16, border:`1px solid ${DS.canvasBdr}`, borderRadius:8,
+                overflow:"hidden", background:DS.canvas }}>
+                <div style={{ padding:"10px 16px", background:DS.canvasAlt,
+                  borderBottom:`1px solid ${DS.canvasBdr}`, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>
+                    ◈ Key Uncertainties — {draft.uncertainties.length} identified
+                  </div>
+                  <div style={{ marginLeft:"auto", fontSize:10, color:DS.inkTer }}>
+                    Seeds Scenario Planning + Value of Information modules
+                  </div>
+                </div>
+                <div style={{ padding:"12px 16px", display:"flex", flexDirection:"column", gap:8 }}>
+                  {draft.uncertainties.map((unc, i) => (
+                    <div key={i} style={{ padding:"10px 14px",
+                      border:`1px solid ${DS.canvasBdr}`, borderRadius:6 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:DS.ink,
+                        marginBottom:4 }}>{unc.label}</div>
+                      <div style={{ fontSize:11, color:DS.inkSub, lineHeight:1.5,
+                        marginBottom:5 }}>{unc.description}</div>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        {unc.decisionImpact && (
+                          <span style={{ fontSize:9, color:DS.inkTer,
+                            padding:"1px 6px", background:DS.canvasAlt,
+                            borderRadius:3 }}>
+                            Impact: {unc.decisionImpact}
+                          </span>
+                        )}
+                        {unc.resolvable && (
+                          <span style={{ fontSize:9, fontWeight:700,
+                            padding:"1px 6px", borderRadius:3,
+                            background:unc.resolvable==="yes"?"#ecfdf5":unc.resolvable==="partially"?"#fffbeb":"#fef2f2",
+                            color:unc.resolvable==="yes"?"#059669":unc.resolvable==="partially"?"#d97706":"#dc2626" }}>
+                            {unc.resolvable==="yes"?"Resolvable":unc.resolvable==="partially"?"Partially resolvable":"Irreducible"}
+                          </span>
+                        )}
+                      </div>
+                      {unc.resolutionPath && (
+                        <div style={{ fontSize:10, color:DS.accent, marginTop:4 }}>
+                          → {unc.resolutionPath}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* GAME THEORY */}
+            {accepted.gameTheory && draft.gameTheorySignals?.hasStrategicInteraction && (
+              <div style={{ marginBottom:16, border:"1.5px solid rgba(99,102,241,.3)",
+                borderRadius:8, overflow:"hidden",
+                background:"rgba(99,102,241,.03)" }}>
+                <div style={{ padding:"10px 16px",
+                  background:"rgba(99,102,241,.08)",
+                  borderBottom:"1px solid rgba(99,102,241,.2)",
+                  display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:16 }}>♟</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:"#4f46e5" }}>
+                      Game Theory Signals Detected
+                    </div>
+                    <div style={{ fontSize:10, color:"#6366f1" }}>
+                      This decision involves strategic interaction — Game Theory module recommended
+                    </div>
+                  </div>
+                  <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px",
+                    background:"rgba(99,102,241,.15)", color:"#6366f1",
+                    borderRadius:5 }}>
+                    {draft.gameTheorySignals.gameType}
+                  </span>
+                </div>
+                <div style={{ padding:"14px 16px" }}>
+                  <div style={{ fontSize:12, color:DS.ink, lineHeight:1.5, marginBottom:12 }}>
+                    {draft.gameTheorySignals.rationale}
+                  </div>
+                  {draft.gameTheorySignals.mostImportantDynamic && (
+                    <div style={{ padding:"8px 12px",
+                      background:"rgba(99,102,241,.06)",
+                      border:"1px solid rgba(99,102,241,.15)",
+                      borderRadius:6, fontSize:11, color:"#6366f1",
+                      fontStyle:"italic", marginBottom:12 }}>
+                      Key dynamic: {draft.gameTheorySignals.mostImportantDynamic}
+                    </div>
+                  )}
+                  {(draft.gameTheorySignals.keyPlayers||[]).length > 0 && (
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
+                        textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>
+                        Key Players
+                      </div>
+                      <div style={{ display:"grid",
+                        gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:8 }}>
+                        {draft.gameTheorySignals.keyPlayers.map((pl,i) => (
+                          <div key={i} style={{ padding:"8px 12px",
+                            background:"rgba(99,102,241,.06)",
+                            border:"1px solid rgba(99,102,241,.1)",
+                            borderRadius:6 }}>
+                            <div style={{ fontSize:11, fontWeight:700,
+                              color:"#4f46e5", marginBottom:3 }}>{pl.name}</div>
+                            <div style={{ fontSize:10, color:DS.inkSub,
+                              marginBottom:3 }}>{pl.objective}</div>
+                            <div style={{ fontSize:9, color:"#6366f1" }}>
+                              Key move: {pl.keyMove}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -18648,12 +18950,88 @@ export default function App() {
       setStrategies(draft.strategies.map((s,i) => ({
         id:uid("s"), colorIdx:i%DS.s.length,
         name:s.name||DS.sNames[i]||`Strategy ${i+1}`,
-        description:s.description||"", selections:{}, rationale:{},
+        description:s.description||"", objective:s.objective||"",
+        keyAssumptions:s.keyAssumption||"", selections:{}, rationale:{},
       })));
     }
+
+    // ── NEW: Brutal truths + info gaps → issues ──────────────────────────────
+    if (accepted.brutalTruths && draft.brutalTruths?.length) {
+      setIssues(prev => {
+        const existing = new Set(prev.map(i=>i.text));
+        const newIssues = draft.brutalTruths
+          .filter(bt => !existing.has(bt.text))
+          .map(bt => ({
+            id:uid("iss"), text:bt.text,
+            category:"brutal-truth",
+            severity:bt.severity||"High", status:"Open", owner:"", votes:0,
+            source:bt.source||"",
+          }));
+        return [...prev, ...newIssues];
+      });
+    }
+    if (accepted.infoGaps && draft.informationGaps?.length) {
+      setIssues(prev => {
+        const existing = new Set(prev.map(i=>i.text));
+        const newIssues = draft.informationGaps
+          .filter(ig => !existing.has(ig.text))
+          .map(ig => ({
+            id:uid("iss"), text:ig.text,
+            category:"information-gap",
+            severity:ig.severity||"High", status:"Open", owner:"", votes:0,
+            source:ig.source||"",
+          }));
+        return [...prev, ...newIssues];
+      });
+    }
+
+    // ── NEW: Stakeholders ────────────────────────────────────────────────────
+    if (accepted.stakeholders && draft.stakeholders?.length) {
+      setStakeholders(draft.stakeholders.map(sh => ({
+        id:uid("sh"),
+        name:sh.name||"Unnamed",
+        role:sh.role||"",
+        influence:sh.influence||"Medium",
+        alignment:sh.alignment||"neutral",
+        primaryConcern:sh.primaryConcern||"",
+        mustAlign:sh.mustAlign||false,
+        engagementActions:"",
+        notes:sh.isInferred?"[AI inferred — verify with team]":"",
+      })));
+    }
+
+    // ── NEW: Uncertainties → seed scenarioData ───────────────────────────────
+    if (accepted.uncertainties && draft.uncertainties?.length) {
+      setScenarioData(prev => ({
+        ...prev,
+        uncertainties: draft.uncertainties.map(u => ({
+          id:uid("u"),
+          label:u.label||"",
+          description:u.description||"",
+          theme:"",
+          impact:"High",
+          uncertainty:"High",
+          resolvable:u.resolvable||"partially",
+          resolutionPath:u.resolutionPath||"",
+        })),
+      }));
+    }
+
     setShowQuickStart(false);
     setModule("problem");
-    pushAIMsg({ role:"ai", text:`First draft loaded. Project: "${draft.projectName||"Untitled"}". Review each module and refine with your team.` });
+
+    const loadedSections = [
+      accepted.frame && "frame",
+      accepted.issues && `${(draft.issues?.length||0)+(draft.brutalTruths?.length||0)+(draft.informationGaps?.length||0)} issues`,
+      accepted.decisions && "decisions",
+      accepted.criteria && "criteria",
+      accepted.strategies && "strategies",
+      accepted.stakeholders && `${draft.stakeholders?.length||0} stakeholders`,
+      accepted.uncertainties && `${draft.uncertainties?.length||0} uncertainties`,
+      draft.gameTheorySignals?.hasStrategicInteraction && "game theory signals",
+    ].filter(Boolean);
+
+    pushAIMsg({ role:"ai", text:`Deep dive complete. Loaded: ${loadedSections.join(", ")}. ${draft.gameTheorySignals?.hasStrategicInteraction ? "Game Theory module is recommended for this decision — strategic interaction detected." : ""} Review each module and refine with your team.` });
     // Show onboarding after first draft load if not seen before
     try { if (!localStorage.getItem("vantage_onboarded")) setOnboardingStep(0); } catch {}
   };
