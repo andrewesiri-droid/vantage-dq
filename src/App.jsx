@@ -16795,14 +16795,18 @@ function OnboardingTooltip({ step, onNext, onSkip, totalSteps, currentStep }) {
   );
 }
 
-function SessionHealthBar({ problem, issues, decisions, strategies, criteria, assessmentScores }) {
+function SessionHealthBar({ problem, issues, decisions, strategies, criteria, assessmentScores, dqScores, stakeholders, influenceNodes, scenarioData, voiItems }) {
   const items = [
-    { label:"Frame",       done: problem.decisionStatement?.length > 20 },
-    { label:"Issues",      done: issues.length >= 5 },
-    { label:"Hierarchy",   done: decisions.filter(d=>d.tier==="focus").length >= 3 },
-    { label:"Strategies",  done: strategies.length >= 2 && strategies.some(s=>Object.keys(s.selections||{}).length>0) },
-    { label:"Assessment",  done: Object.keys(assessmentScores).length > 0 },
-    { label:"Criteria",    done: criteria.length >= 3 },
+    { label:"Frame",        done: problem.decisionStatement?.length > 20 },
+    { label:"Issues",       done: issues.length >= 3 },
+    { label:"Hierarchy",    done: decisions.filter(d=>d.tier==="focus").length > 0 && criteria.length > 0 },
+    { label:"Strategies",   done: strategies.length >= 2 && strategies.some(s=>Object.keys(s.selections||{}).length>0) },
+    { label:"Assessment",   done: Object.keys(assessmentScores).length > 0 },
+    { label:"Scorecard",    done: Object.values(dqScores||{}).some(s=>s>0) },
+    { label:"Stakeholders", done: (stakeholders||[]).length > 0 },
+    { label:"Influence",    done: (influenceNodes||[]).length >= 3 },
+    { label:"Scenarios",    done: (scenarioData?.scenarios||[]).length > 0 },
+    { label:"VoI",          done: (voiItems||[]).some(x=>x.classification) },
   ];
   const score = Math.round((items.filter(i=>i.done).length / items.length) * 100);
   const color = score>=80 ? DS.success : score>=50 ? DS.warning : DS.accent;
@@ -17078,7 +17082,8 @@ export default function App() {
       setSyncStatus(row ? "saved" : "error");
     }, 2000);
     return () => clearTimeout(syncTimerRef.current);
-  }, [problem, issues, decisions, criteria, strategies, assessmentScores, dqScores]);
+  }, [problem, issues, decisions, criteria, strategies, assessmentScores, dqScores,
+       stakeholders, scenarioData, voiItems, timelineEvents, influenceNodes, influenceEdges]);
 
 
   // Onboarding complete
@@ -17517,13 +17522,21 @@ export default function App() {
                   cursor:"pointer", display:"flex", alignItems:"center",
                   gap:navCollapsed?0:10, justifyContent:navCollapsed?"center":"flex-start",
                   transition:"all .12s" }}>
-                <div style={{ width:22, height:22, borderRadius:5, flexShrink:0,
-                  background:active?DS.accent:DS.chromeSub,
-                  border:`1px solid ${active?DS.accentDim:DS.border}`,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:12, color:active?"#fff":DS.textTer }}>
-                  {m.icon}
-                </div>
+                {(() => {
+                  const comp2 = moduleCompletion(m.id);
+                  const done2 = comp2 === 100;
+                  return (
+                    <div style={{ width:22, height:22, borderRadius:5, flexShrink:0,
+                      background:done2?DS.success:active?DS.accent:DS.chromeSub,
+                      border:`1px solid ${done2?DS.successLine:active?DS.accentDim:DS.border}`,
+                      display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
+                      {done2
+                        ? <Svg path={ICONS.check} size={11} color="#fff" sw={2.5}/>
+                        : <span style={{ color:active?"#fff":DS.textTer, fontSize:8, fontWeight:700 }}>{m.num}</span>
+                      }
+                    </div>
+                  );
+                })()}
                 {!navCollapsed && (
                   <div style={{ textAlign:"left", flex:1, minWidth:0 }}>
                     <div className="nav-label" style={{ fontSize:11, fontWeight:600,
@@ -17531,6 +17544,13 @@ export default function App() {
                     <div className="nav-sub" style={{ fontSize:9, color:DS.textTer, marginTop:1 }}>{m.sub}</div>
                   </div>
                 )}
+                {!navCollapsed && (() => {
+                  const comp2 = moduleCompletion(m.id);
+                  return (
+                    <div style={{ width:5, height:5, borderRadius:"50%", flexShrink:0,
+                      background:comp2===100?DS.success:comp2>0?DS.warning:DS.border }}/>
+                  );
+                })()}
               </button>
             );
           })}
@@ -17607,7 +17627,8 @@ export default function App() {
 
           {/* Session health */}
           <SessionHealthBar problem={problem} issues={issues} decisions={decisions}
-            strategies={strategies} criteria={criteria} assessmentScores={assessmentScores}/>
+            strategies={strategies} criteria={criteria} assessmentScores={assessmentScores}
+            dqScores={dqScores} stakeholders={stakeholders} influenceNodes={influenceNodes} scenarioData={scenarioData} voiItems={voiItems}/>
 
           {/* Right controls */}
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
@@ -17695,8 +17716,6 @@ export default function App() {
             {module==="scenarios"     && <ModuleScenarios            {...moduleProps.scenarios}/>}
             {module==="voi"           && <ModuleVoI                  {...moduleProps.voi}/>}
             {module==="timeline"      && <ModuleTimeline       {...moduleProps.timeline}/>}
-            {module==="influence"  && <ModuleInfluenceMap         {...moduleProps.influence}/>}
-            {module==="voi"        && <ModuleVoI           {...moduleProps.voi}/>}
           </div>
 
           {/* Co-Pilot */}
