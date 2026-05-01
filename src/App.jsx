@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
-const _SB_URL = import.meta.env.VITE_SUPABASE_URL || "";
-const _SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const _SB_URL = (typeof window!=="undefined"&&window.__VITE_SB_URL)||"";
+const _SB_KEY = (typeof window!=="undefined"&&window.__VITE_SB_KEY)||"";
 const _sbHeaders = () => ({
   "apikey": _SB_KEY,
   "Authorization": "Bearer " + _SB_KEY,
@@ -5038,7 +5038,6 @@ function ModuleQualitativeAssessment({
   const setWeight   = (critId, val) => setWeights(w => ({ ...w, [critId]: val }));
 
   // ── AI INITIAL ASSESSMENT ────────────────────────────────────────────────────
-  const [assessing, setAssessing] = useState(false);
 
   const aiInitialAssessment = () => {
     if (!strategies.length || !criteria.length) {
