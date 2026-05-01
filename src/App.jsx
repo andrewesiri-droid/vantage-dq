@@ -4130,58 +4130,89 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
 
   const aiValidate = () => {
     setValidating(true);
-    const tableDesc = nowDecisions.map(d => d.label + ": [" + d.choices.join(" / ") + "]").join("\n");
+
+    const clean = (s) => (s||"").replace(/[\r\n]+/g," ").replace(/"/g,"'").trim();
+
+    const tableDesc = nowDecisions.map(d =>
+      clean(d.label) + ": [" + d.choices.map(clean).join(" / ") + "]"
+    ).join(" | ");
+
     const stratDesc = strategies.map((s, i) => {
       const path = nowDecisions.map(d => {
         const idx = s.selections?.[d.id];
-        return idx !== undefined ? d.label + ":" + d.choices[idx] : d.label + ":MISSING";
-      }).join(", ");
-      return (i+1) + ". " + s.name +
-        (s.objective ? " | Goal: " + s.objective : "") +
-        (s.description ? " | Logic: " + s.description : "") +
+        return idx !== undefined
+          ? clean(d.label) + "=" + clean(d.choices[idx])
+          : clean(d.label) + "=MISSING";
+      }).join("; ");
+      return (i+1) + ". " + clean(s.name) +
+        (s.objective ? " | Goal: " + clean(s.objective) : "") +
+        (s.description ? " | Logic: " + clean(s.description) : "") +
         " | Choices: " + path;
-    }).join("\n");
+    }).join(" || ");
 
-    aiCall(
+    const prompt =
       "You are a DQ expert evaluating a strategy table. " +
-      "Decision: " + (problem?.decisionStatement || "Not defined") + ". " +
-      "Available decisions: " + tableDesc + ". " +
-      "Strategies:\n" + stratDesc + "\n\n" +
-      "Evaluate for: (1) completeness -- does each strategy make a choice on every decision? " +
-      "(2) coherence -- do the choices within each strategy make sense together? " +
-      "(3) distinctiveness -- are strategies genuinely different or just variations? " +
-      "(4) missing alternatives -- what important strategic directions are absent? " +
-      "Return ONLY valid JSON: " +
-      '{"overall":"pass|warn|fail","qualityScore":75,' +
-      '"completenessScores":[{"strategy":"name","score":80,"missing":["decision label if missing"]}],' +
-      '"coherenceIssues":[{"strategy":"name","issue":"specific incoherence","severity":"critical|warning"}],' +
-      '"distinctiveness":"high|medium|low","distinctivenessNote":"explanation of how different the strategies really are",' +
-      '"dominatedStrategies":["strategy name that is strictly worse than another"],' +
-      '"missingAlternatives":["important strategic direction not represented"],' +
-      '"tradeOffInsights":["key trade-off the team should discuss"],' +
-      '"validationFlags":[{"type":"non_distinct|solution_locking|missing_dimensions|dominated|overcomplexity","severity":"critical|warning|info","message":"specific observation"}],' +
-      '"facilitatorQuestions":["question to challenge the team"],' +
-      '"recommendations":["specific improvement to make"],' +
-      '"executiveSummary":"2-3 sentence plain English assessment of the strategy table quality"}',
-      (r) => {
-        let result = r;
-        if (r && r._raw) {
-          try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); }
-          catch(e) { setValidating(false); onAIMsg({role:"ai", text:"Analysis could not be parsed. Try again."}); return; }
-        }
-        if (!result || result.error) {
+      "Decision: " + clean(problem?.decisionStatement || "Not defined") + ". " +
+      "Decisions available: " + tableDesc + ". " +
+      "Strategies: " + stratDesc + ". " +
+      "Evaluate: (1) completeness per strategy, (2) coherence of choices within each strategy, " +
+      "(3) distinctiveness across strategies, (4) missing strategic alternatives. " +
+      "Return ONLY a single valid JSON object with NO markdown, NO code fences, NO explanation. " +
+      "JSON schema: " +
+      '{"overall":"pass","qualityScore":75,' +
+      '"completenessScores":[{"strategy":"name","score":80,"missing":[]}],' +
+      '"coherenceIssues":[{"strategy":"name","issue":"description","severity":"warning"}],' +
+      '"distinctiveness":"high","distinctivenessNote":"explanation",' +
+      '"dominatedStrategies":[],' +
+      '"missingAlternatives":["description"],' +
+      '"tradeOffInsights":["observation"],' +
+      '"validationFlags":[{"type":"non_distinct","severity":"warning","message":"observation"}],' +
+      '"facilitatorQuestions":["question"],' +
+      '"recommendations":["recommendation"],' +
+      '"executiveSummary":"plain English summary of strategy table quality"}';
+
+    aiCall(prompt, (r) => {
+      // useAI already tries to parse _raw before calling back.
+      // If it still comes as _raw, extract JSON manually.
+      let result = r;
+      if (!result || result._raw || result.error) {
+        const raw = result?._raw || result?.error || "";
+        if (raw) {
+          // Try: extract first { ... } block
+          const jsonMatch = raw.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              result = JSON.parse(jsonMatch[0]);
+            } catch(e) {
+              // Try stripping control chars then parse
+              try {
+                const cleaned = jsonMatch[0]
+                  .replace(/[\x00-\x1f]/g, " ")
+                  .replace(/,\s*([}\]])/g, "$1");
+                result = JSON.parse(cleaned);
+              } catch(e2) {
+                setValidating(false);
+                onAIMsg({role:"ai", text:"Analysis returned unparseable JSON. Please try again."});
+                return;
+              }
+            }
+          } else {
+            setValidating(false);
+            onAIMsg({role:"ai", text:"Analysis returned no JSON. Please try again."});
+            return;
+          }
+        } else {
           setValidating(false);
-          onAIMsg({role:"ai", text:"Analysis failed: " + (result?.error || "unknown error")});
           return;
         }
-        setValidation(result);
-        const score = result.qualityScore != null ? " Quality: " + result.qualityScore + "/100." : "";
-        const dist  = result.distinctiveness ? " Distinctiveness: " + result.distinctiveness + "." : "";
-        const summ  = result.executiveSummary || result.recommendations?.[0] || "";
-        onAIMsg({ role:"ai", text: "Strategy Analysis complete." + score + dist + (summ ? " " + summ : "") });
-        setValidating(false);
       }
-    );
+      setValidation(result);
+      const score = result.qualityScore != null ? " Quality: " + result.qualityScore + "/100." : "";
+      const dist  = result.distinctiveness ? " Distinctiveness: " + result.distinctiveness + "." : "";
+      const summ  = result.executiveSummary || result.recommendations?.[0] || "";
+      onAIMsg({ role:"ai", text: "Strategy Analysis complete." + score + dist + (summ ? " " + summ : "") });
+      setValidating(false);
+    });
   };
 
   const activeSData = strategies.find(s=>s.id===activeS);
