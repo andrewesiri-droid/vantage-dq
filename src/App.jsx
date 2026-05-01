@@ -162,7 +162,7 @@ const sbSubscribe = (decisionId, onUpdate) => {
 };
 
 // ─── API KEY CONFIGURATION ────────────────────────────────────────────────────
-// Option 1: Set via .env file — create .env in project root with:
+// Option 1: Set via .env file -- create .env in project root with:
 //   VITE_ANTHROPIC_API_KEY=sk-ant-...
 // Option 2: Paste your key directly here (for local testing only):
 const HARDCODED_API_KEY = "";  // <-- paste key here if .env is not working
@@ -190,7 +190,7 @@ const dqPrompt = (prompt, includeSelfCheck = true) => {
    DESIGN SYSTEM
 ───────────────────────────────────────────────────────────────────────────── */
 const DS = {
-  // Surfaces — light chrome nav
+  // Surfaces -- light chrome nav
   chrome:    "#1e2433",
   chromeAlt: "#252d3d",
   chromeMid: "#2d3650",
@@ -203,7 +203,7 @@ const DS = {
   textSec:   "#a8b2cc",
   textTer:   "#6e7d9e",
   textDis:   "#4a5570",
-  // Canvas (working area) — bright white
+  // Canvas (working area) -- bright white
   canvas:    "#ffffff",
   canvasAlt: "#f7f8fc",
   canvasBdr: "#e0e4f0",
@@ -213,7 +213,7 @@ const DS = {
   inkSub:    "#2d3560",
   inkTer:    "#6b75a0",
   inkDis:    "#a8b0cc",
-  // Accent — vivid blue
+  // Accent -- vivid blue
   accent:    "#2563eb",
   accentDim: "#1e50c4",
   accentSoft:"#eff4ff",
@@ -542,9 +542,9 @@ const AIPanel = ({ messages, onSend, loading, nudge }) => {
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MODULE 1 — PROBLEM DEFINITION
+   MODULE 1 -- PROBLEM DEFINITION
 ───────────────────────────────────────────────────────────────────────────── */
-const URGENCY_OPTS = ["Critical — Decide within days","High — Decide within weeks","Medium — Decide within months","Low — No immediate pressure"];
+const URGENCY_OPTS = ["Critical -- Decide within days","High -- Decide within weeks","Medium -- Decide within months","Low -- No immediate pressure"];
 const IMPORTANCE_OPTS = ["Enterprise-critical","Strategically significant","Operationally important","Routine"];
 
 const defaultProblem = () => ({
@@ -571,7 +571,7 @@ const defaultProblem = () => ({
   assumptions: "APAC regulatory environment remains broadly stable. Existing product requires only moderate localisation. Key partnership targets remain available.",
   successCriteria: "Signed partnership or entity established within 12 months. First revenue from APAC within 18 months. CAC within 130% of North American baseline.",
   failureConsequences: "Competitor cements first-mover advantage. Board confidence in management erodes. Revenue growth target missed by >15% in FY27.",
-  urgency: "High — Decide within weeks",
+  urgency: "High -- Decide within weeks",
   importance: "Strategically significant",
   risks: "Regulatory delays, currency exposure, cultural misalignment in go-to-market approach.",
   opportunities: "First-mover advantage in 3 sub-markets, potential strategic acquisition at attractive valuation, channel partner with existing APAC infrastructure.",
@@ -624,7 +624,7 @@ function ProjectSetupModal({ data, onChange, onClose }) {
                 <Input value={data.projectCode||""} onChange={v=>upd("projectCode",v)} placeholder="e.g. STR-2025-001"/>
               </Field>
               <Field label="Client / Organisation">
-                <Input value={data.client||""} onChange={v=>upd("client",v)} placeholder="e.g. Acme Corp — Strategy Team"/>
+                <Input value={data.client||""} onChange={v=>upd("client",v)} placeholder="e.g. Acme Corp -- Strategy Team"/>
               </Field>
               <Field label="Project Description">
                 <Textarea value={data.projectDescription||""} onChange={v=>upd("projectDescription",v)} rows={3}
@@ -800,7 +800,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
 
   // ── SCORE HELPERS ─────────────────────────────────────────────────────────
   const scoreColor  = (s) => s>=85?"#059669":s>=70?"#2563eb":s>=50?"#d97706":"#dc2626";
-  const scoreLabel  = (s) => s>=85?"Strong Frame":s>=70?"Good — Refine":s>=50?"Incomplete":"Not Decision-Ready";
+  const scoreLabel  = (s) => s>=85?"Strong Frame":s>=70?"Good -- Refine":s>=50?"Incomplete":"Not Decision-Ready";
   const statusColor = (s) => ({ strong:"#059669", adequate:"#2563eb", weak:"#dc2626" }[s]||DS.inkTer);
 
   const DIM_LABELS = {
@@ -833,7 +833,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
       "(5) clearly bound scope in AND out, " +
       "(6) name key uncertainties that could change the decision, " +
       "(7) state constraints as non-negotiable givens not preferences, " +
-      "(8) preserve alternative openness — frame must not be solution-locked. " +
+      "(8) preserve alternative openness -- frame must not be solution-locked. " +
       "\n\nFRAME TO EVALUATE:\n" +
       "Context: \"" + (data.context||"") + "\"\n" +
       "Decision Statement: \"" + (data.decisionStatement||"") + "\"\n" +
@@ -847,22 +847,22 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
       "Assumptions: \"" + (data.assumptions||"") + "\"\n" +
       "Success Criteria: \"" + (data.successCriteria||"") + "\"\n" +
       "Stakeholders: \"" + (data.stakeholders||"") + "\"\n\n" +
-      "Score each of 10 dimensions 0-10. Be strict — an empty or vague field scores 0-2. " +
+      "Score each of 10 dimensions 0-10. Be strict -- an empty or vague field scores 0-2. " +
       "Flag ALL DQ issues found including: no_clear_decision, solution_locking, too_broad, too_narrow, " +
       "missing_owner, missing_timeframe, no_value_measure, no_uncertainty, assumptions_as_facts, scope_confusion. " +
       "\n\nCRITICAL RULE for improvedStatement: Write ONE concise decision statement sentence only. " +
       "It must be a well-formed open question that names who decides, what is being decided, and the core objective. " +
       "Maximum 40 words. Do NOT write a template, document, list, or structured output. " +
-      "Do NOT invent specific numbers, dates or budgets — use [placeholder] only where a real fact belongs. " +
+      "Do NOT invent specific numbers, dates or budgets -- use [placeholder] only where a real fact belongs. " +
       "Example of correct format: 'What market entry strategy should [Owner] pursue to achieve [objective] by [date] within [constraint]?' " +
       "\nReturn ONLY valid JSON:\n" +
       "{\"overallScore\":72,\"status\":\"strong|adequate|weak\"," +
       "\"dimensions\":{\"decisionClarity\":7,\"ownership\":5,\"objectives\":6,\"timeframe\":4,\"scopeDefinition\":6,\"constraints\":5,\"uncertaintyAwareness\":3,\"alternativeOpenness\":7,\"stakeholderAwareness\":4,\"overallFraming\":6}," +
-      "\"flags\":[{\"id\":\"missing_owner\",\"severity\":\"critical|warning|info\",\"field\":\"fieldName\",\"title\":\"Short flag title\",\"message\":\"Specific issue found\",\"why\":\"Why this matters for decision quality\",\"suggestion\":\"Specific improvement advice\",\"before\":\"original text or EMPTY\",\"after\":\"improved version using [placeholders] only where real facts are unknown — never a full template\"}]," +
+      "\"flags\":[{\"id\":\"missing_owner\",\"severity\":\"critical|warning|info\",\"field\":\"fieldName\",\"title\":\"Short flag title\",\"message\":\"Specific issue found\",\"why\":\"Why this matters for decision quality\",\"suggestion\":\"Specific improvement advice\",\"before\":\"original text or EMPTY\",\"after\":\"improved version using [placeholders] only where real facts are unknown -- never a full template\"}]," +
       "\"hiddenAssumptions\":[\"assumption stated as fact\"]," +
       "\"missingElements\":[\"what is missing\"]," +
-      "\"diagnosticSummary\":\"2-3 sentence expert diagnosis of frame quality — be specific, reference the actual content\"," +
-      "\"improvedStatement\":\"One concise decision question, max 40 words, using [placeholder] only where a real fact belongs — NOT a template or document\"," +
+      "\"diagnosticSummary\":\"2-3 sentence expert diagnosis of frame quality -- be specific, reference the actual content\"," +
+      "\"improvedStatement\":\"One concise decision question, max 40 words, using [placeholder] only where a real fact belongs -- NOT a template or document\"," +
       "\"downstreamRecommendations\":[{\"module\":\"Issue Raising\",\"reason\":\"why this module should come next\"}]," +
       "\"facilitatorQuestions\":[\"probing question about the actual frame content\",\"another specific question\"]," +
       "\"executiveSummary\":\"1-2 sentence summary of the frame quality and the single most important thing to fix\"}";
@@ -881,7 +881,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
       setChecking(false);
       const score = result.overallScore;
       const summary = typeof result.executiveSummary === "string" ? result.executiveSummary : "";
-      onAIMsg({ role:"ai", text:"Frame Check: " + (score||"?") + "/100 — " + scoreLabel(score||0) + ". " + summary });
+      onAIMsg({ role:"ai", text:"Frame Check: " + (score||"?") + "/100 -- " + scoreLabel(score||0) + ". " + summary });
     });
   };
 
@@ -919,13 +919,13 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
     const applyPrompt =
       "You are a senior DQ expert. Rewrite ONLY the specific fields listed below to fix the identified issues. " +
       "CRITICAL RULES: " +
-      "(1) Do NOT invent specific facts — use [placeholders] for unknown dates, budgets, names. " +
+      "(1) Do NOT invent specific facts -- use [placeholders] for unknown dates, budgets, names. " +
       "(2) Do NOT change any field not listed. " +
       "(3) Preserve the user's strategic intent and domain context. " +
-      "(4) Decision statement must be a single open question ending in ?, maximum 40 words — not a document, list or template. " +
+      "(4) Decision statement must be a single open question ending in ?, maximum 40 words -- not a document, list or template. " +
       "(5) Success criteria must include measurable thresholds with [placeholder] for unknown numbers. " +
       "(6) Never solution-lock the frame. " +
-      "(7) Every rewritten field must be concise prose matching the field type — decisionStatement is ONE sentence, owner is a role name, deadline is a date/timeframe. " +
+      "(7) Every rewritten field must be concise prose matching the field type -- decisionStatement is ONE sentence, owner is a role name, deadline is a date/timeframe. " +
       "\n\nCURRENT VALUES:\n" +
       "context: " + (data.context||"EMPTY") + "\n" +
       "decisionStatement: " + (data.decisionStatement||"EMPTY") + "\n" +
@@ -1009,7 +1009,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
           upd("aiValidation", res2);
           setChecking(false);
           const s2 = res2?.overallScore;
-          onAIMsg({ role:"ai", text:"Frame Check updated: " + (s2||"?") + "/100 — " + scoreLabel(s2||0) });
+          onAIMsg({ role:"ai", text:"Frame Check updated: " + (s2||"?") + "/100 -- " + scoreLabel(s2||0) });
         });
       }, 800);
     });
@@ -1115,7 +1115,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                 What is the situation?
               </div>
               <div style={{ fontSize:12, color:DS.inkTer, marginBottom:20, lineHeight:1.6 }}>
-                Describe the situation or opportunity that triggered this decision — without jumping to solutions.
+                Describe the situation or opportunity that triggered this decision -- without jumping to solutions.
                 Focus on context, not answers.
               </div>
 
@@ -1155,7 +1155,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                 Define the core decision as an open question. Name the decision-maker. State what value this decision should create or protect.
               </div>
 
-              {/* Decision Statement — most important field */}
+              {/* Decision Statement -- most important field */}
               <div style={{ marginBottom:18 }}>
                 <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:5 }}>
                   <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
@@ -1164,7 +1164,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                   </div>
                 </div>
                 <div style={{ fontSize:11, color:DS.inkTer, marginBottom:6, lineHeight:1.5 }}>
-                  Phrase as an open question. Good: <em>"What is the best strategy for X?"</em> — Bad: <em>"Should we do X?"</em> or <em>"We need to improve X."</em>
+                  Phrase as an open question. Good: <em>"What is the best strategy for X?"</em> -- Bad: <em>"Should we do X?"</em> or <em>"We need to improve X."</em>
                 </div>
                 <textarea value={data.decisionStatement||""} rows={3}
                   onChange={e=>handleChange("decisionStatement", e.target.value)}
@@ -1208,7 +1208,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                     <div style={{ fontSize:11, color:"#4c1d95", lineHeight:1.6, marginBottom:5 }}>
                       Is this <em>the</em> decision, or a sub-decision of a larger one?
                       Teams often frame a sub-decision without realising the root decision
-                      hasn't been made yet — leading to premature commitment downstream.
+                      hasn't been made yet -- leading to premature commitment downstream.
                     </div>
                     <div style={{ fontSize:11, color:"#6d28d9", lineHeight:1.6 }}>
                       <strong>Ask:</strong> Could a more fundamental decision change whether
@@ -1230,7 +1230,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
 
               <Field label="Objectives / Value Drivers" fieldKey="objectives" required rows={3}
                 placeholder="What are we trying to maximise, minimise, protect, or achieve? e.g. maximise NPV, reduce operational risk, improve reliability, increase market share"
-                hint="Value to create or protect — not actions"/>
+                hint="Value to create or protect -- not actions"/>
               <LiveFlag field="objectives"/>
 
               <Field label="Key Stakeholders" fieldKey="stakeholders" rows={3}
@@ -1295,7 +1295,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                 <div style={{ fontSize:11, color:DS.ink, lineHeight:1.6 }}>
                   Most decision failures stem from scope confusion or hidden assumptions treated as facts.
                   Key uncertainties defined here feed directly into your Influence Diagram and Scenario Planning modules.
-                  Constraints are non-negotiable — if they are negotiable, they are objectives.
+                  Constraints are non-negotiable -- if they are negotiable, they are objectives.
                 </div>
               </div>
             </div>
@@ -1314,14 +1314,14 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
 
               <Field label="Success Criteria" fieldKey="successCriteria" required rows={4}
                 placeholder="What would define a successful decision outcome? Include measurable thresholds. e.g. NPV > $50M at a 10% discount rate, operational reliability > 95%, time to market within 18 months, stakeholder approval by Q3"
-                hint="Must be measurable — add numbers and thresholds"/>
+                hint="Must be measurable -- add numbers and thresholds"/>
 
               <Field label="Failure Consequences" fieldKey="failureConsequences" rows={3}
                 placeholder="What are the consequences of making a poor decision here? What does failure look like?"
                 hint="Clarifies stakes"/>
 
               <Field label="Facilitator Notes" fieldKey="facilitatorNotes" rows={3}
-                placeholder="Notes for the facilitator or DQ analyst — observations about the framing process, team dynamics, or issues to probe further."/>
+                placeholder="Notes for the facilitator or DQ analyst -- observations about the framing process, team dynamics, or issues to probe further."/>
 
               <div style={{ marginTop:8, padding:"12px 14px", background:DS.accentSoft,
                 border:`1px solid ${DS.accentLine}`, borderRadius:7 }}>
@@ -1395,15 +1395,15 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                       borderRadius:10 }}>
                       <div style={{ fontSize:11, fontWeight:700, color:DS.accent,
                         textTransform:"uppercase", letterSpacing:.5, marginBottom:12 }}>
-                        {impStep===1?"Step 1 of 2 — Review Suggested Improvements":
-                          "Step 2 of 2 — Confirm and Apply"}
+                        {impStep===1?"Step 1 of 2 -- Review Suggested Improvements":
+                          "Step 2 of 2 -- Confirm and Apply"}
                       </div>
 
                       {impStep===1 && (
                         <div>
                           <div style={{ fontSize:12, color:DS.ink, marginBottom:14, lineHeight:1.6 }}>
                             Select the improvements you want to apply. The AI will rewrite
-                            <strong> only the selected fields</strong> — nothing else is touched.
+                            <strong> only the selected fields</strong> -- nothing else is touched.
                           </div>
                           {(improvements.flags||[]).filter(f=>f.after&&f.after!=="EMPTY").map(flag => {
                             const fc = FLAG_COLORS[flag.severity]||FLAG_COLORS.info;
@@ -1493,7 +1493,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                             Ready to apply{" "}
                             <strong>{Object.values(accepted).filter(Boolean).length} improvement(s)</strong>{" "}
                             to the selected fields. The AI will rewrite only those fields
-                            following strict DQ guard rails — no invented facts, no solution locking.
+                            following strict DQ guard rails -- no invented facts, no solution locking.
                           </div>
                           <div style={{ display:"flex", gap:8 }}>
                             <Btn variant="primary" size="sm"
@@ -1753,7 +1753,7 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                   <div>
                     <div style={{ fontSize:12, fontWeight:700, color:DS.ink }}>AI Facilitator</div>
                     <div style={{ fontSize:10, color:DS.inkTer }}>
-                      Ask anything about your frame — or click a prompt below
+                      Ask anything about your frame -- or click a prompt below
                     </div>
                   </div>
                 </div>
@@ -1787,11 +1787,11 @@ function ModuleProblemDefinition({ data, onChange, aiCall, aiBusy, messages, onA
                                   const fp =
                                     "You are an elite DQ facilitator coaching a team on their decision frame. " +
                                     "The user is asking: " + qText + ". " +
-                                    "Their frame — Decision: " + (data.decisionStatement||"not defined") + ". " +
+                                    "Their frame -- Decision: " + (data.decisionStatement||"not defined") + ". " +
                                     "Context: " + (data.context||"not defined") + ". " +
                                     "Owner: " + (data.owner||"not defined") + ". " +
                                     "Objectives: " + (data.objectives||"not defined") + ". " +
-                                    "Respond as a senior DQ facilitator — specific, direct, practical. Under 120 words. Conversational, no bullet points.";
+                                    "Respond as a senior DQ facilitator -- specific, direct, practical. Under 120 words. Conversational, no bullet points.";
                                   aiCall(fp, (r)=>{
                                     const txt = typeof r==="string"?r:(r&&r._raw?r._raw.replace(/```json|```/g,"").trim():(r&&typeof r==="object"?(r.message||r.text||r.executiveSummary||""):String(r)));
                                     onAIMsg({ role:"ai", text:txt||"Let me think about that differently…" });
@@ -1865,7 +1865,7 @@ function ProblemDefChat({ data, v, aiCall, aiBusy, onAIMsg }) {
     const fp =
       "You are an elite Decision Quality facilitator coaching a team on their problem definition. " +
       "The user says: " + text + ". " +
-      "Current frame — Decision Statement: " + (data.decisionStatement||"not yet defined") + ". " +
+      "Current frame -- Decision Statement: " + (data.decisionStatement||"not yet defined") + ". " +
       "Context: " + (data.context||"not yet defined") + ". " +
       "Owner: " + (data.owner||"not defined") + ". " +
       "Objectives: " + (data.objectives||"not defined") + ". " +
@@ -1874,7 +1874,7 @@ function ProblemDefChat({ data, v, aiCall, aiBusy, onAIMsg }) {
       "Success Criteria: " + (data.successCriteria||"not defined") + ". " +
       "DQ Score: " + (v?.overallScore||"not run") + "/100. " +
       "Open flags: " + ((v?.flags||[]).filter(f=>f.severity==="critical"||f.severity==="warning").map(f=>f.title||f.message).join("; ")||"none") + ". " +
-      "Respond as a senior DQ facilitator — specific, direct, constructive, referencing their actual frame. " +
+      "Respond as a senior DQ facilitator -- specific, direct, constructive, referencing their actual frame. " +
       "Help them improve decision quality. Under 150 words. Conversational tone. No bullet points.";
 
     aiCall(fp, (r)=>{
@@ -1913,14 +1913,14 @@ const SEVERITY_LEVELS = ["Critical","High","Medium","Low"];
 const ISSUE_STATUS   = ["Open","In Progress","Resolved","Parked","Escalated"];
 
 const ISSUE_CATEGORIES = [
-  { key:"focus-decision",      label:"Focus Decision",       icon:"⊕", color:"#2563eb", soft:"#eff6ff", line:"#bfdbfe", dqRole:"decisions",    flowTo:"Strategy Table",         desc:"Strategic choices that must be made now — drive the strategy table" },
+  { key:"focus-decision",      label:"Focus Decision",       icon:"⊕", color:"#2563eb", soft:"#eff6ff", line:"#bfdbfe", dqRole:"decisions",    flowTo:"Strategy Table",         desc:"Strategic choices that must be made now -- drive the strategy table" },
   { key:"given-decision",      label:"Given Decision",       icon:"🔒", color:"#6b7280", soft:"#f9fafb", line:"#e5e7eb", dqRole:"decisions",    flowTo:"Decision Hierarchy",     desc:"Already decided, locked, or non-negotiable" },
-  { key:"tactical-decision",   label:"Tactical Decision",    icon:"◎", color:"#7c3aed", soft:"#f5f3ff", line:"#ddd6fe", dqRole:"decisions",    flowTo:"Decision Hierarchy",     desc:"Downstream from focus decisions — cannot resolve yet" },
-  { key:"decision-criteria",   label:"Decision Criteria",    icon:"◉", color:"#059669", soft:"#ecfdf5", line:"#a7f3d0", dqRole:"decisions",    flowTo:"Qualitative Assessment", desc:"What we value — how strategies will be judged" },
+  { key:"tactical-decision",   label:"Tactical Decision",    icon:"◎", color:"#7c3aed", soft:"#f5f3ff", line:"#ddd6fe", dqRole:"decisions",    flowTo:"Decision Hierarchy",     desc:"Downstream from focus decisions -- cannot resolve yet" },
+  { key:"decision-criteria",   label:"Decision Criteria",    icon:"◉", color:"#059669", soft:"#ecfdf5", line:"#a7f3d0", dqRole:"decisions",    flowTo:"Qualitative Assessment", desc:"What we value -- how strategies will be judged" },
   { key:"uncertainty-external",label:"External Uncertainty", icon:"◈", color:"#dc2626", soft:"#fef2f2", line:"#fecaca", dqRole:"uncertainties",flowTo:"Influence Diagram",      desc:"Unknown external factors outside the team's control" },
   { key:"uncertainty-internal",label:"Internal Uncertainty", icon:"◇", color:"#ea580c", soft:"#fff7ed", line:"#fed7aa", dqRole:"uncertainties",flowTo:"Influence Diagram",      desc:"Unknown internal factors the team could resolve" },
   { key:"brutal-truth",        label:"Brutal Truth",         icon:"⚡", color:"#9f1239", soft:"#fff1f2", line:"#fecdd3", dqRole:"uncertainties",flowTo:"Issue Raising",          desc:"Known reality being avoided or understated" },
-  { key:"assumption",          label:"Assumption",           icon:"◷", color:"#d97706", soft:"#fffbeb", line:"#fde68a", dqRole:"frame",        flowTo:"Problem Definition",     desc:"Treated as true without verification — could be wrong" },
+  { key:"assumption",          label:"Assumption",           icon:"◷", color:"#d97706", soft:"#fffbeb", line:"#fde68a", dqRole:"frame",        flowTo:"Problem Definition",     desc:"Treated as true without verification -- could be wrong" },
   { key:"information-gap",     label:"Information Gap",      icon:"◫", color:"#0891b2", soft:"#ecfeff", line:"#a5f3fc", dqRole:"frame",        flowTo:"Value of Information",   desc:"Need to know but don't have yet" },
   { key:"constraint",          label:"Constraint",           icon:"⊟", color:"#475569", soft:"#f8fafc", line:"#e2e8f0", dqRole:"frame",        flowTo:"Problem Definition",     desc:"Hard limit bounding the solution space" },
   { key:"opportunity",         label:"Opportunity",          icon:"⬡", color:"#16a34a", soft:"#f0fdf4", line:"#bbf7d0", dqRole:"value",        flowTo:"Strategy Table",         desc:"Upside possibility worth preserving in strategy design" },
@@ -1979,11 +1979,11 @@ Decision: "${problem.decisionStatement}"
 Context: "${problem.context}"
 Constraints: "${problem.constraints}"
 
-Use ALL of these DQ categories — at least one per category where relevant:
+Use ALL of these DQ categories -- at least one per category where relevant:
 - focus-decision: strategic choices that must be made now
 - given-decision: locked or non-negotiable constraints  
 - tactical-decision: downstream decisions that depend on focus decisions
-- decision-criteria: what the org values — how strategies will be judged
+- decision-criteria: what the org values -- how strategies will be judged
 - uncertainty-external: unknown external factors outside team control
 - uncertainty-internal: unknown internal factors team could resolve
 - brutal-truth: realities everyone knows but avoids stating
@@ -2015,12 +2015,12 @@ Return ONLY JSON:
 Categories:
 - focus-decision: strategic choices that must be made now → strategy table columns
 - given-decision: already decided, locked, non-negotiable
-- tactical-decision: downstream from focus decisions — can't resolve yet
-- decision-criteria: what we value — how strategies will be judged
+- tactical-decision: downstream from focus decisions -- can't resolve yet
+- decision-criteria: what we value -- how strategies will be judged
 - uncertainty-external: unknown, uncontrollable external factors
 - uncertainty-internal: unknown internal factors team could resolve
 - brutal-truth: known reality being avoided or understated
-- assumption: treated as true without verification — could be wrong
+- assumption: treated as true without verification -- could be wrong
 - information-gap: need to know but don't have yet
 - constraint: hard limit bounding the solution space
 - opportunity: upside possibility worth preserving
@@ -2091,7 +2091,7 @@ Return ONLY JSON:
       if (result.improvedDescription) {
         upd(issue.id, "_suggestedDescription", result.improvedDescription);
       }
-      onAIMsg({role:"ai", text: "Issue quality: " + (result.qualityScore||"?") + "/100 — " + (result.summary||"")});
+      onAIMsg({role:"ai", text: "Issue quality: " + (result.qualityScore||"?") + "/100 -- " + (result.summary||"")});
       setValidating(null);
     });
   };
@@ -2108,7 +2108,7 @@ Return ONLY JSON:
       "Context: " + (problem?.context||"") + ". " +
       "Issues raised so far:\n" + (existing||"none") + "\n\n" +
       "Identify issue categories and themes that are under-represented or completely absent. " +
-      "Be specific — name the actual missing issues, not just categories. " +
+      "Be specific -- name the actual missing issues, not just categories. " +
       "Return ONLY JSON: " +
       '{"blindSpots":[{"category":"category-key","title":"missing issue title","why":"why this matters for the decision","severity":"Critical|High|Medium"}],"coverageAssessment":"brief assessment of issue landscape coverage","missingCategories":["category with no issues"]}',
     (r) => {
@@ -2665,7 +2665,7 @@ Return ONLY JSON:
           <div style={{ marginBottom:24 }}>
             <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:4 }}>Issue Heat Map</div>
             <div style={{ fontSize:12, color:DS.inkSub }}>
-              Concentration of issues by DQ category and severity — where your decision problem is loaded.
+              Concentration of issues by DQ category and severity -- where your decision problem is loaded.
             </div>
           </div>
 
@@ -2753,7 +2753,7 @@ Return ONLY JSON:
                                   </span>
                                 </>
                               ) : (
-                                <span style={{ fontSize:11, color:DS.inkDis }}>—</span>
+                                <span style={{ fontSize:11, color:DS.inkDis }}>--</span>
                               )}
                             </div>
                           </td>
@@ -2805,7 +2805,7 @@ Return ONLY JSON:
                 { color:topCat.color, soft:topCat.soft, line:topCat.line,
                   label:"Dominant category",
                   value:`${topCat.icon} ${topCat.label}`,
-                  note:`${catCounts[topCat.key]} issues — ${topCat.desc}` },
+                  note:`${catCounts[topCat.key]} issues -- ${topCat.desc}` },
                 { color:DS.danger, soft:DS.dangerSoft, line:DS.dangerLine,
                   label:"Critical issues",
                   value:`${critCount} critical`,
@@ -2842,7 +2842,7 @@ Return ONLY JSON:
                   Blind Spot Detection
                 </div>
                 <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
-                  AI scans your issue list and identifies what is missing — categories, risks, and decision-critical concerns not yet surfaced.
+                  AI scans your issue list and identifies what is missing -- categories, risks, and decision-critical concerns not yet surfaced.
                 </div>
               </div>
               <Btn variant="primary" size="sm" onClick={detectBlindSpots}
@@ -2937,31 +2937,31 @@ const CRITERIA_WEIGHTS = ["high","medium","low"];
 const H_TIERS = [
   {
     key:"given", label:"Given Decisions", shortLabel:"Given",
-    desc:"Already made or non-negotiable — constraints on the decision space",
+    desc:"Already made or non-negotiable -- constraints on the decision space",
     icon:"🔒", color:"#6b7280", soft:"#f9fafb", line:"#e5e7eb", accent:"#9ca3af",
     cap:null, capLabel:null, highlight:false,
   },
   {
     key:"focus", label:"Focus Decisions", shortLabel:"Focus",
-    desc:"The strategic core — decide now. Max 5 (the Focus Five).",
+    desc:"The strategic core -- decide now. Max 5 (the Focus Five).",
     icon:"⊕", color:DS.accent, soft:DS.accentSoft, line:DS.accentLine, accent:DS.accent,
     cap:5, capLabel:"Focus Five", highlight:true,
   },
   {
     key:"tactical", label:"Tactical Decisions", shortLabel:"Tactical",
-    desc:"Downstream from Focus — can only be made after strategic choices are set",
+    desc:"Downstream from Focus -- can only be made after strategic choices are set",
     icon:"◎", color:"#7c3aed", soft:"#f5f3ff", line:"#ddd6fe", accent:"#7c3aed",
     cap:null, capLabel:null, highlight:false,
   },
   {
     key:"deferred", label:"Deferred Decisions", shortLabel:"Deferred",
-    desc:"Consciously parked — revisit when trigger condition is met",
+    desc:"Consciously parked -- revisit when trigger condition is met",
     icon:"◷", color:DS.success, soft:DS.successSoft, line:DS.successLine, accent:DS.success,
     cap:null, capLabel:null, highlight:false,
   },
   {
     key:"dependency", label:"Dependencies", shortLabel:"Depends",
-    desc:"Blocked on external factors — decisions waiting on something outside our control",
+    desc:"Blocked on external factors -- decisions waiting on something outside our control",
     icon:"⛓", color:DS.warning, soft:DS.warnSoft, line:DS.warnLine, accent:DS.warning,
     cap:null, capLabel:null, highlight:false,
   },
@@ -3008,9 +3008,9 @@ function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria,
       "You are a senior DQ facilitator. Classify these decisions into the correct hierarchy tiers.\\n\\n" +
       "Tier definitions:\\n" +
       "- given: already decided, locked, board mandate, non-negotiable\\n" +
-      "- focus: most consequential strategic decisions to make NOW (max 5 — the Focus Five)\\n" +
+      "- focus: most consequential strategic decisions to make NOW (max 5 -- the Focus Five)\\n" +
       "- tactical: downstream decisions that depend on focus decisions being made first\\n" +
-      "- deferred: consciously parked — more info needed or trigger event required\\n" +
+      "- deferred: consciously parked -- more info needed or trigger event required\\n" +
       "- dependency: blocked on external factor outside the team's control\\n\\n" +
       "Issues context:\\n" + issueCtx + "\\n\\n" +
       "Current decisions:\\n" + decCtx + "\\n\\n" +
@@ -3074,7 +3074,7 @@ function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria,
       if (r&&r._raw){try{result=JSON.parse(r._raw.replace(/```json|```/g,"").trim());}catch(e){setAnalysing(false);return;}}
       if (!result||result.error){setAnalysing(false);return;}
       setAnalysis(result);
-      onAIMsg({ role:"ai", text:"Hierarchy Analysis: " + (result.overallScore||"?") + "/100 — " + (result.diagnosticSummary||"") });
+      onAIMsg({ role:"ai", text:"Hierarchy Analysis: " + (result.overallScore||"?") + "/100 -- " + (result.diagnosticSummary||"") });
       setAnalysing(false);
       setActiveTab("analysis");
     });
@@ -3148,7 +3148,7 @@ function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria,
               fontWeight:700, color:DS.ink }}>Decision Hierarchy</div>
           </div>
           <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-            {focusCount > 5 && <Badge variant="danger">⚠ {focusCount} Focus — trim to 5</Badge>}
+            {focusCount > 5 && <Badge variant="danger">⚠ {focusCount} Focus -- trim to 5</Badge>}
             {focusCount > 0 && focusCount <= 5 && <Badge variant="blue">Focus Five: {focusCount}/5</Badge>}
             <Badge variant="default">{decisions.length} decisions</Badge>
             <Badge variant="green">{criteria.length} criteria</Badge>
@@ -3352,7 +3352,7 @@ function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria,
                           <div style={{ fontSize:11, color:tier.color, padding:"4px 8px",
                             background:tier.soft, borderRadius:5, display:"inline-block",
                             border:`1px solid ${tier.line}` }}>
-                            ✓ Focus Five complete — move others to Tactical or Deferred
+                            ✓ Focus Five complete -- move others to Tactical or Deferred
                           </div>
                         )}
                       </div>
@@ -3453,7 +3453,7 @@ function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria,
                         border:`1px solid ${sel.escalation?"#dc2626":"#e5e7eb"}`,
                         background:sel.escalation?"#fef2f2":"transparent",
                         color:sel.escalation?"#dc2626":DS.inkTer }}>
-                      {sel.escalation?"Yes — Escalation required":"No"}
+                      {sel.escalation?"Yes -- Escalation required":"No"}
                     </button>
                   </div>
 
@@ -3849,7 +3849,7 @@ function ModuleDecisionHierarchy({ decisions, criteria, onDecisions, onCriteria,
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MODULE 4 — STRATEGY TABLE
+   MODULE 4 -- STRATEGY TABLE
 ───────────────────────────────────────────────────────────────────────────── */
 const defaultIssues = () => ([
   { id:uid("i"), text:"Regulatory approval timelines are uncertain and vary significantly by country", severity:"High",   category:"uncertainty-external", type:"uncertainty", description:"", decisionImpact:"", uncertaintyLevel:"highly-uncertain", dependencies:"", resolutionPath:"", qualityScore:null, qualityFlags:[], status:"Open", owner:"", votes:0 },
@@ -3863,18 +3863,18 @@ const defaultIssues = () => ([
 ]);
 
 const defaultDecisions = () => ([
-  { id:uid("d"), label:"Market Entry Mode", sourceId:null, choices:["Direct subsidiary","Strategic partnership","Acquire local player","Agent / reseller model"], tier:"focus", owner:"CSO", rationale:"Most consequential variable — determines capital, speed, and control", description:"", level:"strategic", timing:"Q2 2025", constraints:"", uncertainties:"", escalation:false, strategicAlignment:"", dependencies:"" },
+  { id:uid("d"), label:"Market Entry Mode", sourceId:null, choices:["Direct subsidiary","Strategic partnership","Acquire local player","Agent / reseller model"], tier:"focus", owner:"CSO", rationale:"Most consequential variable -- determines capital, speed, and control", description:"", level:"strategic", timing:"Q2 2025", constraints:"", uncertainties:"", escalation:false, strategicAlignment:"", dependencies:"" },
   { id:uid("d"), label:"Geographic Priority", sourceId:null, choices:["Singapore first","Japan first","Australia first","Multi-market simultaneous"], tier:"focus", owner:"CEO", rationale:"Sets the operational blueprint for the full APAC build-out", description:"", level:"strategic", timing:"Q2 2025", constraints:"", uncertainties:"", escalation:false, strategicAlignment:"", dependencies:"Market Entry Mode" },
-  { id:uid("d"), label:"Investment Level Year 1", sourceId:null, choices:["$10M conservative","$20M base case","$25M aggressive (cap)"], tier:"focus", owner:"CFO", rationale:"Capital ceiling has been board-set — choices within it are live", description:"", level:"portfolio", timing:"Q2 2025", constraints:"Board-approved $25M ceiling", uncertainties:"", escalation:true, strategicAlignment:"", dependencies:"" },
+  { id:uid("d"), label:"Investment Level Year 1", sourceId:null, choices:["$10M conservative","$20M base case","$25M aggressive (cap)"], tier:"focus", owner:"CFO", rationale:"Capital ceiling has been board-set -- choices within it are live", description:"", level:"portfolio", timing:"Q2 2025", constraints:"Board-approved $25M ceiling", uncertainties:"", escalation:true, strategicAlignment:"", dependencies:"" },
   { id:uid("d"), label:"Technology Localisation Approach", sourceId:null, choices:["Build in-house","License local tech","Partner with regional SaaS"], tier:"focus", owner:"CTO", rationale:"Critical path dependency for any market entry within 12 months", description:"", level:"program", timing:"Q3 2025", constraints:"", uncertainties:"Technology readiness", escalation:false, strategicAlignment:"", dependencies:"Market Entry Mode" },
-  { id:uid("d"), label:"Long-term Ownership Model", sourceId:null, choices:["Wholly-owned","JV 50/50","Majority-owned JV"], tier:"tactical", owner:"Legal", rationale:"Depends on entry mode chosen — cannot be decided in isolation", description:"", level:"strategic", timing:"", constraints:"", uncertainties:"", escalation:true, strategicAlignment:"", dependencies:"Market Entry Mode" },
-  { id:uid("d"), label:"Brand Strategy in APAC", sourceId:null, choices:["Global brand unchanged","Co-brand with local partner","Standalone local brand"], tier:"tactical", owner:"CMO", rationale:"Flows from partnership model — premature to decide now", description:"", level:"tactical", timing:"", constraints:"", uncertainties:"", escalation:false, strategicAlignment:"", dependencies:"Market Entry Mode" },
+  { id:uid("d"), label:"Long-term Ownership Model", sourceId:null, choices:["Wholly-owned","JV 50/50","Majority-owned JV"], tier:"tactical", owner:"Legal", rationale:"Depends on entry mode chosen -- cannot be decided in isolation", description:"", level:"strategic", timing:"", constraints:"", uncertainties:"", escalation:true, strategicAlignment:"", dependencies:"Market Entry Mode" },
+  { id:uid("d"), label:"Brand Strategy in APAC", sourceId:null, choices:["Global brand unchanged","Co-brand with local partner","Standalone local brand"], tier:"tactical", owner:"CMO", rationale:"Flows from partnership model -- premature to decide now", description:"", level:"tactical", timing:"", constraints:"", uncertainties:"", escalation:false, strategicAlignment:"", dependencies:"Market Entry Mode" },
   { id:uid("d"), label:"Regional HQ Location", sourceId:null, choices:["Singapore","Hong Kong","Sydney"], tier:"deferred", owner:"COO", rationale:"Defer pending regulatory clarity and partner negotiations", description:"", level:"operational", timing:"", constraints:"", uncertainties:"Regulatory environment", escalation:false, strategicAlignment:"", dependencies:"Geographic Priority" },
-  { id:uid("d"), label:"APAC product pricing model", sourceId:null, choices:["Mirror North America","Local market pricing","Partner-set pricing"], tier:"deferred", owner:"Head of Sales", rationale:"Requires market validation data — revisit after pilot launch", description:"", level:"tactical", timing:"", constraints:"", uncertainties:"Market price sensitivity", escalation:false, strategicAlignment:"", dependencies:"" },
-  { id:uid("d"), label:"Proceed with APAC expansion", sourceId:null, choices:["Yes — board mandate confirmed"], tier:"given", owner:"Board", rationale:"Board-approved in FY25 strategic plan — not up for debate", description:"", level:"strategic", timing:"", constraints:"", uncertainties:"", escalation:false, strategicAlignment:"FY25 growth strategy", dependencies:"" },
-  { id:uid("d"), label:"Maximum Year 1 capital budget", sourceId:null, choices:["$25M ceiling — non-negotiable"], tier:"given", owner:"CFO", rationale:"Capital ceiling set by board. Hard constraint on all options.", description:"", level:"portfolio", timing:"", constraints:"Board mandate", uncertainties:"", escalation:false, strategicAlignment:"", dependencies:"" },
-  { id:uid("d"), label:"Target acquisition shortlist", sourceId:null, choices:["Pending M&A advisor report","Subject to valuation"], tier:"dependency", owner:"CSO", rationale:"Blocked on external M&A advisor engagement — due Q1", description:"", level:"strategic", timing:"", constraints:"", uncertainties:"M&A advisor timeline", escalation:false, strategicAlignment:"", dependencies:"" },
-  { id:uid("d"), label:"Regulatory approval — Japan", sourceId:null, choices:["Pending regulatory review","Timeline unknown"], tier:"dependency", owner:"Legal", rationale:"Cannot proceed with Japan-first strategy until regulatory path confirmed", description:"", level:"operational", timing:"", constraints:"", uncertainties:"Regulatory timeline", escalation:true, strategicAlignment:"", dependencies:"Geographic Priority" },
+  { id:uid("d"), label:"APAC product pricing model", sourceId:null, choices:["Mirror North America","Local market pricing","Partner-set pricing"], tier:"deferred", owner:"Head of Sales", rationale:"Requires market validation data -- revisit after pilot launch", description:"", level:"tactical", timing:"", constraints:"", uncertainties:"Market price sensitivity", escalation:false, strategicAlignment:"", dependencies:"" },
+  { id:uid("d"), label:"Proceed with APAC expansion", sourceId:null, choices:["Yes -- board mandate confirmed"], tier:"given", owner:"Board", rationale:"Board-approved in FY25 strategic plan -- not up for debate", description:"", level:"strategic", timing:"", constraints:"", uncertainties:"", escalation:false, strategicAlignment:"FY25 growth strategy", dependencies:"" },
+  { id:uid("d"), label:"Maximum Year 1 capital budget", sourceId:null, choices:["$25M ceiling -- non-negotiable"], tier:"given", owner:"CFO", rationale:"Capital ceiling set by board. Hard constraint on all options.", description:"", level:"portfolio", timing:"", constraints:"Board mandate", uncertainties:"", escalation:false, strategicAlignment:"", dependencies:"" },
+  { id:uid("d"), label:"Target acquisition shortlist", sourceId:null, choices:["Pending M&A advisor report","Subject to valuation"], tier:"dependency", owner:"CSO", rationale:"Blocked on external M&A advisor engagement -- due Q1", description:"", level:"strategic", timing:"", constraints:"", uncertainties:"M&A advisor timeline", escalation:false, strategicAlignment:"", dependencies:"" },
+  { id:uid("d"), label:"Regulatory approval -- Japan", sourceId:null, choices:["Pending regulatory review","Timeline unknown"], tier:"dependency", owner:"Legal", rationale:"Cannot proceed with Japan-first strategy until regulatory path confirmed", description:"", level:"operational", timing:"", constraints:"", uncertainties:"Regulatory timeline", escalation:true, strategicAlignment:"", dependencies:"Geographic Priority" },
 ]);
 
 const defaultCriteria = () => ([
@@ -3945,7 +3945,7 @@ function ModuleStrategyTable({ decisions, strategies, onChange, onDecisions, aiC
       "You are a Decision Quality strategist. Generate 3 meaningfully distinct strategies for this decision. "+
       "Each strategy must: (1) have a clear strategic objective, (2) pick one option for EVERY decision below, (3) have a rationale explaining why those choices are internally coherent. "+
       "Decision: "+(problem?.decisionStatement||"Not defined")+". Existing (do not duplicate): "+existingNames+". "+
-      "DECISIONS — use exact option index (0,1,2...) in selections:\n"+decMenu+"\n\n"+
+      "DECISIONS -- use exact option index (0,1,2...) in selections:\n"+decMenu+"\n\n"+
       "Return ONLY JSON:\n"+
       '{"strategies":[{"name":"Bold Growth","objective":"Maximise market capture","rationale":"Why these choices cohere","selections":{"D1":0,"D2":1},"keyAssumptions":"What must be true","keyUncertainties":"What could shift this","majorRisks":"What could go wrong","timeHorizon":"Short/medium/long term","flexibility":"High/Medium/Low"}],"insight":"observation","validationFlags":["flag if any DQ issue"]}\n'+
       "IMPORTANT: selections keys are D1, D2, D3... matching decision numbers. Use integer index.",
@@ -4083,7 +4083,7 @@ Return ONLY JSON:
     aiCall(
       "You are a Decision Quality strategist. Complete missing fields for these strategies. " +
       "For each strategy: write a clear objective (what it aims to achieve), a rationale (why the option choices cohere), " +
-      "and select the BEST options for any unselected decisions — you may select MORE THAN ONE option per decision if it makes strategic sense. " +
+      "and select the BEST options for any unselected decisions -- you may select MORE THAN ONE option per decision if it makes strategic sense. " +
       "Match the strategy intent. Only fill what is MISSING. " +
       "Decision: "+(problem?.decisionStatement||"Not defined")+"\n" +
       "DECISIONS:\n"+decMenu+"\n\n" +
@@ -4296,7 +4296,7 @@ Return ONLY JSON:
                   </div>
                 )}
 
-                {/* Add Focus Decision — top right of table */}
+                {/* Add Focus Decision -- top right of table */}
                 <div style={{ padding:"12px 28px 0", display:"flex", justifyContent:"flex-end" }}>
                   {onDecisions && (
                     <button
@@ -4478,7 +4478,7 @@ Return ONLY JSON:
                               </div>
                             </td>
 
-                            {/* Decision cells — options as vertical list */}
+                            {/* Decision cells -- options as vertical list */}
                             {nowDecisions.map(d=>{
                               const rawSel = s.selections[d.id];
                               const selected = Array.isArray(rawSel)?rawSel:
@@ -4558,7 +4558,7 @@ Return ONLY JSON:
           <div style={{ padding:"28px 28px" }}>
             <div style={{ textAlign:"center", marginBottom:24 }}>
               <div style={{ fontFamily:"'Libre Baskerville', Georgia, serif", fontSize:18, color:DS.ink, marginBottom:6 }}>
-                Workshop View — {problem.decisionStatement?.slice(0,80)}…
+                Workshop View -- {problem.decisionStatement?.slice(0,80)}…
               </div>
               <div style={{ fontSize:12, color:DS.inkSub }}>Highlight one strategy at a time. Tap a strategy to explore.</div>
             </div>
@@ -4596,7 +4596,7 @@ Return ONLY JSON:
                         <div style={{ width:110, fontSize:11, fontWeight:700, color:DS.inkTer,
                           letterSpacing:.4, textTransform:"uppercase", flexShrink:0 }}>{d.label}</div>
                         <div style={{ fontSize:14, fontWeight:600, color:idx!==undefined?col.fill:DS.inkDis }}>
-                          {idx!==undefined ? d.choices[idx] : "— Not selected —"}
+                          {idx!==undefined ? d.choices[idx] : "-- Not selected --"}
                         </div>
                       </div>
                     );
@@ -4677,7 +4677,7 @@ Return ONLY JSON:
                               borderRadius:6,border:`1px solid ${idx!==undefined?col.line:DS.canvasBdr}` }}>
                               <span style={{ fontSize:11,color:idx!==undefined?col.fill:DS.inkDis,
                                 fontWeight:idx!==undefined?600:400 }}>
-                                {idx!==undefined?d.choices[idx]:"—"}
+                                {idx!==undefined?d.choices[idx]:"--"}
                               </span>
                             </td>
                           );
@@ -4762,7 +4762,7 @@ Return ONLY JSON:
                       <div style={{ fontSize:22, fontWeight:700,
                         color:validation.distinctiveness==="high"?"#059669":validation.distinctiveness==="medium"?"#d97706":"#dc2626",
                         marginBottom:6, textTransform:"capitalize" }}>
-                        {validation.distinctiveness||"—"}
+                        {validation.distinctiveness||"--"}
                       </div>
                       <div style={{ fontSize:11, color:DS.inkSub, lineHeight:1.5 }}>
                         {validation.distinctivenessNote}
@@ -4964,10 +4964,10 @@ Return ONLY JSON:
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MODULE 5 — QUALITATIVE ASSESSMENT
+   MODULE 5 -- QUALITATIVE ASSESSMENT
 ───────────────────────────────────────────────────────────────────────────── */
 
-// Radar / spider chart — pure SVG, no dependencies
+// Radar / spider chart -- pure SVG, no dependencies
 function RadarChart({ labels, datasets, size = 220 }) {
   const cx = size / 2, cy = size / 2;
   const r  = size * 0.36;
@@ -5139,7 +5139,7 @@ function ModuleQualitativeAssessment({
     setAssessing(true);
     const critList = criteria.map((cr, i) =>
       (i+1) + ". " + cr.label +
-      (cr.description ? " — " + cr.description.slice(0, 60) : "") +
+      (cr.description ? " -- " + cr.description.slice(0, 60) : "") +
       " [weight:" + getWeight(cr.id) + "]"
     ).join("\n");
     const stratList = strategies.map((s, i) => {
@@ -5156,7 +5156,7 @@ function ModuleQualitativeAssessment({
 
     aiCall(
       "You are a Decision Quality expert. Score each strategy against each criterion (1=poor, 2=below average, 3=adequate, 4=good, 5=excellent). " +
-      "Be rigorous and differentiated — avoid scoring everything the same. " +
+      "Be rigorous and differentiated -- avoid scoring everything the same. " +
       "Decision: " + (problem?.decisionStatement || "Not defined") + "\n" +
       "CRITERIA (score each of these):\n" + critList + "\n\n" +
       "STRATEGIES (score each of these):\n" + stratList + "\n\n" +
@@ -5211,7 +5211,7 @@ function ModuleQualitativeAssessment({
       if (r && r._raw) { try { result = JSON.parse(r._raw.replace(/```json|```/g, "").trim()); } catch(e) { setAnalysing(false); return; } }
       if (!result || result.error) { setAnalysing(false); return; }
       setQaAnalysis(result);
-      onAIMsg({ role:"ai", text: "Assessment quality: " + (result.qualityScore||"?") + "/100 — " + (result.diagnosticSummary||"") });
+      onAIMsg({ role:"ai", text: "Assessment quality: " + (result.qualityScore||"?") + "/100 -- " + (result.diagnosticSummary||"") });
       setAnalysing(false);
       setView("analysis");
     });
@@ -5221,14 +5221,14 @@ function ModuleQualitativeAssessment({
   const generateBrief = () => {
     setGenerating(true);
     const tableRows = criteria.map(c => {
-      const row = strategies.map(s => `${DS.sNames[s.colorIdx]||s.name}: ${getScore(s.id,c.id)||"—"}/5`).join(" | ");
+      const row = strategies.map(s => `${DS.sNames[s.colorIdx]||s.name}: ${getScore(s.id,c.id)||"--"}/5`).join(" | ");
       return `${c.label} [wt:${getWeight(c.id)}]: ${row}`;
     }).join("\n");
     const totals = strategies.map(s =>
       `${DS.sNames[s.colorIdx]||s.name}: ${pct(s.id)}% (${weightedTotal(s.id)}/${maxPossible} weighted)`
     ).join(", ");
     const stratDescs = strategies.map(s =>
-      `${DS.sNames[s.colorIdx]||s.name} — ${s.description||"No description"}: ${
+      `${DS.sNames[s.colorIdx]||s.name} -- ${s.description||"No description"}: ${
         focusDecisions.map(d => {
           const idx = s.selections?.[d.id];
           return idx !== undefined ? `${d.label}→${d.choices[idx]}` : `${d.label}→?`;
@@ -5337,7 +5337,7 @@ function ModuleQualitativeAssessment({
           padding:"14px 24px", flexShrink:0 }}>
           <div style={{ fontSize:10, fontWeight:700, color:"#6e7d9e",
             letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
-            DQ Scoring Guide — What Each Score Means
+            DQ Scoring Guide -- What Each Score Means
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
             {[
@@ -5364,7 +5364,7 @@ function ModuleQualitativeAssessment({
           <div style={{ marginTop:10, padding:"8px 12px", background:"rgba(37,99,235,.1)",
             border:"1px solid rgba(37,99,235,.2)", borderRadius:6,
             fontSize:10, color:"#93b4fd", lineHeight:1.5 }}>
-            <strong style={{color:"#60a5fa"}}>DQ principle:</strong> Scores should be differentiated — if all strategies score similarly, the criterion may not be decision-relevant. Every score should have a rationale. Confidence reflects how well the team understands this relationship, not how certain the outcome is.
+            <strong style={{color:"#60a5fa"}}>DQ principle:</strong> Scores should be differentiated -- if all strategies score similarly, the criterion may not be decision-relevant. Every score should have a rationale. Confidence reflects how well the team understands this relationship, not how certain the outcome is.
           </div>
         </div>
       )}
@@ -5375,7 +5375,7 @@ function ModuleQualitativeAssessment({
           padding:"12px 24px", flexShrink:0 }}>
           <div style={{ fontSize:10, fontWeight:700, color:DS.inkTer,
             letterSpacing:.8, textTransform:"uppercase", marginBottom:10 }}>
-            Criterion Weights — how much each criterion matters to the final score
+            Criterion Weights -- how much each criterion matters to the final score
           </div>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
             {criteria.map(crit => {
@@ -5439,14 +5439,14 @@ function ModuleQualitativeAssessment({
               <div style={{ padding:"60px 40px", textAlign:"center",
                 border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10,
                 color:DS.inkTer, fontSize:13, margin:28 }}>
-                No decision criteria yet. Add criteria in Module 03 — Decision Hierarchy.
+                No decision criteria yet. Add criteria in Module 03 -- Decision Hierarchy.
               </div>
             )}
             {criteria.length > 0 && strategies.length === 0 && (
               <div style={{ padding:"60px 40px", textAlign:"center",
                 border:`1.5px dashed ${DS.canvasMid}`, borderRadius:10,
                 color:DS.inkTer, fontSize:13, margin:28 }}>
-                No strategies yet. Build strategies in Module 04 — Strategy Table.
+                No strategies yet. Build strategies in Module 04 -- Strategy Table.
               </div>
             )}
 
@@ -5777,7 +5777,7 @@ function ModuleQualitativeAssessment({
                   </div>
                   <textarea value={selCell.rationale||""}
                     onChange={e => setCell(selStrat.id, selCrit.id, "rationale", e.target.value)}
-                    placeholder={"Why this score? Be specific — what evidence or reasoning supports " + SCORE_LABELS[selCell.score||3] + " for " + selCrit.label + "?"}
+                    placeholder={"Why this score? Be specific -- what evidence or reasoning supports " + SCORE_LABELS[selCell.score||3] + " for " + selCrit.label + "?"}
                     rows={4}
                     style={{ width:"100%", fontSize:11, padding:"8px 10px",
                       fontFamily:"inherit", background:DS.canvasAlt,
@@ -5819,7 +5819,7 @@ function ModuleQualitativeAssessment({
                     fontSize:11, fontWeight:700, display:"flex",
                     alignItems:"center", gap:6, transition:"all .12s" }}>
                   <span>{selCell.disagreement ? "⚑" : "⚐"}</span>
-                  {selCell.disagreement ? "Disagreement flagged — team not aligned" : "Flag disagreement"}
+                  {selCell.disagreement ? "Disagreement flagged -- team not aligned" : "Flag disagreement"}
                 </button>
 
                 {/* What score guide says for this criterion */}
@@ -5932,7 +5932,7 @@ function ModuleQualitativeAssessment({
                   </div>
                 </div>
 
-                {/* Score guide — what 1–5 means */}
+                {/* Score guide -- what 1-5 means */}
                 <div style={{ borderTop:`1px solid ${DS.canvasBdr}`,
                   paddingTop:16, marginBottom:4 }}>
                   <div style={{ fontSize:9, fontWeight:700, color:DS.inkDis,
@@ -5961,7 +5961,7 @@ function ModuleQualitativeAssessment({
                           {item.label}
                         </span>
                         <span style={{ fontSize:10, color:DS.inkTer }}>
-                          — {item.desc}
+                          -- {item.desc}
                         </span>
                       </div>
                     </div>
@@ -6476,7 +6476,7 @@ const DQ_ELEMENTS = [
     desc:  "The right decision problem is being addressed at the right level with the right scope and perspective.",
     questions: [
       "Is the decision statement clear, specific, and well-formed?",
-      "Is the scope — in and out — explicitly defined?",
+      "Is the scope -- in and out -- explicitly defined?",
       "Are we solving the root problem, not just a symptom?",
       "Is there alignment on purpose and perspective among decision makers?",
     ],
@@ -6491,14 +6491,14 @@ const DQ_ELEMENTS = [
     key:   "alternatives",
     num:   "02",
     label: "Creative Alternatives",
-    desc:  "Genuinely distinct strategies that meaningfully test the solution space — not variations of the same idea.",
+    desc:  "Genuinely distinct strategies that meaningfully test the solution space -- not variations of the same idea.",
     questions: [
       "Do we have at least 3 genuinely distinct strategies?",
       "Do strategies differ on the decisions that matter most?",
       "Have we avoided packaging our favourite with two straw men?",
       "Does each strategy represent a coherent, internally consistent path?",
     ],
-    good:  "3+ distinct strategies. Each is internally coherent. No false diversity — real strategic difference.",
+    good:  "3+ distinct strategies. Each is internally coherent. No false diversity -- real strategic difference.",
     weak:  "Only one real option presented. Strategies are minor variations. No genuine alternatives considered.",
     icon:  "⊞",
     color: "#7c3aed",
@@ -6513,7 +6513,7 @@ const DQ_ELEMENTS = [
     questions: [
       "Have we identified the key uncertainties affecting strategy value?",
       "Do we know which uncertainties are deal-breakers?",
-      "Is our information reliable — not just convenient?",
+      "Is our information reliable -- not just convenient?",
       "Have we distinguished facts from assumptions from uncertainties?",
     ],
     good:  "Key uncertainties mapped. Critical path uncertainties identified. Information quality assessed.",
@@ -6679,8 +6679,8 @@ function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, a
     const altSigs = [];
     let altScore = 0;
     if (strategies.length === 0) { altSigs.push("⚠ No strategies built yet"); }
-    else if (strategies.length === 1) { altScore += 15; altSigs.push("⚠ Only 1 strategy — DQ requires ≥3 genuine alternatives"); }
-    else if (strategies.length === 2) { altScore += 30; altSigs.push("⚠ 2 strategies — consider a third genuine alternative"); }
+    else if (strategies.length === 1) { altScore += 15; altSigs.push("⚠ Only 1 strategy -- DQ requires ≥3 genuine alternatives"); }
+    else if (strategies.length === 2) { altScore += 30; altSigs.push("⚠ 2 strategies -- consider a third genuine alternative"); }
     else { altScore += 50; altSigs.push(strategies.length + " strategies developed"); }
     const filledStrats = strategies.filter(s => Object.keys(s.selections||{}).length >= Math.ceil(focusDecs.length * 0.7));
     if (filledStrats.length === strategies.length && strategies.length > 0) {
@@ -6696,7 +6696,7 @@ function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, a
     }
     if (strategies.length > 0 && focusDecs.length === 0) {
       altScore = Math.min(altScore, 40);
-      altSigs.push("⚠ No Focus decisions — strategies may not be truly distinct");
+      altSigs.push("⚠ No Focus decisions -- strategies may not be truly distinct");
     }
 
     // ── INFORMATION ──────────────────────────────────────────────────────────
@@ -6708,7 +6708,7 @@ function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, a
     const uncNodes = (scenarioData?.uncertainties || []).length;
     if (uncNodes > 0) { infoScore += 20; infoSigs.push(uncNodes + " uncertainties in scenario planning"); }
     if (scenarios.length > 0) { infoScore += 20; infoSigs.push(scenarios.length + " scenarios developed"); }
-    else infoSigs.push("⚠ No scenarios built — key uncertainty not stress-tested");
+    else infoSigs.push("⚠ No scenarios built -- key uncertainty not stress-tested");
     if (voiClassified.length > 0) { infoScore += 20; infoSigs.push(voiClassified.length + " VoI items classified"); }
     else infoSigs.push("⚠ Value of Information not assessed");
     if (problem.keyUncertainties?.length > 20) { infoScore += 10; infoSigs.push("Key uncertainties documented in problem frame"); }
@@ -6717,7 +6717,7 @@ function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, a
     const valuesSigs = [];
     let valuesScore = 0;
     if (criteria.length === 0) { valuesSigs.push("⚠ No decision criteria defined"); }
-    else if (criteria.length < 3) { valuesScore += 20; valuesSigs.push("⚠ Only " + criteria.length + " criteria — consider 4-7 for balanced evaluation"); }
+    else if (criteria.length < 3) { valuesScore += 20; valuesSigs.push("⚠ Only " + criteria.length + " criteria -- consider 4-7 for balanced evaluation"); }
     else { valuesScore += 35; valuesSigs.push(criteria.length + " decision criteria defined"); }
     const withDesc = criteria.filter(cr => cr.description?.length > 10);
     if (withDesc.length === criteria.length && criteria.length > 0) {
@@ -6742,7 +6742,7 @@ function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, a
       const rat_pct = Math.round(cellsWithRationale / Math.max(scoredCells,1) * 100);
       if (rat_pct > 70) { reasonScore += 25; reasonSigs.push(rat_pct + "% of scores have rationale"); }
       else if (rat_pct > 30) { reasonScore += 10; reasonSigs.push("⚠ Only " + rat_pct + "% of scores have rationale"); }
-      else { reasonSigs.push("⚠ Most scores lack rationale — reasoning not documented"); }
+      else { reasonSigs.push("⚠ Most scores lack rationale -- reasoning not documented"); }
     } else if (scoredCells > 0) {
       reasonSigs.push("⚠ No score rationale documented");
     }
@@ -6754,7 +6754,7 @@ function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, a
     } else {
       reasonSigs.push("⚠ No scenario stress-testing");
     }
-    if (brief) { reasonScore += 20; reasonSigs.push("Decision brief generated — reasoning consolidated"); }
+    if (brief) { reasonScore += 20; reasonSigs.push("Decision brief generated -- reasoning consolidated"); }
 
     // ── COMMITMENT ───────────────────────────────────────────────────────────
     const commitSigs = [];
@@ -6774,7 +6774,7 @@ function ModuleDQScorecard({ problem, issues, decisions, strategies, criteria, a
       }
     }
     if (problem.owner?.length > 2) { commitScore += 15; commitSigs.push("Decision owner identified: " + problem.owner); }
-    else commitSigs.push("⚠ No decision owner — commitment authority unclear");
+    else commitSigs.push("⚠ No decision owner -- commitment authority unclear");
     if (decisions.some(d => d.owner?.length > 2)) { commitScore += 15; commitSigs.push("Individual decision owners assigned"); }
 
     return {
@@ -6827,16 +6827,16 @@ Weakest element: ${weakest.label} (${getScore(weakest.key)}/100)`.trim();
 
 ${contextSummary}
 
-Write a rigorous, frank DQ narrative. Don't hedge — be direct about where quality is strong and where it is weak.
+Write a rigorous, frank DQ narrative. Don't hedge -- be direct about where quality is strong and where it is weak.
 The weakest link principle: the chain is only as strong as its weakest link.
 
 Return ONLY valid JSON:
 {
-  "overallVerdict": "one sentence overall DQ quality verdict — decisive and frank",
+  "overallVerdict": "one sentence overall DQ quality verdict -- decisive and frank",
   "readinessStatement": "Is this decision ready to be made? One clear sentence.",
   "readinessStatus": "not-ready|partially-ready|conditionally-ready|decision-ready",
   "confidenceIndicator": "low|medium|high",
-  "confidenceNote": "Why this confidence level — what limits reliability of the assessment",
+  "confidenceNote": "Why this confidence level -- what limits reliability of the assessment",
   "scoreCategory": "elite|strong|moderate|weak|high-risk",
   "elementNarratives": {
     "frame": "2 sentences on frame quality",
@@ -6858,7 +6858,7 @@ Return ONLY valid JSON:
     {"action": "specific action", "element": "DQ element key", "urgency": "immediate|before-deciding|can-wait"}
   ],
   "decidingNow": "yes|no|conditional",
-  "conditionalNote": "if conditional — what condition must be met first (null if yes/no)",
+  "conditionalNote": "if conditional -- what condition must be met first (null if yes/no)",
   "facilitatorQuestions": ["What weakness most threatens decision quality?", "Where is confidence unsupported?"],
   "facilitatorRecommendation": "What the facilitator recommends the team do in the next session",
   "downstreamRecommendations": [{"module": "Value of Information", "reason": "why"}]
@@ -6943,11 +6943,11 @@ Return ONLY valid JSON:
                 <div style={{ marginBottom:10 }}>
                   <div style={{ fontFamily:"'Libre Baskerville',Georgia,serif", fontSize:18,
                     fontWeight:700, color:DS.ink, marginBottom:6 }}>
-                    {overall>=90 ? "Elite Decision Quality — proceed with high confidence." :
-                     overall>=75 ? "Strong Decision Quality — proceed with confidence." :
-                     overall>=60 ? "Moderate Decision Quality — address key gaps before committing." :
-                     overall>=40 ? "Weak Decision Quality — do not decide until weakest links resolved." :
-                                   "High Risk Decision Process — substantial rework required."}
+                    {overall>=90 ? "Elite Decision Quality -- proceed with high confidence." :
+                     overall>=75 ? "Strong Decision Quality -- proceed with confidence." :
+                     overall>=60 ? "Moderate Decision Quality -- address key gaps before committing." :
+                     overall>=40 ? "Weak Decision Quality -- do not decide until weakest links resolved." :
+                                   "High Risk Decision Process -- substantial rework required."}
                   </div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                     {narrative?.readinessStatus && (
@@ -7048,7 +7048,7 @@ Return ONLY valid JSON:
                     </div>
                   </div>
 
-                  {/* Signal evidence — visible on every card */}
+                  {/* Signal evidence -- visible on every card */}
                   {autoScores?.[el.key] && (
                     <div style={{ marginTop:8, padding:"7px 10px",
                       background:DS.canvasAlt,
@@ -7109,8 +7109,8 @@ Return ONLY valid JSON:
           {unscored === DQ_ELEMENTS.length && (
             <div style={{ marginTop:20, padding:"16px 20px", background:DS.accentSoft,
               borderRadius:8, border:`1px solid ${DS.accentLine}`, fontSize:12, color:DS.accent }}>
-              <strong>How to score:</strong> Click each element and use the 0–100 buttons. 0 = not assessed, 
-              10–30 = significant gaps, 40–60 = adequate, 70–80 = strong, 90–100 = excellent. 
+              <strong>How to score:</strong> Click each element and use the 0-100 buttons. 0 = not assessed, 
+              10-30 = significant gaps, 40-60 = adequate, 70-80 = strong, 90-100 = excellent. 
               Click any card to expand diagnostic questions and scoring guidance.
             </div>
           )}
@@ -7122,7 +7122,7 @@ Return ONLY valid JSON:
         <div style={{ flex:1, overflowY:"auto", padding:"32px 40px" }}>
           <div style={{ marginBottom:24 }}>
             <div style={{ fontSize:13, fontWeight:700, color:DS.ink, marginBottom:4 }}>
-              The DQ Chain — A Decision is Only as Strong as Its Weakest Link
+              The DQ Chain -- A Decision is Only as Strong as Its Weakest Link
             </div>
             <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
               All six elements must be strong for a high-quality decision. One weak link degrades the entire chain, regardless of how strong the other elements are.
@@ -7176,7 +7176,7 @@ Return ONLY valid JSON:
               border:`1.5px solid ${DS.dangerLine}`, borderRadius:10, marginBottom:20 }}>
               <div style={{ fontSize:10, fontWeight:700, color:DS.danger,
                 letterSpacing:.8, textTransform:"uppercase", marginBottom:8 }}>
-                Weakest Link — {weakest.label} ({getScore(weakest.key)}/100)
+                Weakest Link -- {weakest.label} ({getScore(weakest.key)}/100)
               </div>
               <div style={{ fontSize:13, color:DS.ink, lineHeight:1.65, marginBottom:12 }}>
                 {weakest.weak}
@@ -7217,7 +7217,7 @@ Return ONLY valid JSON:
                   <div style={{ width:50, textAlign:"right", fontSize:14, fontWeight:700,
                     fontFamily:"'Libre Baskerville',Georgia,serif",
                     color:s>0?scoreColor(s):DS.inkDis }}>
-                    {s>0?s:"—"}
+                    {s>0?s:"--"}
                   </div>
                 </div>
               );
@@ -7252,8 +7252,8 @@ Return ONLY valid JSON:
                   {problem.decisionStatement?.slice(0,80)}{problem.decisionStatement?.length>80?"…":""}
                 </div>
                 <div style={{ display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
-                  <div style={{ fontSize:13, color:DS.inkSub }}>Owner: {problem.owner||"—"}</div>
-                  <div style={{ fontSize:13, color:DS.inkSub }}>Deadline: {problem.deadline||"—"}</div>
+                  <div style={{ fontSize:13, color:DS.inkSub }}>Owner: {problem.owner||"--"}</div>
+                  <div style={{ fontSize:13, color:DS.inkSub }}>Deadline: {problem.deadline||"--"}</div>
                   <div style={{ marginLeft:"auto" }}>
                     <span style={{ fontSize:28, fontWeight:700,
                       fontFamily:"'Libre Baskerville',Georgia,serif",
@@ -7284,7 +7284,7 @@ Return ONLY valid JSON:
                   <Badge variant={narrative.decidingNow==="yes"?"green":narrative.decidingNow==="no"?"danger":"warn"}>
                     {narrative.decidingNow==="yes"?"✓ Ready to decide":
                      narrative.decidingNow==="no"?"✗ Not ready to decide":
-                     "⚠ Conditional — see note"}
+                     "⚠ Conditional -- see note"}
                   </Badge>
                   {narrative.conditionalNote && (
                     <div style={{ fontSize:12, color:DS.inkSub, marginTop:8, fontStyle:"italic" }}>
@@ -7312,7 +7312,7 @@ Return ONLY valid JSON:
                           <span style={{ fontSize:18 }}>{el.icon}</span>
                           <span style={{ fontSize:14, fontWeight:700,
                             fontFamily:"'Libre Baskerville',Georgia,serif",
-                            color:s>0?scoreColor(s):DS.inkDis }}>{s||"—"}</span>
+                            color:s>0?scoreColor(s):DS.inkDis }}>{s||"--"}</span>
                         </div>
                         <div style={{ flex:1 }}>
                           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
@@ -7320,7 +7320,7 @@ Return ONLY valid JSON:
                             {isWeak && <Badge variant="danger" size="xs">Weakest Link</Badge>}
                           </div>
                           <div style={{ fontSize:12, color:DS.inkSub, lineHeight:1.6 }}>
-                            {text||"—"}
+                            {text||"--"}
                           </div>
                         </div>
                       </div>
@@ -7335,7 +7335,7 @@ Return ONLY valid JSON:
                   background:DS.dangerSoft, border:`1.5px solid ${DS.dangerLine}`, borderRadius:10 }}>
                   <div style={{ fontSize:10, fontWeight:700, color:DS.danger,
                     letterSpacing:.8, textTransform:"uppercase", marginBottom:8 }}>
-                    Weakest Link Deep Dive — {weakest.label}
+                    Weakest Link Deep Dive -- {weakest.label}
                   </div>
                   <div style={{ fontSize:13, color:DS.ink, lineHeight:1.7 }}>
                     {narrative.weakestLinkAnalysis}
@@ -7561,7 +7561,7 @@ Return ONLY valid JSON:
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MODULE 07 — EXPORT & REPORT
+   MODULE 07 -- EXPORT & REPORT
 ───────────────────────────────────────────────────────────────────────────── */
 
 function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholders, onChange, aiCall, aiBusy, onAIMsg }) {
@@ -7600,7 +7600,7 @@ function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholde
     setGenerating(true);
     const issuesSummary = issues.filter(i=>i.category==="stakeholder"||i.severity==="Critical")
       .slice(0,6).map(i=>i.text.slice(0,80)).join("; ");
-    const strats = strategies.map(s=>s.name+(s.objective?" — "+s.objective:"")).join("; ");
+    const strats = strategies.map(s=>s.name+(s.objective?" -- "+s.objective:"")).join("; ");
     aiCall(
       "You are a Decision Quality expert mapping stakeholders for a decision. " +
       "Identify 5-8 key stakeholders who matter for this decision's outcome and implementation. " +
@@ -7728,7 +7728,7 @@ function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholde
                 <div style={{fontSize:24,marginBottom:12,opacity:.3}}>◉</div>
                 <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>No stakeholders mapped yet</div>
                 <div style={{fontSize:12,lineHeight:1.6,marginBottom:16,maxWidth:360,margin:"0 auto 16px"}}>
-                  Map who has a stake in this decision — who must approve it, who must implement it, and who could block it.
+                  Map who has a stake in this decision -- who must approve it, who must implement it, and who could block it.
                 </div>
                 <Btn variant="secondary" onClick={aiGenerate} disabled={aiBusy||generating}>
                   {generating?"Generating…":"AI Generate Stakeholders"}
@@ -7747,7 +7747,7 @@ function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholde
                         <span style={{fontSize:10,fontWeight:700,color:al.color,textTransform:"uppercase",letterSpacing:.5}}>
                           {al.label} ({group.length})
                         </span>
-                        <span style={{fontSize:10,color:DS.inkTer}}>— {al.desc}</span>
+                        <span style={{fontSize:10,color:DS.inkTer}}>-- {al.desc}</span>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>
                         {group.map(sh=>(
@@ -7924,7 +7924,7 @@ function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholde
                         </div>
                       )}
                       {!sh.engagementAction&&(
-                        <div style={{fontSize:10,color:DS.inkDis,fontStyle:"italic"}}>No engagement action defined — click to edit</div>
+                        <div style={{fontSize:10,color:DS.inkDis,fontStyle:"italic"}}>No engagement action defined -- click to edit</div>
                       )}
                     </div>
                   );
@@ -7956,7 +7956,7 @@ function ModuleStakeholders({ strategies, decisions, problem, issues, stakeholde
           {analysing&&<div style={{textAlign:"center",padding:48,color:DS.inkTer,fontSize:12}}>Analysing alignment…</div>}
           {analysis&&!analysing&&(()=>{
             const scoreCol = analysis.alignmentScore>=70?DS.success:analysis.alignmentScore>=50?DS.warning:DS.danger;
-            const verdictConfig = {ready:{col:DS.success,bg:DS.successSoft,border:DS.successLine,label:"Ready to Commit"},at_risk:{col:DS.warning,bg:DS.warnSoft,border:DS.warnLine,label:"At Risk — alignment work needed"},blocked:{col:DS.danger,bg:DS.dangerSoft,border:DS.dangerLine,label:"Blocked — resolve before committing"}}[analysis.alignmentVerdict]||{col:DS.inkTer,bg:DS.canvasAlt,border:DS.canvasBdr,label:"Unknown"};
+            const verdictConfig = {ready:{col:DS.success,bg:DS.successSoft,border:DS.successLine,label:"Ready to Commit"},at_risk:{col:DS.warning,bg:DS.warnSoft,border:DS.warnLine,label:"At Risk -- alignment work needed"},blocked:{col:DS.danger,bg:DS.dangerSoft,border:DS.dangerLine,label:"Blocked -- resolve before committing"}}[analysis.alignmentVerdict]||{col:DS.inkTer,bg:DS.canvasAlt,border:DS.canvasBdr,label:"Unknown"};
             return (
               <div>
                 {/* Score card */}
@@ -8076,7 +8076,7 @@ function ModuleExport({ problem, issues, decisions, criteria, strategies, assess
           const cell = perfMatrix[s.id+"_"+sc.id] || {};
           return sc.name + ": " + (cell.rating||"unrated");
         }).join(", ");
-        return (DS.sNames[s.colorIdx]||s.name) + " — " + ratings;
+        return (DS.sNames[s.colorIdx]||s.name) + " -- " + ratings;
       }).join("; ");
     })();
 
@@ -8132,7 +8132,7 @@ Produce a complete executive decision package. Be specific, direct, and authorit
 Return ONLY valid JSON:
 {
   "executiveSummary": {
-    "onePager": "Complete executive summary in 4-5 paragraphs — situation, decision, alternatives, recommendation, next step",
+    "onePager": "Complete executive summary in 4-5 paragraphs -- situation, decision, alternatives, recommendation, next step",
     "bulletPoints": ["Key point 1", "Key point 2", "Key point 3", "Key point 4", "Key point 5"],
     "tweetVersion": "The decision in 280 characters or fewer"
   },
@@ -8146,7 +8146,7 @@ Return ONLY valid JSON:
     "successMetrics": ["Metric 1", "Metric 2", "Metric 3"],
     "decisionCriteria": "How the recommendation was evaluated"
   },
-  "boardNarrative": "A board-ready narrative — 6-8 sentences covering the situation, the options considered, the recommended direction, the key trade-off, the critical assumption, and the requested action from the board",
+  "boardNarrative": "A board-ready narrative -- 6-8 sentences covering the situation, the options considered, the recommended direction, the key trade-off, the critical assumption, and the requested action from the board",
   "stakeholderMessages": {
     "board": "2-sentence message for the board",
     "executiveTeam": "2-sentence message for the exec team",
@@ -8261,7 +8261,7 @@ Return ONLY valid JSON:
             const el = document.getElementById("vdq-export-content");
             if (!el) return;
             const orig = document.title;
-            document.title = (problem.projectName||problem.decisionStatement||"VantageDQ") + " — Decision Package";
+            document.title = (problem.projectName||problem.decisionStatement||"VantageDQ") + " -- Decision Package";
             window.print();
             document.title = orig;
           }}>
@@ -8385,9 +8385,9 @@ Return ONLY valid JSON:
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:14, fontWeight:700, color:DS.ink, marginBottom:4 }}>
                     {overallReadiness==="ready" ? "Ready to generate the executive package"
-                   : overallReadiness==="almost" ? "Almost ready — one core module remaining"
-                   : overallReadiness==="partial" ? "Partially ready — package will be thin"
-                   : "Core modules incomplete — generate anyway or complete first"}
+                   : overallReadiness==="almost" ? "Almost ready -- one core module remaining"
+                   : overallReadiness==="partial" ? "Partially ready -- package will be thin"
+                   : "Core modules incomplete -- generate anyway or complete first"}
                   </div>
                   <div style={{ height:6, background:"rgba(0,0,0,.06)", borderRadius:3,
                     overflow:"hidden", marginBottom:6 }}>
@@ -8428,7 +8428,7 @@ Return ONLY valid JSON:
                   marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
                   Core Modules
                   <span style={{ fontSize:10, fontWeight:400, color:DS.inkTer }}>
-                    — required for a meaningful executive package
+                    -- required for a meaningful executive package
                   </span>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
@@ -8477,7 +8477,7 @@ Return ONLY valid JSON:
                   marginBottom:6, display:"flex", alignItems:"center", gap:8 }}>
                   Enrichment Modules
                   <span style={{ fontSize:10, fontWeight:400, color:DS.inkTer }}>
-                    — add depth if completed; package still generates without them
+                    -- add depth if completed; package still generates without them
                   </span>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
@@ -8492,7 +8492,7 @@ Return ONLY valid JSON:
                         background:item.done ? DS.accent : DS.canvasBdr }}>
                         {item.done
                           ? <Svg path={ICONS.check} size={10} color="#fff" sw={2.5}/>
-                          : <span style={{ fontSize:9, color:DS.inkDis }}>–</span>
+                          : <span style={{ fontSize:9, color:DS.inkDis }}>-</span>
                         }
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
@@ -8535,7 +8535,7 @@ Return ONLY valid JSON:
                       gap:7, fontSize:11 }}>
                       <span style={{ color:row.present ? DS.success : DS.inkDis,
                         fontSize:12, flexShrink:0 }}>
-                        {row.present ? "✓" : "–"}
+                        {row.present ? "✓" : "-"}
                       </span>
                       <span style={{ color:row.present ? DS.inkSub : DS.inkDis }}>
                         {row.label}
@@ -8731,7 +8731,7 @@ Return ONLY valid JSON:
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   PHASE 2 — MODULE 08: INFLUENCE MAP & UNCERTAINTY ANALYSIS
+   PHASE 2 -- MODULE 08: INFLUENCE MAP & UNCERTAINTY ANALYSIS
 ───────────────────────────────────────────────────────────────────────────── */
 
 const IMPACT_LEVELS      = ["Critical","High","Medium","Low"];
@@ -8745,37 +8745,37 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
     decision: {
       label:"Decision", color:"#2563eb", bg:"#eff4ff", border:"#93c5fd",
       icon:"▣", shape:"rect",
-      desc:"A controllable choice — what can be decided",
+      desc:"A controllable choice -- what can be decided",
       rule:"Must have outgoing influence. Cannot be probabilistic.",
     },
     uncertainty: {
       label:"Uncertainty", color:"#d97706", bg:"#fffbeb", border:"#fcd34d",
       icon:"◎", shape:"oval",
-      desc:"An unknown variable — what cannot be controlled",
+      desc:"An unknown variable -- what cannot be controlled",
       rule:"May influence other uncertainties and value nodes.",
     },
     value: {
       label:"Value / Outcome", color:"#059669", bg:"#ecfdf5", border:"#6ee7b7",
       icon:"◆", shape:"diamond",
-      desc:"An objective or result — NPV, market share, strategic value",
+      desc:"An objective or result -- NPV, market share, strategic value",
       rule:"Terminal node. Should not influence upstream nodes.",
     },
     deterministic: {
       label:"Deterministic", color:"#7c3aed", bg:"#f5f3ff", border:"#c4b5fd",
       icon:"⬡", shape:"hex",
-      desc:"A calculated relationship — revenue, cash flow, emissions",
+      desc:"A calculated relationship -- revenue, cash flow, emissions",
       rule:"Calculated from inputs. Can influence value nodes.",
     },
     constraint: {
       label:"Constraint", color:"#64748b", bg:"#f8fafc", border:"#cbd5e1",
       icon:"⊟", shape:"rect",
-      desc:"A limiting condition — budget cap, regulatory restriction, resource limit",
+      desc:"A limiting condition -- budget cap, regulatory restriction, resource limit",
       rule:"Constrains decisions and intermediate variables. Cannot be changed within the decision.",
     },
     objective: {
       label:"Objective", color:"#0891b2", bg:"#ecfeff", border:"#a5f3fc",
       icon:"◉", shape:"oval",
-      desc:"A value goal — maximize value, reduce risk, preserve flexibility",
+      desc:"A value goal -- maximize value, reduce risk, preserve flexibility",
       rule:"Strategic intent. Links to value nodes. Guides decision criteria.",
     },
   };
@@ -8870,7 +8870,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
 
     // Rule: value nodes cannot influence upstream
     if (src?.type === "value") {
-      onAIMsg({ role: "ai", text: "⚠ Invalid link: Value/Outcome nodes are terminal — they cannot influence other nodes. Reverse the arrow direction." });
+      onAIMsg({ role: "ai", text: "⚠ Invalid link: Value/Outcome nodes are terminal -- they cannot influence other nodes. Reverse the arrow direction." });
       setLinkSource(null); return;
     }
 
@@ -8891,7 +8891,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       return dfs(to);
     };
     if (wouldCycle(linkSource, targetId)) {
-      onAIMsg({ role: "ai", text: "⚠ Circular dependency detected. Influence diagrams must be acyclic — this link would create a loop." });
+      onAIMsg({ role: "ai", text: "⚠ Circular dependency detected. Influence diagrams must be acyclic -- this link would create a loop." });
       setLinkSource(null); return;
     }
 
@@ -8996,31 +8996,31 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
     // Orphan nodes
     nodes.forEach(n => {
       const connected = edges.some(e => e.from === n.id || e.to === n.id);
-      if (!connected) issues_found.push({ type: "orphan", node: n.label, msg: "Not connected to anything — either link it or remove it." });
+      if (!connected) issues_found.push({ type: "orphan", node: n.label, msg: "Not connected to anything -- either link it or remove it." });
     });
 
     // Value nodes with no incoming
     nodes.filter(n => n.type === "value").forEach(n => {
       if (!edges.some(e => e.to === n.id))
-        issues_found.push({ type: "disconnected-value", node: n.label, msg: "Value node has no incoming influence — what drives this outcome?" });
+        issues_found.push({ type: "disconnected-value", node: n.label, msg: "Value node has no incoming influence -- what drives this outcome?" });
     });
 
     // Decision nodes with no outgoing
     nodes.filter(n => n.type === "decision").forEach(n => {
       if (!edges.some(e => e.from === n.id))
-        issues_found.push({ type: "disconnected-decision", node: n.label, msg: "Decision node has no outgoing influence — what does this decision affect?" });
+        issues_found.push({ type: "disconnected-decision", node: n.label, msg: "Decision node has no outgoing influence -- what does this decision affect?" });
     });
 
     // Duplicate labels
     const labels = nodes.map(n => n.label.toLowerCase().trim());
     nodes.forEach((n, i) => {
       if (labels.indexOf(n.label.toLowerCase().trim()) !== i)
-        issues_found.push({ type: "duplicate", node: n.label, msg: "Duplicate node label — consolidate these into one node." });
+        issues_found.push({ type: "duplicate", node: n.label, msg: "Duplicate node label -- consolidate these into one node." });
     });
 
     // No value nodes at all
     if (nodes.length > 3 && !nodes.some(n => n.type === "value"))
-      issues_found.push({ type: "no-value", node: "Diagram", msg: "No Value/Outcome nodes — what is this diagram optimising for?" });
+      issues_found.push({ type: "no-value", node: "Diagram", msg: "No Value/Outcome nodes -- what is this diagram optimising for?" });
 
     setValidation(issues_found);
     return issues_found;
@@ -9044,7 +9044,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
       "decision nodes (controllable choices), uncertainty nodes (unknown variables), " +
       "deterministic nodes (calculated relationships like revenue/cost), value nodes (outcomes like NPV/market share), " +
       "constraint nodes (budget/regulatory limits), and objective nodes (strategic goals). " +
-      "Suggest influence edges. Value nodes must be terminal — they cannot influence other nodes. " +
+      "Suggest influence edges. Value nodes must be terminal -- they cannot influence other nodes. " +
       "Decision nodes must have outgoing edges. No circular dependencies. " +
       'Return ONLY JSON: {"nodes":[{"type":"uncertainty","label":"Oil Price","description":"Global crude benchmark","impact":"High","control":"Low","owner":""}],' +
       '"edges":[{"from":"Oil Price","to":"Revenue","label":"drives"}],' +
@@ -9230,7 +9230,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
     const wacc=parseFloat(p.discount)||10, yrs=parseInt(p.horizon)||5;
     aiCall(
       "Decision: "+(problem?.decisionStatement||"Not defined")+". Uncertainties: "+uncNodes+". Decisions: "+decNodes+". "+
-      "Define uncertainty multipliers for Low/Base/High scenarios only — no numbers, just multipliers and narrative. "+
+      "Define uncertainty multipliers for Low/Base/High scenarios only -- no numbers, just multipliers and narrative. "+
       "Return ONLY JSON: "+
       '{"modelTitle":"short title","revenueMultipliers":{"low":0.6,"base":1.0,"high":1.4},"costMultipliers":{"low":1.1,"base":1.0,"high":0.85},"growthMultipliers":{"low":0.6,"base":1.0,"high":1.3},"assumptions":[{"name":"assumption","driver":"uncertainty node","low":"desc","base":"desc","high":"desc"}],"scenarioLow":"downside","scenarioBase":"base case","scenarioHigh":"upside","keyRisks":["risk1"],"notes":"modelling notes"}',
     (r)=>{
@@ -9386,7 +9386,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
           display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {validation.length === 0 ? (
             <span style={{ fontSize: 11, color: DS.success, fontWeight: 700 }}>
-              ✓ Diagram is structurally valid — no orphans, circular dependencies, or missing value nodes.
+              ✓ Diagram is structurally valid -- no orphans, circular dependencies, or missing value nodes.
             </span>
           ) : (
             <>
@@ -9499,13 +9499,13 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
               height: "calc(100% - 80px)", minHeight: 400 }}>
               {[
                 { impact: "High", control: "High", label: "Manage Actively",
-                  sub: "High leverage — key levers you control", color: "#059669", bg: "#ecfdf5" },
+                  sub: "High leverage -- key levers you control", color: "#059669", bg: "#ecfdf5" },
                 { impact: "High", control: "Low", label: "Monitor Closely",
-                  sub: "Major impact, low control — external forces", color: "#d97706", bg: "#fffbeb" },
+                  sub: "Major impact, low control -- external forces", color: "#d97706", bg: "#fffbeb" },
                 { impact: "Low", control: "High", label: "Exploit",
-                  sub: "Easy wins — you control these", color: "#2563eb", bg: "#eff4ff" },
+                  sub: "Easy wins -- you control these", color: "#2563eb", bg: "#eff4ff" },
                 { impact: "Low", control: "Low", label: "Accept / Track",
-                  sub: "Background noise — monitor but don't over-invest", color: "#6b7280", bg: "#f9fafb" },
+                  sub: "Background noise -- monitor but don't over-invest", color: "#6b7280", bg: "#f9fafb" },
               ].map(q => {
                 const qNodes = nodes.filter(n =>
                   n.type === "uncertainty" && n.impact === q.impact && n.control === q.control
@@ -9872,14 +9872,14 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
                 Influence Diagram DQ Principles
               </div>
               {[
-                "Decision nodes must have at least one outgoing influence — they must affect something.",
-                "Value/Outcome nodes must have at least one incoming influence — something must drive the outcome.",
-                "Value/Outcome nodes should not influence upstream nodes — they are terminal.",
-                "No circular dependencies — influence must flow in one direction only.",
+                "Decision nodes must have at least one outgoing influence -- they must affect something.",
+                "Value/Outcome nodes must have at least one incoming influence -- something must drive the outcome.",
+                "Value/Outcome nodes should not influence upstream nodes -- they are terminal.",
+                "No circular dependencies -- influence must flow in one direction only.",
                 "Every uncertainty should ultimately connect to a value node (directly or indirectly).",
-                "Orphan nodes (no connections) are not contributing to the model — link or remove them.",
-                "Duplicate node labels suggest redundant thinking — consolidate into one node.",
-                "Every diagram needs at least one value node — what is this decision optimising for?",
+                "Orphan nodes (no connections) are not contributing to the model -- link or remove them.",
+                "Duplicate node labels suggest redundant thinking -- consolidate into one node.",
+                "Every diagram needs at least one value node -- what is this decision optimising for?",
               ].map((rule, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6,
                   fontSize: 11, color: DS.inkSub, lineHeight: 1.5 }}>
@@ -10235,7 +10235,7 @@ function ModuleInfluenceMap({ issues, decisions, strategies, aiCall, aiBusy, onA
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   PROJECTOR VIEW — Room-facing display for Workshop Mode
+   PROJECTOR VIEW -- Room-facing display for Workshop Mode
    Opens in a separate browser window. Reads state from localStorage.
    Participants can vote on canvas items from their phones/devices.
 ───────────────────────────────────────────────────────────────────────────── */
@@ -10498,7 +10498,7 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
       id:"issues", num:3, label:"Issue Raising", icon:"◈",
       duration:20,
       objective:"Surface all issues, uncertainties, assumptions and brutal truths before filtering.",
-      facilitatorGuide:"Run a silent brainstorm first (3 min). Then share out. Enforce no evaluation during this phase — capture everything. Push for brutal truths.",
+      facilitatorGuide:"Run a silent brainstorm first (3 min). Then share out. Enforce no evaluation during this phase -- capture everything. Push for brutal truths.",
       participantTask:"Add every issue, uncertainty, assumption, or concern you have about this decision.",
       requiredOutput:"Comprehensive unfiltered issue list.",
       transitionCondition:"Silent brainstorm complete, all voices have contributed.",
@@ -10538,7 +10538,7 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
       id:"assumptions", num:7, label:"Assumption Surfacing", icon:"◈",
       duration:20,
       objective:"Make explicit all assumptions that each alternative rests on.",
-      facilitatorGuide:"For each strategy ask: What must be true for this to work? Go deeper — ask three times. Surface assumptions about market, execution, stakeholders, timing.",
+      facilitatorGuide:"For each strategy ask: What must be true for this to work? Go deeper -- ask three times. Surface assumptions about market, execution, stakeholders, timing.",
       participantTask:"List the key assumptions behind each strategy. Mark which are testable vs untestable.",
       requiredOutput:"Assumption register with confidence ratings.",
       transitionCondition:"Each alternative has at least 2-3 explicit assumptions documented.",
@@ -10694,7 +10694,7 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
     const context =
       "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
       "Issues raised: " + (issues.slice(0,10).map(i=>i.text).join("; ")||"none") + ". " +
-      "Strategies: " + (strategies.slice(0,5).map(s=>s.name+(s.objective?" — "+s.objective:"")).join("; ")||"none") + ". " +
+      "Strategies: " + (strategies.slice(0,5).map(s=>s.name+(s.objective?" -- "+s.objective:"")).join("; ")||"none") + ". " +
       "Decisions: " + (decisions.slice(0,5).map(d=>d.label).join("; ")||"none") + ". " +
       "Canvas items this session: " + (canvasItems.map(x=>x.tag+": "+x.text).join("; ")||"none") + ". " +
       "Workshop notes this phase: " + (wsNotes[p.id]||"none");
@@ -11013,7 +11013,7 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
             <div style={{ padding:"16px 18px", background:"#1a1d27",
               borderRadius:10, border:"1px solid rgba(255,255,255,.08)" }}>
               <div style={{ fontSize:10, fontWeight:700, color:"#64748b",
-                textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>Facilitator Notes — {currentPhase.label}</div>
+                textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>Facilitator Notes -- {currentPhase.label}</div>
               <textarea
                 value={wsNotes[currentPhase.id]||""}
                 onChange={e=>setWsNotes(prev=>({...prev,[currentPhase.id]:e.target.value}))}
@@ -11083,7 +11083,7 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
               {!currentInsight&&!analysing&&(
                 <div style={{ fontSize:11, color:"#475569", textAlign:"center",
                   padding:"20px", lineHeight:1.7 }}>
-                  Click <strong style={{color:"#a5b4fc"}}>Get Insight</strong> to receive AI facilitation guidance for this phase — tension detection, missing perspectives, and a recommended facilitation move.
+                  Click <strong style={{color:"#a5b4fc"}}>Get Insight</strong> to receive AI facilitation guidance for this phase -- tension detection, missing perspectives, and a recommended facilitation move.
                 </div>
               )}
 
@@ -11339,8 +11339,8 @@ function WorkshopMode({ problem, issues, decisions, strategies, criteria, onIssu
                       </td>
                       <td style={{ padding:"10px 10px", fontSize:12, color:"#cbd5e1",
                         textDecoration:a.done?"line-through":"none" }}>{a.text}</td>
-                      <td style={{ padding:"10px 10px", fontSize:11, color:"#94a3b8" }}>{a.owner||"—"}</td>
-                      <td style={{ padding:"10px 10px", fontSize:11, color:"#94a3b8" }}>{a.due||"—"}</td>
+                      <td style={{ padding:"10px 10px", fontSize:11, color:"#94a3b8" }}>{a.owner||"--"}</td>
+                      <td style={{ padding:"10px 10px", fontSize:11, color:"#94a3b8" }}>{a.due||"--"}</td>
                       <td style={{ padding:"10px 10px" }}>
                         <button onClick={()=>setActions(prev=>prev.filter(x=>x.id!==a.id))}
                           style={{ background:"none",border:"none",cursor:"pointer",color:"#475569",fontSize:13 }}>×</button>
@@ -11676,7 +11676,7 @@ function VersionPanel({ currentData, onRestore, onClose }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   PHASE 2 — CROSS-MODULE AI INTELLIGENCE PANEL
+   PHASE 2 -- CROSS-MODULE AI INTELLIGENCE PANEL
 ───────────────────────────────────────────────────────────────────────────── */
 
 
@@ -12227,7 +12227,7 @@ function ModuleTimeline({ decisions, strategies, issues, problem, timelineEvents
                     Last Responsible Moment
                   </div>
                   <div style={{ fontSize:13,fontWeight:700,color:DS.ink,marginBottom:3 }}>
-                    Month {readiness.lastResponsibleMoment.month} — {monthLabel(readiness.lastResponsibleMoment.month)}
+                    Month {readiness.lastResponsibleMoment.month} -- {monthLabel(readiness.lastResponsibleMoment.month)}
                   </div>
                   <div style={{ fontSize:11,color:DS.inkSub,lineHeight:1.6 }}>
                     {readiness.lastResponsibleMoment.rationale}
@@ -12308,7 +12308,7 @@ function ModuleTimeline({ decisions, strategies, issues, problem, timelineEvents
                           color:aiAssess.alertLevel==="Green"?DS.success:
                             aiAssess.alertLevel==="Red"?DS.danger:DS.warning,
                           textTransform:"uppercase",letterSpacing:.4,marginBottom:3 }}>
-                          ✦ AI Assessment — {aiAssess.alertLevel}
+                          ✦ AI Assessment -- {aiAssess.alertLevel}
                         </div>
                         {aiAssess.readinessGap&&(
                           <div style={{ fontSize:11,color:DS.ink,marginBottom:4 }}>
@@ -12424,7 +12424,7 @@ function ModuleTimeline({ decisions, strategies, issues, problem, timelineEvents
                         {r.severity}
                       </span>
                       <span style={{ fontSize:10,color:DS.inkTer }}>
-                        {monthLabel(r.startMonth)} – {monthLabel(r.endMonth)}
+                        {monthLabel(r.startMonth)} - {monthLabel(r.endMonth)}
                       </span>
                     </div>
                     {r.description&&(
@@ -12561,7 +12561,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [view, setView]               = useState("uncertainties"); // uncertainties | matrix2x2 | scenarios | test | insights
-  // Lifted state — from scenarioData prop
+  // Lifted state -- from scenarioData prop
   const uncertainties   = scenarioData.uncertainties  || [];
   const axis1           = scenarioData.axis1;
   const axis2           = scenarioData.axis2;
@@ -12638,7 +12638,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
     aiCall(
       "You are a DQ scenario planning expert. Identify the 4-6 most decision-relevant external uncertainties for this decision. " +
       "Uncertainties must be external (not controllable), distinct, and directly relevant to the decision outcome. " +
-      "Do NOT include issues, risks, constraints or decisions — only genuine uncertainties about the external environment. " +
+      "Do NOT include issues, risks, constraints or decisions -- only genuine uncertainties about the external environment. " +
       "Decision: " + (problem?.decisionStatement||"Not defined") + ". " +
       "Known uncertainties from influence diagram: " + (uncNodes||"none") + ". " +
       "Critical issues: " + (critIssues||"none") + ". " +
@@ -12672,7 +12672,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
       "Axis 2: " + (u2?.label||"Uncertainty 2") + " (Low vs High). " +
       "The 4 quadrants are: Q1=Low/High, Q2=High/High, Q3=Low/Low, Q4=High/Low. " +
       "For each quadrant, write: a vivid scenario name (3-5 words), a narrative (2-3 sentences describing the world), key assumptions, early warning indicators that signal this scenario is emerging. " +
-      "Scenarios must be plausible, distinct, and decision-relevant — NOT best/base/worst case. " +
+      "Scenarios must be plausible, distinct, and decision-relevant -- NOT best/base/worst case. " +
       "Return ONLY JSON: " +
       '{"scenarios":[{"pos":"TL","name":"Scenario name","narrative":"2-3 sentence story","assumptions":"key assumptions","earlyWarningIndicators":"2-3 signposts","risks":"strategic risks","opportunities":"strategic opportunities"}],"insight":"observation"}',
     (r) => {
@@ -12704,7 +12704,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
     aiCall(
       "You are a scenario planning expert. Generate 4 distinct, plausible future scenarios from this full set of uncertainties. "+
       "Each scenario should specify how each uncertainty resolves in a coherent future world. "+
-      "Scenarios must be meaningfully different — not simply optimistic/pessimistic. "+
+      "Scenarios must be meaningfully different -- not simply optimistic/pessimistic. "+
       "Decision: "+(problem?.decisionStatement||"Not defined")+".\nUncertainties:\n"+uncList+"\n\n"+
       "Return ONLY JSON: "+
       '{"scenarios":[{"id":"s1","name":"Scenario name","narrative":"2-3 sentence story","uncertaintyResolutions":{"uncertainty label":"how it resolves"},"assumptions":"key assumptions","earlyWarningIndicators":"2-3 signposts","risks":"strategic risks","opportunities":"strategic opportunities"}],"insight":"observation"}',
@@ -12726,10 +12726,10 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
     if (!scenarios.length||!strategies.length) return;
     setFilling(true);
     const stratList = strategies.map((s,i)=>
-      (i+1)+". "+s.name+(s.objective?" — objective: "+s.objective:"")
+      (i+1)+". "+s.name+(s.objective?" -- objective: "+s.objective:"")
     ).join("\n");
     const scenList = scenarios.map(s=>
-      s.pos+": "+s.name+" — "+s.narrative
+      s.pos+": "+s.name+" -- "+s.narrative
     ).join("\n");
     aiCall(
       "You are a DQ strategist evaluating how alternatives perform across future scenarios. " +
@@ -12766,7 +12766,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
       }).join("; ")
     ).join("\n");
     const scenSummary = scenarios.map(sc =>
-      sc.name + " — " + (sc.narrative || sc.pos)
+      sc.name + " -- " + (sc.narrative || sc.pos)
     ).join("\n");
     aiCall(
       "You are a senior decision analyst performing a scenario stress-test. " +
@@ -12885,7 +12885,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
           <div>
             <div style={{fontSize:12,color:DS.inkSub,lineHeight:1.6,marginBottom:16,maxWidth:700}}>
               Identify the key <strong>external uncertainties</strong> that could affect this decision.
-              These must be things outside management control — not decisions, risks, or constraints.
+              These must be things outside management control -- not decisions, risks, or constraints.
               AI will suggest which two are most decision-relevant for building your 2×2 scenario matrix.
             </div>
 
@@ -13317,7 +13317,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:700,color:DS.ink,marginBottom:2}}>Strategy Survival Map</div>
                     <div style={{fontSize:11,color:DS.inkTer}}>
-                      Read across rows — where does each strategy thrive or fail? Read down columns — which future is most dangerous?
+                      Read across rows -- where does each strategy thrive or fail? Read down columns -- which future is most dangerous?
                     </div>
                   </div>
                   {Object.keys(perfMatrix).length > 0 && (
@@ -13379,7 +13379,7 @@ function ModuleScenarios({ strategies, decisions, issues, problem, nodes, edges,
                                 {cell.note&&<div style={{fontSize:8,color:DS.inkTer,textAlign:"center",lineHeight:1.3}}>{cell.note.slice(0,50)}{cell.note.length>50?"…":""}</div>}
                               </>
                             ):(
-                              <span style={{fontSize:10,color:DS.inkDis}}>—</span>
+                              <span style={{fontSize:10,color:DS.inkDis}}>--</span>
                             )}
                           </div>
                         );
@@ -13591,7 +13591,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, voiIt
   const analyseVoI = () => {
     if (!items.length) return;
     setAnalysing(true);
-    const stratList = strategies.map(s=>s.name+(s.objective?" — "+s.objective:"")).join("; ");
+    const stratList = strategies.map(s=>s.name+(s.objective?" -- "+s.objective:"")).join("; ");
     const uncList = items.map((x,i)=>
       (i+1)+". "+x.label+" | Decision Impact: "+x.decisionImpact+" | Uncertainty: "+x.currentUncertainty+" | Resolvability: "+x.resolvability
     ).join("\n");
@@ -13601,7 +13601,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, voiIt
       "Strategies: "+(stratList||"none")+".\n\n" +
       "UNCERTAINTIES:\n"+uncList+"\n\n" +
       "For each uncertainty: " +
-      "(1) Is it truly decision-critical — would knowing it change which strategy to pick? " +
+      "(1) Is it truly decision-critical -- would knowing it change which strategy to pick? " +
       "(2) Suggest the best information option to reduce it (be specific: e.g. commission market research, run 8-week pilot, obtain legal opinion). " +
       "(3) Classify as: do_now | do_later | conditional | do_not | bundle. " +
       "(4) Provide a plain-language VoI note for executives. " +
@@ -13683,7 +13683,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, voiIt
               {[
                 {
                   q:"Would knowing this change our decision?",
-                  a:"If learning the answer wouldn't change which strategy you choose, the information has no value — regardless of cost or ease.",
+                  a:"If learning the answer wouldn't change which strategy you choose, the information has no value -- regardless of cost or ease.",
                   icon:"◎", color:"#2563eb",
                 },
                 {
@@ -13742,7 +13742,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, voiIt
                 <div style={{fontSize:28,marginBottom:8,opacity:.4}}>◎</div>
                 <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>No uncertainties loaded</div>
                 <div style={{fontSize:12,marginBottom:16,lineHeight:1.6}}>
-                  Build the <strong>Influence Diagram</strong> (Module 09) with uncertainty nodes — they auto-populate here. Or add manually.
+                  Build the <strong>Influence Diagram</strong> (Module 09) with uncertainty nodes -- they auto-populate here. Or add manually.
                 </div>
                 <Btn variant="secondary" onClick={addItem}>+ Add Uncertainty</Btn>
               </div>
@@ -13755,7 +13755,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, voiIt
                   <div style={{fontSize:9,fontWeight:700,color:DS.inkTer,letterSpacing:.5,textTransform:"uppercase",padding:"0 8px"}}>Uncertainty</div>
                   {[
                     {label:"Decision Impact",   tip:"If we knew this, would it change which strategy we choose?"},
-                    {label:"Current Uncertainty",tip:"How unknown is this today — do we have any data at all?"},
+                    {label:"Current Uncertainty",tip:"How unknown is this today -- do we have any data at all?"},
                     {label:"Resolvability",      tip:"Can we get a reliable answer before the decision deadline?"},
                     {label:"Change Probability", tip:"How likely is new information to actually shift the preferred alternative?"},
                   ].map(col=>(
@@ -13909,7 +13909,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, voiIt
                         <span style={{fontSize:11,fontWeight:700,color:DS.accent,minWidth:16}}>{i+1}.</span>
                         <div>
                           <span style={{fontSize:12,fontWeight:700,color:DS.ink}}>{x.label}</span>
-                          {opt&&<span style={{fontSize:11,color:DS.inkSub}}> — {opt.description||opt.type}</span>}
+                          {opt&&<span style={{fontSize:11,color:DS.inkSub}}> -- {opt.description||opt.type}</span>}
                           {(opt?.cost||opt?.duration)&&<span style={{fontSize:10,color:DS.inkTer}}> ({[opt.cost,opt.duration].filter(Boolean).join(", ")})</span>}
                         </div>
                       </div>
@@ -13960,7 +13960,7 @@ function ModuleVoI({ nodes, edges, issues, strategies, decisions, problem, voiIt
                             {x.voiNote}
                           </div>
                         )}
-                        {/* Decision Pivot — the key addition */}
+                        {/* Decision Pivot -- the key addition */}
                         {x.decisionPivot&&(
                           <div style={{padding:"7px 10px",marginBottom:6,
                             background:x.isDecisionCritical?"rgba(37,99,235,.06)":"rgba(0,0,0,.03)",
@@ -14114,7 +14114,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
       "Is sequence of moves critical (Sequential)? " +
       "Return ONLY JSON: " +
       '{"diagnosis":"Competitive|Coordination|Collaboration|Sequential|Negotiation|Deterrence|Coalition|Bidding",' +
-      '"confidence":"High|Medium|Low","reasoning":"why this game type — be specific",' +
+      '"confidence":"High|Medium|Low","reasoning":"why this game type -- be specific",' +
       '"correction":"if stated type is wrong, explain",' +
       '"framingInsights":["key structural feature","second insight"],' +
       '"criticalQuestion":"most important question before analysis",' +
@@ -14176,7 +14176,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
       "Decision: " + decisionCtx + ". " +
       "Context: " + context.environment + ". " +
       "Existing players (do not duplicate): " + existingNames + ". " +
-      "For each player: infer their objectives, incentives, capabilities, likely risk tolerance, and — critically — any hidden motivations that may not be obvious. " +
+      "For each player: infer their objectives, incentives, capabilities, likely risk tolerance, and -- critically -- any hidden motivations that may not be obvious. " +
       "Be specific and realistic. Think like a strategist, not an academic. " +
       "Return ONLY JSON: " +
       '{"players":[{"name":"Player name","type":"Competitor|Regulator|Partner|Customer|Supplier|Government|Investor","objective":"primary objective","incentives":"what drives them","capabilities":"their strengths","riskTolerance":"Low|Medium|High","constraints":"what limits them","hiddenMotivations":"non-obvious incentives that may surprise us","historicalBehavior":"how they have behaved in similar situations"}],"insight":"key strategic observation about the player landscape"}',
@@ -14575,7 +14575,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
                             {key:"incentives",label:"Incentives",placeholder:"What drives their decisions?"},
                             {key:"capabilities",label:"Capabilities",placeholder:"What can they actually do?"},
                             {key:"constraints",label:"Constraints",placeholder:"What limits their moves?"},
-                            {key:"hiddenMotivations",label:"⚡ Hidden Motivations",placeholder:"Non-obvious incentives — what might surprise us?"},
+                            {key:"hiddenMotivations",label:"⚡ Hidden Motivations",placeholder:"Non-obvious incentives -- what might surprise us?"},
                             {key:"historicalBehavior",label:"Historical Behavior",placeholder:"How have they acted in similar situations?"},
                           ].map(f=>(
                             <div key={f.key}>
@@ -14619,7 +14619,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
             <div>
               <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:22, fontWeight:700, marginBottom:4 }}>Strategic Moves</div>
               <div style={{ fontSize:12, color:"#64748b", marginBottom:20 }}>
-                Define possible actions for each player including yourself. Be realistic — include cooperative and aggressive options.
+                Define possible actions for each player including yourself. Be realistic -- include cooperative and aggressive options.
               </div>
 
               {allPlayers.map(p => {
@@ -14724,7 +14724,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
 
               {players.length===0 || (moves["us"]||[]).length===0 ? (
                 <div style={{ padding:24, color:"#475569", fontSize:12, textAlign:"center" }}>
-                  Complete Steps 1–2 first: add players and define our moves.
+                  Complete Steps 1-2 first: add players and define our moves.
                 </div>
               ) : (
                 players.map(opponent => {
@@ -14832,7 +14832,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
               <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:22,
                 fontWeight:700, marginBottom:4 }}>Game Tree</div>
               <div style={{ fontSize:12, color:"#64748b", marginBottom:20, lineHeight:1.6 }}>
-                Map the sequential structure of the game. Who moves first? Use backward induction —
+                Map the sequential structure of the game. Who moves first? Use backward induction --
                 work from the terminal nodes back to find the equilibrium path.
               </div>
 
@@ -14886,7 +14886,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
                     </div>
                     <div style={{ fontSize:11, color:"#94a3b8", lineHeight:1.5 }}>
                       Start from the end of the game. At each terminal node, identify which payoff each player prefers.
-                      Work backwards — at each decision node, rational players choose the branch leading to their
+                      Work backwards -- at each decision node, rational players choose the branch leading to their
                       best reachable outcome. The highlighted path is what rational players will actually do.
                     </div>
                   </div>
@@ -15033,7 +15033,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
                                 "Anticipating this, " + mainOpp.name + " will respond with [" +
                                 (eq.theirBest?.label||"their best response") + "]. " +
                                 "Our payoff on this equilibrium path: " + (eq.ourPayoff>=0?"+":"") + eq.ourPayoff + ". " +
-                                "This is the subgame-perfect equilibrium — neither player can do better by deviating, given the other plays rationally.";
+                                "This is the subgame-perfect equilibrium -- neither player can do better by deviating, given the other plays rationally.";
                             })()}
                           </div>
                         </div>
@@ -15061,7 +15061,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
               <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontFamily:"'Libre Baskerville',serif", fontSize:22, fontWeight:700, marginBottom:4 }}>Strategic Intelligence</div>
-                  <div style={{ fontSize:12, color:"#64748b" }}>AI-powered game theory analysis — dominant strategies, equilibria, risks, and recommendations.</div>
+                  <div style={{ fontSize:12, color:"#64748b" }}>AI-powered game theory analysis -- dominant strategies, equilibria, risks, and recommendations.</div>
                 </div>
                 <button className="gt-btn" onClick={runAnalysis} disabled={analysing||aiBusy}
                   style={{ padding:"8px 16px", fontSize:11, fontWeight:700, fontFamily:"inherit",
@@ -15214,7 +15214,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
                     borderRadius:8, display:"flex",
                     alignItems:"center", gap:12 }}>
                     <div style={{ flex:1, fontSize:11, color:"#94a3b8" }}>
-                      Analysis complete. Now design how to play the game —
+                      Analysis complete. Now design how to play the game --
                       move sequence, signals, commitments, and contingency triggers.
                     </div>
                     <button className="gt-btn"
@@ -15466,7 +15466,7 @@ function GameTheoryMode({ problem, issues, decisions, strategies, scenarios, onC
                                 marginBottom:3 }}>{sig.signal}</div>
                               <div style={{ fontSize:10, color:"#64748b",
                                 lineHeight:1.4, marginBottom:2 }}>
-                                Via {sig.medium} — {sig.purpose}
+                                Via {sig.medium} -- {sig.purpose}
                               </div>
                               <div style={{ fontSize:9, color:"#6366f1",
                                 fontStyle:"italic" }}>
@@ -15825,7 +15825,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
       "You are an elite Decision Quality intelligence engine performing a cross-module audit of a live decision session. " +
       "Your role is to detect contradictions, framing drift, missing analysis, unresolved tensions, and coherence failures " +
       "that ONLY become visible when reading across all modules simultaneously. " +
-      "Be specific — every flag must reference actual data from the session. No generic observations.\n\n" +
+      "Be specific -- every flag must reference actual data from the session. No generic observations.\n\n" +
       "=== SESSION DATA ===\n" +
       "Decision: \"" + (problem?.decisionStatement || "NOT SET") + "\"\n" +
       "Frame quality: " + scopeQuality + "\n" +
@@ -15918,8 +15918,8 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
 
   const READINESS_CONFIG = {
     ready:        { col:"#059669", bg:"#ecfdf5", border:"#a7f3d0", label:"Ready to Commit" },
-    conditional:  { col:"#d97706", bg:"#fffbeb", border:"#fde68a", label:"Conditional — resolve blockers" },
-    not_ready:    { col:"#dc2626", bg:"#fef2f2", border:"#fecaca", label:"Not Ready — critical gaps remain" },
+    conditional:  { col:"#d97706", bg:"#fffbeb", border:"#fde68a", label:"Conditional -- resolve blockers" },
+    not_ready:    { col:"#dc2626", bg:"#fef2f2", border:"#fecaca", label:"Not Ready -- critical gaps remain" },
   };
 
   const MODULE_HEALTH_LABELS = {
@@ -15959,7 +15959,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
         )}
         {isStale && (
           <span style={{ width:6, height:6, borderRadius:"50%",
-            background:DS.warning, display:"inline-block" }} title="Data changed — re-run recommended"/>
+            background:DS.warning, display:"inline-block" }} title="Data changed -- re-run recommended"/>
         )}
       </button>
 
@@ -15994,7 +15994,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
                   Cross-Module Intelligence Engine
                 </div>
                 <div style={{ fontSize:11, color:"#6e7d9e" }}>
-                  Reads all modules simultaneously — surfaces contradictions, drift, and coherence failures
+                  Reads all modules simultaneously -- surfaces contradictions, drift, and coherence failures
                 </div>
               </div>
               {insights && (
@@ -16032,7 +16032,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
                 <div style={{ fontSize:13, color:DS.inkSub, lineHeight:1.7,
                   maxWidth:520, marginBottom:24 }}>
                   Analyses all modules simultaneously for logic contradictions, framing drift,
-                  orphan risks, groupthink, decision tensions, and missing analysis — blind spots
+                  orphan risks, groupthink, decision tensions, and missing analysis -- blind spots
                   that only appear when reading the full decision architecture at once.
                 </div>
                 <Btn variant="primary" icon="spark" size="lg" onClick={run} disabled={aiBusy||running}>
@@ -16126,7 +16126,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
                       {(insights.flags||[]).length === 0 ? (
                         <div style={{ textAlign:"center", padding:"40px",
                           color:DS.success, fontSize:13 }}>
-                          ✓ No flags detected — decision architecture is coherent
+                          ✓ No flags detected -- decision architecture is coherent
                         </div>
                       ) : (
                         // Group by severity
@@ -16208,7 +16208,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
                       <div style={{ fontSize:12, color:DS.inkTer, marginBottom:16,
                         lineHeight:1.6 }}>
                         Decision tensions are legitimate conflicts between objectives, constraints, or strategies.
-                        They should be explicitly acknowledged and managed — not silently resolved.
+                        They should be explicitly acknowledged and managed -- not silently resolved.
                       </div>
                       {(insights.tensions||[]).length === 0 ? (
                         <div style={{ textAlign:"center", padding:"40px",
@@ -16310,7 +16310,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
                             <div style={{ fontFamily:"'Libre Baskerville',serif",
                               fontSize:48, fontWeight:700, lineHeight:1,
                               color:rc.col }}>
-                              {ra.score||"—"}
+                              {ra.score||"--"}
                             </div>
                             <div style={{ flex:1 }}>
                               <div style={{ fontSize:14, fontWeight:700,
@@ -16333,7 +16333,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
                             <div style={{ fontSize:11, fontWeight:700, color:"#dc2626",
                               marginBottom:8, textTransform:"uppercase",
                               letterSpacing:.5 }}>
-                              ⛔ Hard Blockers — must resolve before committing
+                              ⛔ Hard Blockers -- must resolve before committing
                             </div>
                             {ra.blockers.map((b,i) => (
                               <div key={i} style={{ padding:"8px 12px",
@@ -16355,7 +16355,7 @@ function CrossModuleAI({ problem, issues, decisions, criteria, strategies,
                             <div style={{ fontSize:11, fontWeight:700, color:"#d97706",
                               marginBottom:8, textTransform:"uppercase",
                               letterSpacing:.5 }}>
-                              ⚠ Conditions — resolve before or shortly after committing
+                              ⚠ Conditions -- resolve before or shortly after committing
                             </div>
                             {ra.conditions.map((cond,i) => (
                               <div key={i} style={{ padding:"8px 12px",
@@ -16481,7 +16481,7 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
       const cur = {
         id: "current",
         name: currentProject.projectName || currentProject.decisionStatement?.slice(0,50) || "Current Decision",
-        owner: currentProject.owner||"—",
+        owner: currentProject.owner||"--",
         date: new Date().toISOString().slice(0,10),
         dqScores: { ...dqScores },
         issueCount: issues.length,
@@ -16499,7 +16499,7 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
     const newEntry = {
       id: uid("proj"),
       name: currentProject.decisionStatement?.slice(0,50)||"Untitled",
-      owner: currentProject.owner||"—",
+      owner: currentProject.owner||"--",
       date: new Date().toISOString().slice(0,10),
       dqScores: { ...dqScores },
       issueCount: issues.length,
@@ -16567,9 +16567,9 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:24 }}>
             {[
               { label:"Projects Tracked", value:projects.length, sub:"active + archived", color:DS.accent },
-              { label:"Avg DQ Score", value:avgOverall>0?`${avgOverall}/100`:"—", sub:"across all projects", color:scoreColor(avgOverall) },
-              { label:"Consistently Weak", value:weakestElement.avg>0?weakestElement.label:"—", sub:`avg ${weakestElement.avg||"—"}/100`, color:DS.danger },
-              { label:"Consistently Strong", value:strongestElement.avg>0?strongestElement.label:"—", sub:`avg ${strongestElement.avg||"—"}/100`, color:DS.success },
+              { label:"Avg DQ Score", value:avgOverall>0?`${avgOverall}/100`:"--", sub:"across all projects", color:scoreColor(avgOverall) },
+              { label:"Consistently Weak", value:weakestElement.avg>0?weakestElement.label:"--", sub:`avg ${weakestElement.avg||"--"}/100`, color:DS.danger },
+              { label:"Consistently Strong", value:strongestElement.avg>0?strongestElement.label:"--", sub:`avg ${strongestElement.avg||"--"}/100`, color:DS.success },
             ].map((kpi,i)=>(
               <div key={i} style={{ padding:"16px 18px", background:DS.canvas,
                 border:`1px solid ${DS.canvasBdr}`, borderRadius:9,
@@ -16614,7 +16614,7 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
                       <td style={{ padding:"10px 12px", textAlign:"center" }}>
                         <span style={{ fontSize:14, fontWeight:700,
                           fontFamily:"'Libre Baskerville',Georgia,serif",
-                          color:scoreColor(p.overall) }}>{p.overall>0?p.overall:"—"}</span>
+                          color:scoreColor(p.overall) }}>{p.overall>0?p.overall:"--"}</span>
                       </td>
                       <td style={{ padding:"10px 12px" }}>
                         <Badge variant={p.id==="current"?"blue":p.status==="Archived"?"default":"green"} size="xs">
@@ -16649,7 +16649,7 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
                       <span style={{ fontSize:11, fontWeight:700, color:DS.ink, flex:1 }}>{el.label}</span>
                       <span style={{ fontSize:12, fontWeight:700,
                         fontFamily:"'Libre Baskerville',Georgia,serif",
-                        color:scoreColor(el.avg) }}>{el.avg>0?el.avg:"—"}</span>
+                        color:scoreColor(el.avg) }}>{el.avg>0?el.avg:"--"}</span>
                     </div>
                     <div style={{ height:5, background:DS.canvasBdr, borderRadius:3, overflow:"hidden" }}>
                       <div style={{ width:`${el.avg}%`, height:"100%", borderRadius:3,
@@ -16673,7 +16673,7 @@ function DQiDashboard({ currentProject, dqScores, strategies, issues, aiCall, ai
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   QUICK START — AI DEEP DIVE ENTRY SCREEN
+   QUICK START -- AI DEEP DIVE ENTRY SCREEN
 ───────────────────────────────────────────────────────────────────────────── */
 
 const ANALYSIS_STEPS = [
@@ -16754,7 +16754,7 @@ function LoginScreen({ onLogin }) {
               Sign in
             </div>
             <div style={{ fontSize:13, color:"#64748b", marginBottom:28, lineHeight:1.6 }}>
-              Enter your email and we'll send you a magic link — no password needed.
+              Enter your email and we'll send you a magic link -- no password needed.
             </div>
 
             <div style={{ marginBottom:12 }}>
@@ -16830,7 +16830,7 @@ function LoginScreen({ onLogin }) {
             </div>
             <div style={{ fontSize:13, color:"#64748b", lineHeight:1.7, marginBottom:28 }}>
               We sent a magic link to <strong style={{color:"#94a3b8"}}>{email}</strong>.
-              Click the link to sign in — it expires in 1 hour.
+              Click the link to sign in -- it expires in 1 hour.
             </div>
             <button onClick={()=>{setSent(false);setError("");}}
               style={{ fontSize:12, color:"#475569", background:"none",
@@ -16990,7 +16990,7 @@ function PresenceBar({ presence }) {
   return (
     <div style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 0" }}>
       {presence.slice(0,5).map((p,i) => (
-        <div key={i} title={p.name + (p.module ? " — " + p.module : "")}
+        <div key={i} title={p.name + (p.module ? " -- " + p.module : "")}
           style={{ width:24, height:24, borderRadius:"50%",
             background:colorFor(p.email),
             border:"2px solid white",
@@ -17290,9 +17290,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
       "NODE TYPES: 'decision' (choices being made), 'uncertainty' (unknowns that affect outcomes), 'value' (what stakeholders care about), " +
       "'constraint' (hard limits), 'external' (outside forces), 'objective' (goals). " +
       "EDGES: directional relationships between nodes with strength (strong/moderate/weak) and direction of influence. " +
-      "Be specific -- use real names from the document. 8-16 nodes, 10-20 edges.
-
-" +
+      "Be specific -- use real names from the document. 8-16 nodes, 10-20 edges." +
       docContext +
       'Return ONLY JSON: {"influenceNodes":[{"id":"n1","label":"node name","type":"decision|uncertainty|value|constraint|external|objective","description":"what this represents","confidence":"high|medium|low","source":"from document"}],' +
       '"influenceEdges":[{"source":"n1","target":"n2","label":"how n1 influences n2","strength":"strong|moderate|weak","confidence":"high|medium|low"}]}'
@@ -17307,9 +17305,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
       "Identify the 2 most decision-critical uncertainties as scenario axes. " +
       "Construct 4 coherent scenario narratives from the 2x2 matrix. " +
       "For each scenario: name it, describe the world it depicts, and assess which strategy performs best in it. " +
-      "Also identify early warning indicators -- observable signals that would tell you which scenario is materialising.
-
-" +
+      "Also identify early warning indicators -- observable signals that would tell you which scenario is materialising." +
       docContext +
       'Return ONLY JSON: {"scenarioAxes":{"axis1":{"label":"axis 1 label","low":"low end description","high":"high end description"},' +
       '"axis2":{"label":"axis 2 label","low":"low end description","high":"high end description"}},' +
@@ -17328,9 +17324,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
       "You are a Value of Information analyst. From this document, identify which uncertainties are worth resolving before committing to a decision. " +
       "Apply the three VoI questions to each: (1) Would knowing this change the decision? (2) Can we find out before we must decide? (3) Is the cost/delay of finding out less than the risk of not knowing? " +
       "Classify each as: do_now (resolve before committing), do_later (useful but not blocking), conditional (only if a trigger occurs), do_not_do (not worth the cost). " +
-      "Suggest a specific information-gathering action for each do_now item.
-
-" +
+      "Suggest a specific information-gathering action for each do_now item." +
       docContext +
       'Return ONLY JSON: {"voiItems":[{"label":"uncertainty label","description":"what is unknown","wouldChangeDecision":true,"canResolveInTime":true,"worthCost":true,' +
       '"classification":"do_now|do_later|conditional|do_not_do","action":"specific study or action to gather this information","costEstimate":"Low|Medium|High",' +
@@ -17346,9 +17340,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
       "You are a decision risk analyst. From this document, build a risk timeline showing: " +
       "key risk events, decision gates (points where the team must decide or pivot), milestones, and implementation checkpoints. " +
       "For each event: estimate timing relative to now (months from today), type, severity, trigger, and mitigation. " +
-      "Decision gates are the most important -- identify the conditions that must be met to proceed at each gate.
-
-" +
+      "Decision gates are the most important -- identify the conditions that must be met to proceed at each gate." +
       docContext +
       'Return ONLY JSON: {"timelineEvents":[{"title":"event title","type":"decision_gate|risk_event|milestone|implementation|review","timing":6,' +
       '"timingLabel":"e.g. Month 6 from FID","severity":"Critical|High|Medium|Low","description":"what happens at this point",' +
@@ -17367,9 +17359,7 @@ function QuickStartScreen({ onComplete, onSkip }) {
       "Frame (Is the right decision being addressed?), Alternatives (Are genuinely distinct options present?), " +
       "Information (Is key data present and reliable?), Values (Are criteria and trade-offs explicit?), " +
       "Reasoning (Is the logic connecting evidence to conclusions sound?), Commitment (Is stakeholder alignment sufficient?). " +
-      "VALIDATION FLAGS: check for all 16 flag types from the brief.
-
-" +
+      "VALIDATION FLAGS: check for all 16 flag types from the brief." +
       docContext +
       'Return ONLY JSON: {"dqScores":{"frame":0,"alternatives":0,"information":0,"values":0,"reasoning":0,"commitment":0},' +
       '"dqNarrative":"2-3 sentence assessment of overall decision quality in the document",' +
@@ -19201,13 +19191,7 @@ function ToolsMenu({ onWorkshop, onVersions, onDqi, onDeepDive, onProject, onNew
 }
 
 /* ── MAIN APP ─────────────────────────────────────────────────────────────── */
-export default function App() {
-  // ── Projector mode: render room-facing view when ?ws_projector=1 ──────────
-  if (typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("ws_projector") === "1") {
-    return <ProjectorView/>;
-  }
-
+function AppMain() {
   const [module, setModule]               = useState("problem");
   const [problem, setProblem]             = useState(defaultProblem);
   const [issues, setIssues]               = useState(defaultIssues);
@@ -20312,4 +20296,13 @@ export default function App() {
       )}
     </div>
   );
+}
+
+
+export default function App() {
+  if (typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("ws_projector") === "1") {
+    return <ProjectorView/>;
+  }
+  return <AppMain/>;
 }
