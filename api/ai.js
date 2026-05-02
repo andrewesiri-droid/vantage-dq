@@ -1,149 +1,106 @@
-/**
- * Vantage DQ — Unified AI Gateway
- * 
- * Orchestrates Claude + Gemini based on task classification.
- * Handles: routing, fallback, consensus, audit, rate limiting.
- */
+import Anthropic from '@anthropic-ai/sdk';
 
-import { classifyTask } from './_lib/classifier.js';
-import { getRouting, getFallback, shouldRunConsensus } from './_lib/router.js';
-import { sanitisePrompt, estimateTokens, hashPrompt, validateFiles } from './_lib/sanitiser.js';
-import { writeAuditLog } from './_lib/audit.js';
-import { checkRateLimit } from './_lib/rateLimiter.js';
-import { callClaude } from './claude.js';
-import { callGemini } from './gemini.js';
+const DQ_SYSTEM = `You are an elite Decision Quality facilitator embedded in Vantage DQ.
+
+Your role is to improve the quality of this decision - not to be generically helpful.
+
+CORE BEHAVIOURS:
+- Challenge weak framing before answering
+- Identify hidden assumptions without being asked  
+- Flag when a decision is actually a goal in disguise
+- Use DQ vocabulary: frame, alternatives, information, values, reasoning, commitment
+- Write at executive level - concise, precise, actionable
+- Never express false confidence
+
+DQ STANDARDS:
+- Decision statements must be open questions, not descriptions
+- Alternatives must be genuinely distinct
+- A DQ score below 45 means commitment is premature
+- The weakest element determines the ceiling
+
+TONE: Senior advisor. Strategic challenger. NOT a chatbot.`;
+
+// Task classification - which module/task goes to which model
+function classifyTask(module, taskType, hasFiles, tokenEstimate) {
+  if (hasFiles || tokenEstimate > 50000) return 'gemini';
+  
+  const geminiTasks = ['ai-generate', 'bulk-suggest', 'ai-categorise', 'fast-generation'];
+  if (geminiTasks.includes(taskType)) return 'gemini';
+  
+  const geminiModules = ['influence-diagram', 'risk-timeline', 'scenario-planning'];
+  if (geminiModules.includes(module) && taskType === 'ai-generate') return 'gemini';
+  
+  return 'claude';
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const startTime = Date.now();
   const {
-    messages,           // Legacy Claude format: [{role, content}]
-    prompt: rawPrompt,  // Direct prompt string
-    module  = '',
+    messages,
+    prompt: rawPrompt,
+    module = '',
     task_type = '',
-    session_id,
-    user_id = 'anonymous',
-    files   = [],
-    consensus = false,
+    files = [],
   } = req.body;
 
-  // Support legacy messages[] format from existing useAI hook
-  const prompt = rawPrompt || (messages && messages.length > 0
-    ? messages.map(m => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n')
+  // Support both messages[] format and direct prompt
+  const prompt = rawPrompt || (messages?.length
+    ? messages.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n')
     : '');
 
   if (!prompt) return res.status(400).json({ error: 'No prompt provided' });
 
-  // 1. RATE LIMIT
-  const allowed = await checkRateLimit(user_id);
-  if (!allowed) return res.status(429).json({ error: 'Rate limit exceeded. Please wait a moment.' });
+  const tokenEstimate = Math.ceil(prompt.length / 4);
+  const target = classifyTask(module, task_type, files.length > 0, tokenEstimate);
 
-  // 2. SANITISE
-  let safePrompt;
+  console.log(`[AI] module=${module} task=${task_type} → ${target} (${tokenEstimate} tokens)`);
+
+  // Try primary model, fallback to Claude if anything fails
   try {
-    safePrompt = sanitisePrompt(prompt);
-    if (files.length) validateFiles(files);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
+    let text;
 
-  // 3. CLASSIFY TASK
-  const tokenEstimate = estimateTokens(prompt, files);
-  const classification = classifyTask({ module, task_type, files, token_estimate: tokenEstimate, prompt });
-  const routing = getRouting(classification.category);
-
-  // 4. AUDIT ENTRY
-  const auditBase = {
-    session_id, user_id, module, task_type,
-    task_category:  classification.category,
-    model_selected: routing.model,
-    model_version:  routing.version,
-    token_estimate: tokenEstimate,
-    prompt_hash:    hashPrompt(safePrompt),
-    timestamp:      new Date().toISOString(),
-  };
-
-  console.log(`[AI-GATEWAY] module=${module} task=${task_type} → ${routing.model}/${routing.version} (${classification.category}, conf=${classification.confidence})`);
-
-  try {
-    // 5. PRIMARY MODEL CALL
-    const primaryText = await callModel(routing, safePrompt, files);
-
-    // 6. CONSENSUS (optional — runs both models on critical tasks)
-    let consensusText = null;
-    if (shouldRunConsensus(classification.category, consensus)) {
+    if (target === 'gemini' && process.env.GEMINI_API_KEY) {
       try {
-        const altRouting = getFallback(routing.model);
-        consensusText = await callModel(altRouting, safePrompt, files);
-      } catch (consensusErr) {
-        console.warn('[AI-GATEWAY] Consensus model failed:', consensusErr.message);
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-1.5-flash',
+          systemInstruction: DQ_SYSTEM,
+          generationConfig: { maxOutputTokens: 4000, temperature: 0.3 },
+        });
+        const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+        text = result.response.text();
+        console.log(`[AI] Gemini responded (${text.length} chars)`);
+      } catch (geminiErr) {
+        console.warn('[AI] Gemini failed, falling back to Claude:', geminiErr.message);
+        text = await callClaude(prompt);
       }
+    } else {
+      text = await callClaude(prompt);
     }
 
-    // 7. WRITE AUDIT
-    await writeAuditLog({
-      ...auditBase,
-      status:        'success',
-      latency_ms:    Date.now() - startTime,
-      has_consensus: !!consensusText,
-    });
-
-    // 8. RESPOND — format to match existing Claude response format
-    // so legacy useAI hook keeps working without changes
-    const responseText = primaryText;
     return res.status(200).json({
-      // Legacy format (for existing useAI hook)
-      content: [{ type: 'text', text: responseText }],
-      // Enhanced format
-      result: responseText,
-      consensus: consensusText,
-      meta: {
-        model:         routing.model,
-        version:       routing.version,
-        task_category: classification.category,
-        confidence:    classification.confidence,
-        latency_ms:    Date.now() - startTime,
-        routed_by:     classification.reasoning,
-      },
+      content: [{ type: 'text', text }],
+      result: text,
+      meta: { model: target, module, task_type },
     });
 
-  } catch (primaryErr) {
-    console.error(`[AI-GATEWAY] Primary model (${routing.model}) failed:`, primaryErr.message);
-
-    // 9. FALLBACK
-    const fallbackRouting = getFallback(routing.model);
-    try {
-      const fallbackText = await callModel(fallbackRouting, safePrompt, files);
-      await writeAuditLog({
-        ...auditBase,
-        status:         'fallback',
-        fallback_reason: primaryErr.message,
-        latency_ms:     Date.now() - startTime,
-      });
-      return res.status(200).json({
-        content: [{ type: 'text', text: fallbackText }],
-        result:  fallbackText,
-        meta:    { ...fallbackRouting, fallback: true, original_error: primaryErr.message },
-      });
-    } catch (fallbackErr) {
-      await writeAuditLog({ ...auditBase, status: 'failed', latency_ms: Date.now() - startTime });
-      return res.status(500).json({ error: 'All AI models unavailable. Please try again.' });
-    }
+  } catch (err) {
+    console.error('[AI] Fatal error:', err.message);
+    return res.status(500).json({ error: `AI request failed: ${err.message}` });
   }
 }
 
-async function callModel({ model, version, max_tokens }, prompt, files) {
-  if (model === 'claude') {
-    return callClaude({ prompt, version, max_tokens, files });
-  }
-  if (model === 'gemini') {
-    // Gracefully degrade to Claude if Gemini not configured
-    if (!process.env.GEMINI_API_KEY) {
-      console.log('[AI-GATEWAY] GEMINI_API_KEY not set, falling back to Claude');
-      return callClaude({ prompt, version: 'claude-sonnet-4-20250514', max_tokens, files });
-    }
-    return callGemini({ prompt, version, max_tokens, files });
-  }
-  throw new Error(`Unknown model: ${model}`);
+async function callClaude(prompt) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4000,
+    system: DQ_SYSTEM,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  const text = response.content[0]?.text || '';
+  console.log(`[AI] Claude responded (${text.length} chars)`);
+  return text;
 }
