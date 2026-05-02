@@ -200,20 +200,58 @@ export function initializeDemoData(): void {
   }
 }
 
+
+export function initializeEmptySession(name: string = 'New Decision Session', owner: string = ''): void {
+  // Always wipe storage so no demo data bleeds in
+  localStorage.removeItem('vantage_dq_demo_sessions');
+  const emptySession = {
+    id: 1,
+    slug: 'demo-apac-entry',
+    name: name || 'New Decision Session',
+    decisionStatement: '',
+    context: '',
+    background: '',
+    trigger: '',
+    owner: owner || '',
+    deadline: '',
+    scopeIn: '',
+    scopeOut: '',
+    constraints: '',
+    assumptions: '',
+    successCriteria: '',
+    dqScores: {},
+  };
+  localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify({
+    sessions: [emptySession],
+    issues: [],
+    decisions: [],
+    strategies: [],
+    criteria: [],
+    assessmentScores: [],
+    uncertainties: [],
+    stakeholderEntries: [],
+    riskItems: [],
+    scenarios: [],
+    voiAnalyses: [],
+  }));
+}
+
 export function getDemoData(): ModuleData {
   const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  // If the stored session has no decisionStatement, it's an empty session — don't fall back to demo data
+  const isEmptySession = stored.sessions?.[0] && !stored.sessions[0].decisionStatement;
   return {
     session: stored.sessions?.[0] || DEMO_SESSION,
-    issues: stored.issues || DEMO_ISSUES,
-    decisions: stored.decisions || DEMO_DECISIONS,
-    strategies: stored.strategies || DEMO_STRATEGIES,
-    criteria: stored.criteria || DEMO_CRITERIA,
-    assessmentScores: stored.assessmentScores || DEMO_ASSESSMENT_SCORES,
-    uncertainties: stored.uncertainties || DEMO_UNCERTAINTIES,
-    stakeholderEntries: stored.stakeholderEntries || DEMO_STAKEHOLDERS,
-    riskItems: stored.riskItems || DEMO_RISKS,
-    scenarios: stored.scenarios || DEMO_SCENARIOS,
-    voiAnalyses: stored.voiAnalyses || DEMO_VOI,
+    issues: stored.issues ?? (isEmptySession ? [] : DEMO_ISSUES),
+    decisions: stored.decisions ?? (isEmptySession ? [] : DEMO_DECISIONS),
+    strategies: stored.strategies ?? (isEmptySession ? [] : DEMO_STRATEGIES),
+    criteria: stored.criteria ?? (isEmptySession ? [] : DEMO_CRITERIA),
+    assessmentScores: stored.assessmentScores ?? (isEmptySession ? [] : DEMO_ASSESSMENT_SCORES),
+    uncertainties: stored.uncertainties ?? (isEmptySession ? [] : DEMO_UNCERTAINTIES),
+    stakeholderEntries: stored.stakeholderEntries ?? (isEmptySession ? [] : DEMO_STAKEHOLDERS),
+    riskItems: stored.riskItems ?? (isEmptySession ? [] : DEMO_RISKS),
+    scenarios: stored.scenarios ?? (isEmptySession ? [] : DEMO_SCENARIOS),
+    voiAnalyses: stored.voiAnalyses ?? (isEmptySession ? [] : DEMO_VOI),
     gameTheoryModels: [],
     aiSuggestions: [],
   };

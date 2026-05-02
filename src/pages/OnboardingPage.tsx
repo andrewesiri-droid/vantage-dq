@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { enableDemoMode, initializeDemoData } from '@/lib/demoData';
+import { enableDemoMode, initializeDemoData, initializeEmptySession } from '@/lib/demoData';
 import { useDemoContext } from '@/App';
 import {
   Sparkles, FileText, MessageSquare, Play,
@@ -40,7 +40,7 @@ const MODES = [
     id: 'dq-questions' as Mode,
     icon: MessageSquare,
     color: DS.values.fill,
-    soft: DS.values.soft,
+    soft: DS.valuesSoft,
     title: '5 DQ Questions',
     subtitle: 'Guided framing',
     desc: 'Answer 5 targeted Decision Quality questions. AI uses your answers to frame the decision and seed the key modules. Takes about 5 minutes.',
@@ -85,8 +85,8 @@ export function OnboardingPage() {
   };
 
   const startCleanSlate = () => {
-    enableDemoMode();
-    initializeDemoData();
+    localStorage.setItem('vantage_dq_demo_mode', 'true');
+    initializeEmptySession(sessionName || 'New Decision Session', decisionOwner);
     setDemoMode(true);
     navigate('/session/demo-apac-entry');
   };
@@ -105,26 +105,33 @@ export function OnboardingPage() {
       let parsed: any = {};
       try { parsed = JSON.parse((text.match(/\{[\s\S]*\}/) || ['{}'])[0]); } catch { /**/ }
 
-      enableDemoMode();
-      initializeDemoData();
-      setDemoMode(true);
-      // Store the framing in localStorage for the session to pick up
+      // Initialize empty session with the AI-framed content
+      const sessionTitle = sessionName || parsed.decisionStatement?.slice(0, 60) || 'New Decision Session';
+      localStorage.setItem('vantage_dq_demo_mode', 'true');
+      initializeEmptySession(sessionTitle, decisionOwner || parsed.owner || '');
+      // Now patch the session with AI-extracted framing
       try {
-        const demoData = JSON.parse(localStorage.getItem('vantage-dq-demo') || '{}');
-        demoData.session = { ...demoData.session, ...parsed, name: sessionName || parsed.decisionStatement?.slice(0, 50), owner: decisionOwner || parsed.owner };
-        localStorage.setItem('vantage-dq-demo', JSON.stringify(demoData));
+        const stored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
+        if (stored.sessions?.[0]) {
+          stored.sessions[0] = { ...stored.sessions[0], ...parsed, name: sessionTitle };
+          localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify(stored));
+        }
       } catch { /**/ }
+      setDemoMode(true);
       navigate('/session/demo-apac-entry');
     } catch {
-      startCleanSlate();
+      localStorage.setItem('vantage_dq_demo_mode', 'true');
+      initializeEmptySession(sessionName || 'New Decision Session', decisionOwner);
+      setDemoMode(true);
+      navigate('/session/demo-apac-entry');
     } finally {
       setUploading(false);
     }
   };
 
   const startDeepDive = () => {
-    enableDemoMode();
-    initializeDemoData();
+    localStorage.setItem('vantage_dq_demo_mode', 'true');
+    initializeEmptySession(sessionName || 'New Decision Session', decisionOwner);
     setDemoMode(true);
     navigate('/session/demo-apac-entry');
   };
@@ -271,7 +278,7 @@ export function OnboardingPage() {
                 <span className="text-[10px] font-bold shrink-0" style={{ color: DS.inkDis }}>{step + 1}/{DQ_QUESTIONS.length}</span>
               </div>
 
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: DS.values.soft }}>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: DS.valuesSoft }}>
                 <Target size={22} style={{ color: DS.values.fill }} />
               </div>
               <h2 className="text-lg font-black mb-1" style={{ color: DS.ink }}>{currentQ.label}</h2>
