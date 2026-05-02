@@ -40,7 +40,7 @@ const MODES = [
     id: 'dq-questions' as Mode,
     icon: MessageSquare,
     color: DS.values.fill,
-    soft: DS.valuesSoft,
+    soft: DS.values.soft,
     title: '5 DQ Questions',
     subtitle: 'Guided framing',
     desc: 'Answer 5 targeted Decision Quality questions. AI uses your answers to frame the decision and seed the key modules. Takes about 5 minutes.',
@@ -278,7 +278,7 @@ export function OnboardingPage() {
                 <span className="text-[10px] font-bold shrink-0" style={{ color: DS.inkDis }}>{step + 1}/{DQ_QUESTIONS.length}</span>
               </div>
 
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: DS.valuesSoft }}>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: DS.values.soft }}>
                 <Target size={22} style={{ color: DS.values.fill }} />
               </div>
               <h2 className="text-lg font-black mb-1" style={{ color: DS.ink }}>{currentQ.label}</h2>
