@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { MODULES, DS, TOOLS, type ToolId } from '@/constants';
 import type { ModuleId } from '@/types';
-import { Sparkles, Menu, X, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Users, Wrench, Swords, Presentation, Brain, FileSpreadsheet, PlusSquare } from 'lucide-react';
+import { Sparkles, Menu, X, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Users, Wrench, Swords, Presentation, Brain, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AICoPilot } from './AICoPilot';
 import { WorkshopPanel } from './WorkshopPanel';
@@ -80,47 +80,58 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
         {isSyncing && <RefreshCw size={12} className="text-white/50 animate-spin mr-1" />}
 
         <div className="flex items-center gap-1">
-          {/* Tools dropdown */}
+          {/* Tools dropdown — toggle open/close, each tool toggles on/off */}
           <div className="relative hidden sm:block">
-            <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10" onClick={() => setToolsOpen(!toolsOpen)}>
+            <Button size="sm" variant="ghost"
+              className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10"
+              onClick={() => setToolsOpen(!toolsOpen)}>
               <Wrench size={12} /> Tools
               {activeTool && <span className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: '#4ADE80' }} />}
             </Button>
+
             {toolsOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setToolsOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl shadow-2xl border z-50 overflow-hidden" style={{ borderColor: DS.borderLight }}>
-                  <div className="px-3 py-2 border-b" style={{ background: DS.bg, borderColor: DS.borderLight }}>
+                <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-xl shadow-2xl border z-50 overflow-hidden" style={{ borderColor: DS.borderLight }}>
+                  <div className="px-3 py-2.5 border-b flex items-center justify-between" style={{ background: DS.bg, borderColor: DS.borderLight }}>
                     <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: DS.inkTer }}>Strategic Tools</p>
+                    {activeTool && (
+                      <button onClick={() => { onToolChange?.(null); setToolsOpen(false); }}
+                        className="text-[9px] flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ color: DS.danger, background: DS.dangerSoft }}>
+                        <X size={9} /> Close tool
+                      </button>
+                    )}
                   </div>
                   {TOOLS.map(tool => {
                     const ToolIcon = TOOL_ICONS[tool.id] || Wrench;
                     const isActive = activeTool === tool.id;
                     return (
-                      <button key={tool.id} className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
-                        onClick={() => { onToolChange?.(isActive ? null : tool.id); setToolsOpen(false); }}>
-                        <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5" style={{ background: tool.color + '18' }}>
-                          <ToolIcon size={14} style={{ color: tool.color }} />
+                      <button key={tool.id}
+                        className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50 border-b last:border-b-0"
+                        style={{ borderColor: DS.borderLight, background: isActive ? `${tool.color}10` : undefined }}
+                        onClick={() => {
+                          // Toggle: if already active, deactivate. Otherwise activate.
+                          onToolChange?.(isActive ? null : tool.id);
+                          setToolsOpen(false);
+                        }}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: isActive ? tool.color : tool.color + '18' }}>
+                          <ToolIcon size={15} style={{ color: isActive ? '#fff' : tool.color }} />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[11px] font-semibold" style={{ color: DS.ink }}>{tool.label}</span>
-                            {isActive && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#4ADE80' }} />}
+                            <span className="text-[11px] font-semibold" style={{ color: isActive ? tool.color : DS.ink }}>{tool.label}</span>
+                            {isActive && (
+                              <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white" style={{ background: tool.color }}>ACTIVE</span>
+                            )}
                           </div>
-                          <p className="text-[9px] mt-0.5 leading-relaxed" style={{ color: DS.inkTer }}>{tool.description}</p>
+                          <p className="text-[9px] mt-0.5 leading-relaxed" style={{ color: DS.inkTer }}>
+                            {isActive ? 'Click to close this tool' : tool.description}
+                          </p>
                         </div>
+                        {isActive && <X size={13} className="shrink-0 mt-1" style={{ color: tool.color }} />}
                       </button>
                     );
                   })}
-                  {activeTool && onToolChange && (
-                    <>
-                      <div className="border-t" style={{ borderColor: DS.borderLight }} />
-                      <button className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
-                        onClick={() => { onToolChange(null); setToolsOpen(false); }}>
-                        <span className="text-[10px]" style={{ color: DS.inkTer }}>← Return to Modules</span>
-                      </button>
-                    </>
-                  )}
                 </div>
               </>
             )}
@@ -172,6 +183,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
   );
 }
 
+// Sidebar — NO Strategic Tools section, just modules
 function SidebarContent({ activeModule, onModuleChange, activeTool, onToolChange }: {
   activeModule: ModuleId;
   onModuleChange: (id: ModuleId) => void;
@@ -192,25 +204,7 @@ function SidebarContent({ activeModule, onModuleChange, activeTool, onToolChange
       {MODULES.filter(m => m.phase === 2).map(m => (
         <ModuleButton key={m.id} module={m} active={activeModule === m.id && !activeTool} onClick={() => { onModuleChange(m.id); onToolChange?.(null); }} />
       ))}
-
-      {/* Tools section in sidebar */}
-      <div className="mt-auto border-t mx-3 pt-3 pb-2" style={{ borderColor: DS.borderLight }}>
-        <p className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: DS.inkDis }}>Strategic Tools</p>
-        {TOOLS.map(tool => {
-          const isActive = activeTool === tool.id;
-          return (
-            <button key={tool.id} onClick={() => onToolChange?.(isActive ? null : tool.id)}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md mb-0.5 text-left transition-all"
-              style={{ background: isActive ? tool.color + '18' : 'transparent' }}>
-              <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ background: isActive ? tool.color : DS.bg }}>
-                <Wrench size={9} style={{ color: isActive ? '#fff' : DS.inkDis }} />
-              </div>
-              <span className="text-[10px] font-medium truncate" style={{ color: isActive ? tool.color : DS.inkSub }}>{tool.label}</span>
-              {isActive && <span className="w-1.5 h-1.5 rounded-full ml-auto shrink-0" style={{ background: '#4ADE80' }} />}
-            </button>
-          );
-        })}
-      </div>
+      {/* Strategic Tools removed from sidebar — use Tools in top bar */}
     </div>
   );
 }
