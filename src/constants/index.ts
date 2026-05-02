@@ -179,6 +179,16 @@ export const IMPACT_LEVELS = ['Critical', 'High', 'Medium', 'Low'];
 export const CONTROL_LEVELS = ['High', 'Some', 'Low', 'None'];
 
 // Workshop phases per manual
+// ============================================
+// TOOLS — Top-bar dropdown (not sidebar)
+// ============================================
+export const TOOLS: { id: import('@/types').ToolId; label: string; description: string; color: string }[] = [
+  { id: 'game-theory', label: 'Strategic Gaming', description: 'Game theory analysis — players, incentives, equilibria, reactions', color: '#7C3AED' },
+  { id: 'workshop', label: 'Workshop Mode', description: 'Collaborative team workshop with real-time facilitation', color: '#0891B2' },
+  { id: 'new-workspace', label: 'New Workspace', description: 'Create a fresh decision workspace', color: '#10B981' },
+  { id: 'export-advanced', label: 'Advanced Export', description: 'Export to Excel, PowerPoint, PDF with full formatting', color: '#F59E0B' },
+];
+
 export const WORKSHOP_PHASES = [
   { id: 'p1', label: 'Decision Context', time: 10, desc: 'Align the room on what decision is being made' },
   { id: 'p2', label: 'Stakeholder Mapping', time: 15, desc: 'Map who has a stake, who decides, who must act' },

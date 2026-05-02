@@ -1,29 +1,40 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { MODULES, DS } from '@/constants';
-import type { ModuleId } from '@/types';
-import { Sparkles, Menu, X, Users, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw } from 'lucide-react';
+import { MODULES, TOOLS, DS } from '@/constants';
+import type { ModuleId, ToolId } from '@/types';
+import { Sparkles, Menu, X, Users, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Wrench, Swords, Presentation, FileSpreadsheet, PlusSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AIPanel } from './AIPanel';
 import { WorkshopPanel } from './WorkshopPanel';
+
+const TOOL_ICONS: Record<string, typeof Wrench> = {
+  'game-theory': Swords,
+  'workshop': Presentation,
+  'new-workspace': PlusSquare,
+  'export-advanced': FileSpreadsheet,
+};
 
 interface AppShellProps {
   sessionName: string;
   sessionId?: number;
   activeModule: ModuleId;
   onModuleChange: (id: ModuleId) => void;
+  activeTool?: ToolId | null;
+  onToolChange?: (id: ToolId | null) => void;
   isSyncing?: boolean;
   children: React.ReactNode;
 }
 
-export function AppShell({ sessionName, sessionId, activeModule, onModuleChange, isSyncing, children }: AppShellProps) {
+export function AppShell({ sessionName, sessionId, activeModule, onModuleChange, activeTool, onToolChange, isSyncing, children }: AppShellProps) {
   const navigate = useNavigate();
   const [aiOpen, setAiOpen] = useState(false);
   const [workshopOpen, setWorkshopOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   const currentModule = MODULES.find(m => m.id === activeModule)!;
+  const currentTool = activeTool ? TOOLS.find(t => t.id === activeTool) : null;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ background: DS.bg }}>
@@ -53,8 +64,17 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
         </div>
 
         <div className="flex items-center gap-2 mr-2">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white" style={{ background: DS.accent }}>{currentModule.num}</span>
-          <span className="text-[11px] text-white font-medium hidden sm:inline">{currentModule.label}</span>
+          {currentTool ? (
+            <>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white" style={{ background: currentTool.color }}>TOOL</span>
+              <span className="text-[11px] text-white font-medium hidden sm:inline">{currentTool.label}</span>
+            </>
+          ) : (
+            <>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white" style={{ background: DS.accent }}>{currentModule.num}</span>
+              <span className="text-[11px] text-white font-medium hidden sm:inline">{currentModule.label}</span>
+            </>
+          )}
         </div>
 
         {isSyncing && (
@@ -64,9 +84,61 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
         )}
 
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setWorkshopOpen(true)}>
-            <Users size={12} /> Workshop
-          </Button>
+          {/* Tools Dropdown */}
+          <div className="relative hidden sm:block">
+            <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10" onClick={() => setToolsOpen(!toolsOpen)}>
+              <Wrench size={12} /> Tools
+              {activeTool && <span className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: '#4ADE80' }} />}
+            </Button>
+            {toolsOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setToolsOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border z-50 overflow-hidden">
+                  <div className="px-3 py-2 border-b" style={{ background: '#F8FAFC' }}>
+                    <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: DS.inkTer }}>Strategic Tools</p>
+                  </div>
+                  {TOOLS.map(tool => {
+                    const ToolIcon = TOOL_ICONS[tool.id] || Wrench;
+                    const isActive = activeTool === tool.id;
+                    return (
+                      <button key={tool.id} className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
+                        onClick={() => {
+                          if (tool.id === 'workshop') {
+                            setWorkshopOpen(true);
+                            setToolsOpen(false);
+                          } else if (onToolChange) {
+                            onToolChange(isActive ? null : tool.id);
+                            setToolsOpen(false);
+                          }
+                        }}>
+                        <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5" style={{ background: tool.color + '15' }}>
+                          <ToolIcon size={14} style={{ color: tool.color }} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-semibold" style={{ color: DS.ink }}>{tool.label}</span>
+                            {isActive && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#4ADE80' }} />}
+                          </div>
+                          <p className="text-[9px] mt-0.5 leading-relaxed" style={{ color: DS.inkTer }}>{tool.description}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {activeTool && onToolChange && (
+                    <>
+                      <div className="border-t" />
+                      <button className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors" onClick={() => { onToolChange(null); setToolsOpen(false); }}>
+                        <span className="text-[10px]" style={{ color: DS.inkTer }}>← Return to Modules</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="w-px h-4 bg-white/20 hidden sm:block" />
+
           <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setAiOpen(true)}>
             <Bot size={12} /> AI
           </Button>

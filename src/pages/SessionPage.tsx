@@ -5,9 +5,10 @@ import { useSessionData } from '@/hooks/useSessionData';
 import { useDemoContext } from '@/App';
 import { demoApi, getDemoData, isDemoMode } from '@/lib/demoData';
 import { MODULES, DS } from '@/constants';
-import type { ModuleId, ModuleData } from '@/types';
+import type { ModuleId, ToolId, ModuleData } from '@/types';
 import { AppShell } from '@/components/layout/AppShell';
 import { AISuggestionsPanel } from '@/components/layout/AISuggestionsPanel';
+import { GameTheory } from '@/components/tools';
 import { ProblemFrame } from '@/components/modules/ProblemFrame';
 import { IssueGeneration } from '@/components/modules/IssueGeneration';
 import { DecisionHierarchy } from '@/components/modules/DecisionHierarchy';
@@ -20,6 +21,10 @@ import { InfluenceDiagram } from '@/components/modules/InfluenceDiagram';
 import { ScenarioPlanning } from '@/components/modules/ScenarioPlanning';
 import { ValueOfInformation } from '@/components/modules/ValueOfInformation';
 import { DecisionRiskTimeline } from '@/components/modules/DecisionRiskTimeline';
+
+const TOOL_COMPONENTS: Record<string, React.ComponentType<any>> = {
+  'game-theory': GameTheory,
+};
 
 const MODULE_COMPONENTS: Record<ModuleId, React.ComponentType<any>> = {
   problem: ProblemFrame,
@@ -82,23 +87,29 @@ export function SessionPage() {
   const { slug } = useParams<{ slug: string }>()
 ;
   const [activeModule, setActiveModule] = useState<ModuleId>('problem');
+  const [activeTool, setActiveTool] = useState<ToolId | null>(null);
   const { demoMode } = useDemoContext();
+
+  const handleModuleChange = (id: ModuleId) => {
+    setActiveModule(id);
+    setActiveTool(null);
+  };
 
   // Demo mode: use localStorage data directly
   if (demoMode || isDemoMode()) {
-    return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={setActiveModule} />;
+    return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={setActiveTool} />;
   }
 
   // Normal mode: use tRPC + backend
-  return <BackendSessionPage slug={slug || ''} activeModule={activeModule} setActiveModule={setActiveModule} />;
+  return <BackendSessionPage slug={slug || ''} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={setActiveTool} />;
 }
 
-function DemoSessionPage({ slug, activeModule, setActiveModule }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void }) {
+function DemoSessionPage({ slug, activeModule, setActiveModule, activeTool, setActiveTool }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void; activeTool: ToolId | null; setActiveTool: (t: ToolId | null) => void }) {
   const data = getDemoData();
   const hooks = useDemoHooks(data.session.id);
   const sessionName = data.session?.name || 'Demo Session';
-  const ModuleComponent = MODULE_COMPONENTS[activeModule];
-  const currentModule = MODULES.find(m => m.id === activeModule)!;
+
+  const ActiveComponent = activeTool ? TOOL_COMPONENTS[activeTool] : MODULE_COMPONENTS[activeModule];
 
   return (
     <AppShell
@@ -106,15 +117,17 @@ function DemoSessionPage({ slug, activeModule, setActiveModule }: { slug: string
       sessionId={data.session.id}
       activeModule={activeModule}
       onModuleChange={setActiveModule}
+      activeTool={activeTool}
+      onToolChange={setActiveTool}
       isSyncing={false}
     >
-      <AISuggestionsPanel sessionId={data.session.id} module={activeModule} />
-      <ModuleComponent sessionId={data.session.id} data={data} hooks={hooks} />
+      {!activeTool && <AISuggestionsPanel sessionId={data.session.id} module={activeModule} />}
+      <ActiveComponent sessionId={data.session.id} data={data} hooks={hooks} />
     </AppShell>
   );
 }
 
-function BackendSessionPage({ slug, activeModule, setActiveModule }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void }) {
+function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, setActiveTool }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void; activeTool: ToolId | null; setActiveTool: (t: ToolId | null) => void }) {
   const { data: sessionMeta } = trpc.session.getBySlug.useQuery(
     { slug },
     { enabled: !!slug }
@@ -135,7 +148,7 @@ function BackendSessionPage({ slug, activeModule, setActiveModule }: { slug: str
     );
   }
 
-  const ModuleComponent = MODULE_COMPONENTS[activeModule];
+  const ActiveComponent = activeTool ? TOOL_COMPONENTS[activeTool] : MODULE_COMPONENTS[activeModule];
 
   return (
     <AppShell
@@ -143,10 +156,12 @@ function BackendSessionPage({ slug, activeModule, setActiveModule }: { slug: str
       sessionId={sessionId}
       activeModule={activeModule}
       onModuleChange={setActiveModule}
+      activeTool={activeTool}
+      onToolChange={setActiveTool}
       isSyncing={sessionData.isLoading}
     >
-      {sessionId && <AISuggestionsPanel sessionId={sessionId} module={activeModule} />}
-      <ModuleComponent sessionId={sessionId} data={sessionData.data} hooks={sessionData} />
+      {sessionId && !activeTool && <AISuggestionsPanel sessionId={sessionId} module={activeModule} />}
+      <ActiveComponent sessionId={sessionId} data={sessionData.data} hooks={sessionData} />
     </AppShell>
   );
 }

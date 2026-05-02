@@ -1,0 +1,1 @@
+export { GameTheory } from './GameTheory';
