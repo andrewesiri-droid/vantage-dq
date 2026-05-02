@@ -98,7 +98,8 @@ export const ISSUE_CATEGORIES = [
   { key: 'regulatory-trap', label: 'Regulatory Trap', short: 'Reg', icon: 'R', desc: 'Hidden regulatory or compliance risk', color: '#D97706', soft: '#FFFBEB' },
   { key: 'second-order', label: 'Second-Order Effect', short: '2nd', icon: '2', desc: 'Indirect consequences not immediately visible', color: '#6366F1', soft: '#EEF2FF' },
   { key: 'black-swan', label: 'Black Swan', short: 'Sw', icon: 'B', desc: 'Low probability, extreme impact event', color: '#1E293B', soft: '#F1F5F9' },
-  { key: 'focus-decision', label: 'Focus Decision', short: 'Foc', icon: 'F', desc: 'Core strategic choice to promote to hierarchy', color: '#2563EB', soft: '#EFF6FF' },
+  { key: "focus-decision", label: "Focus Decision", short: "Foc", icon: "F", desc: "Core strategic choice to promote to hierarchy", color: "#2563EB", soft: "#EFF6FF" },
+  { key: "option-forgotten", label: "Forgotten Option", short: "Opt", icon: "O", desc: "Upside or option that has been overlooked", color: "#10B981", soft: "#ECFDF5" },
   { key: 'option-forgotten', label: 'Forgotten Option', short: 'Opt', icon: 'O', desc: 'Upside or option that has been overlooked', color: '#10B981', soft: '#ECFDF5' },
 ];
 
