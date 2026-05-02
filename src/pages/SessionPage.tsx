@@ -8,7 +8,7 @@ import { MODULES, DS } from '@/constants';
 import type { ModuleId, ToolId, ModuleData } from '@/types';
 import { AppShell } from '@/components/layout/AppShell';
 import { AISuggestionsPanel } from '@/components/layout/AISuggestionsPanel';
-import { GameTheory } from '@/components/tools';
+import { GameTheory, WorkshopMode } from '@/components/tools';
 import { ProblemFrame } from '@/components/modules/ProblemFrame';
 import { IssueGeneration } from '@/components/modules/IssueGeneration';
 import { DecisionHierarchy } from '@/components/modules/DecisionHierarchy';
@@ -24,6 +24,7 @@ import { DecisionRiskTimeline } from '@/components/modules/DecisionRiskTimeline'
 
 const TOOL_COMPONENTS: Record<string, React.ComponentType<any>> = {
   'game-theory': GameTheory,
+  'workshop': WorkshopMode,
 };
 
 const MODULE_COMPONENTS: Record<ModuleId, React.ComponentType<any>> = {

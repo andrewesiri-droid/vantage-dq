@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { GitBranch, Plus, Trash2, Lock, Star, PauseCircle } from 'lucide-react';
+import { GitBranch, Plus, Trash2, Lock, Star, PauseCircle, BrainCircuit, CheckCircle2, AlertTriangle, Lightbulb } from 'lucide-react';
 
 interface DecisionItem { id: number; label: string; choices: string[]; tier: string; owner: string; rationale: string; }
 
@@ -28,6 +28,7 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
   const [decisions, setDecisions] = useState<DecisionItem[]>(DEMO_DECISIONS);
   const [newLabel, setNewLabel] = useState('');
   const [newTier, setNewTier] = useState('focus');
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     if (data?.decisions && data.decisions.length > 0) {
@@ -54,12 +55,48 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
-          <GitBranch size={22} style={{ color: DS.accent }} /> Decision Hierarchy
-        </h2>
-        <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{decisions.length} decisions &middot; {focusCount}/5 focus &middot; {decisions.filter(d => d.tier === 'given').length} given &middot; {decisions.filter(d => d.tier === 'deferred').length} deferred</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
+            <GitBranch size={22} style={{ color: DS.accent }} /> Decision Hierarchy
+          </h2>
+          <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{decisions.length} decisions &middot; {focusCount}/5 focus &middot; {decisions.filter(d => d.tier === 'given').length} given &middot; {decisions.filter(d => d.tier === 'deferred').length} deferred</p>
+        </div>
+        <Button size="sm" variant="outline" className="h-8 text-[10px] gap-1" onClick={() => setAiOpen(!aiOpen)}>
+          <BrainCircuit size={12} /> {aiOpen ? 'Hide AI' : 'AI Analysis'}
+        </Button>
       </div>
+
+      {/* AI Panel */}
+      {aiOpen && (
+        <Card className="border-0 shadow-md" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 100%)`, borderLeft: `4px solid #7C3AED` }}>
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center gap-2"><BrainCircuit size={14} style={{ color: '#7C3AED' }} /><span className="text-xs font-bold" style={{ color: '#6D28D9' }}>AI Structure Analysis</span></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {focusCount > 5 ? (
+                <div className="p-2.5 rounded-lg" style={{ background: '#FEF2F2' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#DC2626' }}><AlertTriangle size={10} className="inline mr-1" /> Focus Five Exceeded</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>{focusCount} focus decisions exceeds the recommended 5. Cognitive overload risk. Consider deferring lower-priority decisions.</p>
+                </div>
+              ) : focusCount === 5 ? (
+                <div className="p-2.5 rounded-lg" style={{ background: '#ECFDF5' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#059669' }}><CheckCircle2 size={10} className="inline mr-1" /> Focus Five Full</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Exactly 5 focus decisions. At capacity — any new focus decision should trigger a deferral.</p>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-lg" style={{ background: '#F0FDFA' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#059669' }}><CheckCircle2 size={10} className="inline mr-1" /> Focus Capacity Available</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>{5 - focusCount} slots remaining in Focus Five. Ensure all focus decisions have defined choices.</p>
+                </div>
+              )}
+              <div className="p-2.5 rounded-lg" style={{ background: '#FFFBEB' }}>
+                <p className="text-[10px] font-semibold" style={{ color: '#D97706' }}><Lightbulb size={10} className="inline mr-1" /> Recommendation</p>
+                <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>{decisions.filter(d => d.tier === 'focus' && d.choices.length < 2).length} focus decisions have fewer than 2 choices. Add alternatives to enable meaningful trade-offs.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex items-center gap-2">
         {[0, 1, 2, 3, 4].map(i => (

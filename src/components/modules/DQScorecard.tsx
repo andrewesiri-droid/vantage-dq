@@ -4,11 +4,12 @@ import { DS, DQ_ELEMENTS, DQ_SCORE_BANDS } from '@/constants';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Award, TrendingUp, Zap, ChevronRight } from 'lucide-react';
+import { Award, TrendingUp, Zap, ChevronRight, BrainCircuit, CheckCircle2, AlertTriangle, Lightbulb } from 'lucide-react';
 
 export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
   const [scores, setScores] = useState<Record<string, number>>({});
   const [activeElement, setActiveElement] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     if (data?.session?.dqScores) {
@@ -52,12 +53,50 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
-          <Award size={22} style={{ color: DS.commitment.fill }} /> DQ Scorecard
-        </h2>
-        <p className="text-xs mt-1" style={{ color: DS.inkSub }}>Score each element 0–100. A decision is only as strong as its weakest element.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
+            <Award size={22} style={{ color: DS.commitment.fill }} /> DQ Scorecard
+          </h2>
+          <p className="text-xs mt-1" style={{ color: DS.inkSub }}>Score each element 0–100. A decision is only as strong as its weakest element.</p>
+        </div>
+        <Button size="sm" variant="outline" className="h-8 text-[10px] gap-1" onClick={() => setAiOpen(!aiOpen)}>
+          <BrainCircuit size={12} /> {aiOpen ? 'Hide AI' : 'AI Analysis'}
+        </Button>
       </div>
+
+      {/* AI Panel */}
+      {aiOpen && (
+        <Card className="border-0 shadow-md" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 100%)`, borderLeft: `4px solid #7C3AED` }}>
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center gap-2"><BrainCircuit size={14} style={{ color: '#7C3AED' }} /><span className="text-xs font-bold" style={{ color: '#6D28D9' }}>AI DQ Analysis</span></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {overall < 50 ? (
+                <div className="p-2.5 rounded-lg" style={{ background: '#FEF2F2' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#DC2626' }}><AlertTriangle size={10} className="inline mr-1" /> Decision Not Ready</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Overall DQ score of {overall} is below 50. This decision requires significant improvement before commitment.</p>
+                </div>
+              ) : overall < 70 ? (
+                <div className="p-2.5 rounded-lg" style={{ background: '#FFFBEB' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#D97706' }}><AlertTriangle size={10} className="inline mr-1" /> Decision Adequate</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Overall DQ score of {overall} is adequate but not strong. Address the weakest element before commitment.</p>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-lg" style={{ background: '#ECFDF5' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#059669' }}><CheckCircle2 size={10} className="inline mr-1" /> Decision Strong</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Overall DQ score of {overall} indicates a well-structured decision. Continue to monitor the weakest element.</p>
+                </div>
+              )}
+              {minEl && (
+                <div className="p-2.5 rounded-lg" style={{ background: '#F0FDFA' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#059669' }}><Lightbulb size={10} className="inline mr-1" /> Priority Action</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Improve <strong>{minEl.label}</strong> (currently {minEntry[1]}). This is your biggest lever for increasing overall decision quality.</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-0 shadow-lg" style={{ background: `linear-gradient(135deg, ${band.soft} 0%, ${DS.canvas} 100%)`, borderTop: `4px solid ${band.color}` }}>

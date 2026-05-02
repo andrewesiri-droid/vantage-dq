@@ -6,6 +6,7 @@ import { Sparkles, Menu, X, Users, Bot, ChevronLeft, PanelLeftClose, PanelLeft, 
 import { Button } from '@/components/ui/button';
 import { AIPanel } from './AIPanel';
 import { WorkshopPanel } from './WorkshopPanel';
+import { AICoPilot } from './AICoPilot';
 
 const TOOL_ICONS: Record<string, typeof Wrench> = {
   'game-theory': Swords,
@@ -32,6 +33,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [coPilotOpen, setCoPilotOpen] = useState(true);
 
   const currentModule = MODULES.find(m => m.id === activeModule)!;
   const currentTool = activeTool ? TOOLS.find(t => t.id === activeTool) : null;
@@ -103,10 +105,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
                     return (
                       <button key={tool.id} className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
                         onClick={() => {
-                          if (tool.id === 'workshop') {
-                            setWorkshopOpen(true);
-                            setToolsOpen(false);
-                          } else if (onToolChange) {
+                          if (onToolChange) {
                             onToolChange(isActive ? null : tool.id);
                             setToolsOpen(false);
                           }
@@ -172,6 +171,8 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
             {children}
           </div>
         </main>
+        {/* AI Co-Pilot Sidebar */}
+        <AICoPilot module={activeModule} sessionId={sessionId} collapsed={!coPilotOpen} onToggle={() => setCoPilotOpen(!coPilotOpen)} />
       </div>
 
       {aiOpen && <AIPanel onClose={() => setAiOpen(false)} module={activeModule} sessionId={sessionId} />}

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table2, Plus, Trash2, Layers, CheckCircle } from 'lucide-react';
+import { Table2, Plus, Trash2, Layers, CheckCircle, BrainCircuit, CheckCircle2, AlertTriangle, Lightbulb } from 'lucide-react';
 
 interface StrategyItem { id: number; name: string; description: string; colorIdx: number; selections: Record<string, number>; }
 
@@ -21,6 +21,7 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
   const [strategies, setStrategies] = useState<StrategyItem[]>(DEMO_STRATEGIES);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [aiOpen, setAiOpen] = useState(false);
 
   const focusDecisions = (data?.decisions || []).filter((d: any) => d.tier === 'focus').map((d: any) => ({
     id: String(d.id), label: d.label, choices: d.choices || ['Option A', 'Option B'],
@@ -81,12 +82,43 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
-          <Table2 size={22} style={{ color: DS.alternatives.fill }} /> Strategy Table
-        </h2>
-        <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{strategies.length} strategies &middot; {focusDecisions.length} focus decisions</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
+            <Table2 size={22} style={{ color: DS.alternatives.fill }} /> Strategy Table
+          </h2>
+          <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{strategies.length} strategies &middot; {focusDecisions.length} focus decisions</p>
+        </div>
+        <Button size="sm" variant="outline" className="h-8 text-[10px] gap-1" onClick={() => setAiOpen(!aiOpen)}>
+          <BrainCircuit size={12} /> {aiOpen ? 'Hide AI' : 'AI Analysis'}
+        </Button>
       </div>
+
+      {/* AI Panel */}
+      {aiOpen && (
+        <Card className="border-0 shadow-md" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 100%)`, borderLeft: `4px solid #7C3AED` }}>
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center gap-2"><BrainCircuit size={14} style={{ color: '#7C3AED' }} /><span className="text-xs font-bold" style={{ color: '#6D28D9' }}>AI Strategy Analysis</span></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {strategies.length < 2 ? (
+                <div className="p-2.5 rounded-lg" style={{ background: '#FEF2F2' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#DC2626' }}><AlertTriangle size={10} className="inline mr-1" /> Insufficient Strategies</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Only {strategies.length} strategy defined. You need at least 2 genuinely distinct alternatives.</p>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-lg" style={{ background: '#ECFDF5' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#059669' }}><CheckCircle2 size={10} className="inline mr-1" /> {strategies.length} Strategies Defined</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Good set size. Check distinctiveness to ensure alternatives are genuinely different.</p>
+                </div>
+              )}
+              <div className="p-2.5 rounded-lg" style={{ background: '#FFFBEB' }}>
+                <p className="text-[10px] font-semibold" style={{ color: '#D97706' }}><Lightbulb size={10} className="inline mr-1" /> Distinctiveness Tip</p>
+                <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>If all strategies choose the same option for a decision, that decision is effectively "given" — move it up the hierarchy.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="builder">
         <TabsList className="text-[10px]">

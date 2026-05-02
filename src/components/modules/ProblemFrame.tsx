@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Edit2, Check, X, Target, AlertCircle, Calendar, User, Users, Lightbulb, ChevronRight, Shield, Save } from 'lucide-react';
+import { Edit2, Check, X, Target, AlertCircle, Calendar, User, Users, Lightbulb, ChevronRight, Shield, Save, BrainCircuit } from 'lucide-react';
 
 const FIELDS = [
   { key: 'decisionStatement', label: 'Decision Statement', placeholder: 'How should we [decide] over [timeframe]?', required: true },
@@ -29,6 +29,7 @@ interface Props {
 
 export function ProblemFrame({ sessionId, data, hooks }: Props) {
   const [editing, setEditing] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [dataState, setDataState] = useState<Record<string, string>>({
     decisionStatement: 'How should we expand into the APAC market over the next 3 years?',
     context: 'We operate in North America and Europe. APAC is our largest growth opportunity. The board approved a $25M capital envelope for Year 1.',
@@ -118,7 +119,11 @@ export function ProblemFrame({ sessionId, data, hooks }: Props) {
             {sessionId && <span className="ml-2" style={{ color: DS.accent }}>● Synced to database</span>}
           </p>
         </div>
-        {editing ? (
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="h-8 text-[10px] gap-1" onClick={() => setAiOpen(!aiOpen)}>
+            <BrainCircuit size={12} /> {aiOpen ? 'Hide AI' : 'AI Analysis'}
+          </Button>
+          {editing ? (
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={cancelEdit} disabled={saving}><X size={12} /></Button>
             <Button size="sm" onClick={saveEdit} disabled={saving}>
@@ -129,6 +134,46 @@ export function ProblemFrame({ sessionId, data, hooks }: Props) {
           <Button size="sm" variant="outline" onClick={startEdit} className="gap-1"><Edit2 size={12} /> Edit</Button>
         )}
       </div>
+      </div>
+
+      {/* AI Analysis Panel */}
+      {aiOpen && (
+        <Card className="border-0 shadow-md" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 100%)`, borderLeft: `4px solid #7C3AED` }}>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <BrainCircuit size={14} style={{ color: '#7C3AED' }} />
+              <span className="text-xs font-bold" style={{ color: '#6D28D9' }}>AI Frame Analysis</span>
+              <Badge variant="outline" className="text-[9px] h-4 ml-auto" style={{ color: '#7C3AED', borderColor: '#DDD6FE' }}>{passedCount}/{FRAME_DIMENSIONS.length} checks passed</Badge>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {passedCount === FRAME_DIMENSIONS.length ? (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: '#ECFDF5' }}>
+                  <Check size={12} style={{ color: '#059669', marginTop: 2 }} />
+                  <div>
+                    <p className="text-[10px] font-semibold" style={{ color: '#059669' }}>Strong Frame</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>All frame checks pass. Decision statement is a genuine open question with clear scope and constraints.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: '#FFFBEB' }}>
+                  <AlertCircle size={12} style={{ color: '#D97706', marginTop: 2 }} />
+                  <div>
+                    <p className="text-[10px] font-semibold" style={{ color: '#D97706' }}>Frame Gaps Detected</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>{FRAME_DIMENSIONS.length - passedCount} checks failed. Strengthen the problem frame before committing resources.</p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: '#F0FDFA' }}>
+                <Lightbulb size={12} style={{ color: '#059669', marginTop: 2 }} />
+                <div>
+                  <p className="text-[10px] font-semibold" style={{ color: '#059669' }}>Recommendation</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>{display.decisionStatement?.includes('?') ? 'Decision statement is well-formed. Ensure stakeholders agree on scope boundaries.' : 'Decision statement should be a genuine open question ending with "?"'}</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Frame Check */}
       <Card className="overflow-hidden border-0 shadow-lg" style={{ background: `linear-gradient(135deg, ${DS.frame.soft} 0%, ${DS.canvas} 100%)` }}>

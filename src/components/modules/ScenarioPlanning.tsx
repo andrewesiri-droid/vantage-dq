@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Compass, Plus, Trash2 } from 'lucide-react';
+import { Compass, Plus, Trash2, BrainCircuit, CheckCircle2, AlertTriangle, Lightbulb } from 'lucide-react';
 
 interface ScenItem { id: number; name: string; description: string; probability: number; drivers: string[]; color: string; }
 
@@ -21,6 +21,7 @@ export function ScenarioPlanning({ sessionId, data, hooks }: ModuleProps) {
   const [scenarios, setScenarios] = useState<ScenItem[]>(DEMO_SCENARIOS);
   const [newName, setNewName] = useState('');
   const [newProb, setNewProb] = useState('0.33');
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     if (data?.scenarios && data.scenarios.length > 0) {
@@ -49,12 +50,44 @@ export function ScenarioPlanning({ sessionId, data, hooks }: ModuleProps) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
-          <Compass size={22} style={{ color: DS.reasoning.fill }} /> Scenario Planning
-        </h2>
-        <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{scenarios.length} scenarios &middot; Total probability: {(totalProb * 100).toFixed(0)}%</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
+            <Compass size={22} style={{ color: DS.reasoning.fill }} /> Scenario Planning
+          </h2>
+          <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{scenarios.length} scenarios &middot; Total probability: {(totalProb * 100).toFixed(0)}%</p>
+        </div>
+        <Button size="sm" variant="outline" className="h-8 text-[10px] gap-1" onClick={() => setAiOpen(!aiOpen)}>
+          <BrainCircuit size={12} /> {aiOpen ? 'Hide AI' : 'AI Analysis'}
+        </Button>
       </div>
+
+      {/* AI Panel */}
+      {aiOpen && (
+        <Card className="border-0 shadow-md" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 100%)`, borderLeft: `4px solid #7C3AED` }}>
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center gap-2"><BrainCircuit size={14} style={{ color: '#7C3AED' }} /><span className="text-xs font-bold" style={{ color: '#6D28D9' }}>AI Scenario Analysis</span></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {Math.abs(totalProb - 1) > 0.05 ? (
+                <div className="p-2.5 rounded-lg" style={{ background: '#FEF2F2' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#DC2626' }}><AlertTriangle size={10} className="inline mr-1" /> Probability Mismatch</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Total probability is {(totalProb * 100).toFixed(0)}% (should be 100%). Adjust scenario weights.</p>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-lg" style={{ background: '#ECFDF5' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#059669' }}><CheckCircle2 size={10} className="inline mr-1" /> Probabilities Valid</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>Scenarios sum to 100%. Good foundation for decision analysis.</p>
+                </div>
+              )}
+              <div className="p-2.5 rounded-lg" style={{ background: '#FFFBEB' }}>
+                <p className="text-[10px] font-semibold" style={{ color: '#D97706' }}><Lightbulb size={10} className="inline mr-1" /> Recommendation</p>
+                <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>{scenarios.length < 3 ? 'Add at least 3 scenarios (Bull/Base/Bear) to cover the uncertainty range.' : scenarios.length > 5 ? 'More than 5 scenarios may complicate analysis. Consider merging similar futures.' : 'Scenario set is well-sized. Test each strategy against all scenarios to assess robustness.'}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="border-0 shadow-sm" style={{ background: `linear-gradient(135deg, ${DS.reasoning.soft} 0%, ${DS.canvas} 100%)`, borderLeft: `4px solid ${DS.reasoning.fill}` }}>
         <CardContent className="pt-4 flex gap-2">
           <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Scenario name" className="text-xs bg-white flex-1" />
