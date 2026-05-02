@@ -82,14 +82,14 @@ export function GameTheoryModule({ sessionId, data, hooks }: ModuleProps) {
       <Card><CardContent className="pt-4 overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr style={{ background: DS.canvasAlt }}>
+            <tr style={{ background: DS.canvas }}>
               <th className="p-2 text-left font-semibold" style={{ color: DS.inkSub }}>{players[0]} \ {players[1]}</th>
               {p2Strats.map((s, j) => <th key={j} className="p-2 text-center font-medium min-w-[100px]" style={{ color: DS.inkSub }}>{s}</th>)}
             </tr>
           </thead>
           <tbody>
             {p1Strats.map((s1, i) => (
-              <tr key={i} className="border-t" style={{ borderColor: DS.canvasBdr }}>
+              <tr key={i} className="border-t" style={{ borderColor: DS.border }}>
                 <td className="p-2 font-medium" style={{ color: DS.ink }}>{s1}</td>
                 {p2Strats.map((s2, j) => {
                   const [p1, p2] = payoffs[`${i}_${j}`] || [0, 0];
@@ -101,7 +101,7 @@ export function GameTheoryModule({ sessionId, data, hooks }: ModuleProps) {
                         <span style={{ color: DS.inkDis }}>,</span>
                         <input type="number" value={p2} onChange={e => updatePayoff(i, j, 1, parseInt(e.target.value) || 0)} className="w-10 text-center text-[10px] border rounded p-0.5" />
                       </div>
-                      {isEq && <Badge style={{ background: DS.accentSoft, color: DS.accentDim }} variant="outline" className="text-[8px] h-4 mt-1">Nash Eq</Badge>}
+                      {isEq && <Badge style={{ background: DS.accentSoft, color: DS.accentLight }} variant="outline" className="text-[8px] h-4 mt-1">Nash Eq</Badge>}
                     </td>
                   );
                 })}

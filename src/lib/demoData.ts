@@ -216,7 +216,6 @@ export function getDemoData(): ModuleData {
     voiAnalyses: stored.voiAnalyses || DEMO_VOI,
     gameTheoryModels: [],
     aiSuggestions: [],
-    members: [{ member: { id: 1, sessionId: 1, userId: 'demo-user-1', role: 'owner' }, user: getDemoUser() }],
   };
 }
 

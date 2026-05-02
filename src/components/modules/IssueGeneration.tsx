@@ -358,7 +358,7 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
                       const cat = ISSUE_CATEGORIES.find(c => c.key === issue.category);
                       return (
                         <div key={issue.id} className="p-2.5 rounded-xl text-xs" style={{ background: sev.soft, borderLeft: `3px solid ${sev.color}` }}>
-                          <div className="font-medium mb-1" style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }} style={{ color: DS.ink }}>{issue.text}</div>
+                          <div className="font-medium mb-1" style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, color: DS.ink }}>{issue.text}</div>
                           <div className="flex items-center gap-1.5">
                             {cat && <span className="text-[8px]" style={{ color: cat.color }}>{CAT_ICONS[issue.category]}</span>}
                             {issue.votes > 0 && <span className="text-[9px] font-bold" style={{ color: DS.accent }}>▲ {issue.votes}</span>}

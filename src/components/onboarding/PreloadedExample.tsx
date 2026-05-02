@@ -124,7 +124,7 @@ export function PreloadedExample({ onBack }: PreloadedExampleProps) {
             </p>
             <div className="flex flex-wrap gap-2">
               {['SaaS · $180M ARR', 'Zero APAC presence', '$25M cap', '12-month target', 'Board mandate'].map(tag => (
-                <Badge key={tag} variant="outline" className="text-[9px] h-4" style={{ borderColor: DS.accent + '40', color: DS.accentDim }}>{tag}</Badge>
+                <Badge key={tag} variant="outline" className="text-[9px] h-4" style={{ borderColor: DS.accent + '40', color: DS.accentLight }}>{tag}</Badge>
               ))}
             </div>
           </CardContent>

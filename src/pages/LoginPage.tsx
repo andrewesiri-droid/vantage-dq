@@ -23,8 +23,8 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: DS.canvasAlt }}>
-      <div className="w-full max-w-sm p-8 bg-white rounded-2xl shadow-lg" style={{ border: `1px solid ${DS.canvasBdr}` }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: DS.canvas }}>
+      <div className="w-full max-w-sm p-8 bg-white rounded-2xl shadow-lg" style={{ border: `1px solid ${DS.border}` }}>
         <div className="flex items-center gap-2 mb-2">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: DS.accent }}>
             <Sparkles size={16} />
