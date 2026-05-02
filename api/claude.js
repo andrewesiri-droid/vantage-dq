@@ -1,56 +1,54 @@
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+import Anthropic from '@anthropic-ai/sdk';
+import { DQ_SYSTEM_PROMPT } from './_lib/prompts/dq-system.js';
 
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+export async function callClaude({ prompt, version = 'claude-sonnet-4-20250514', max_tokens = 4000, files = [] }) {
+  const content = buildContent(prompt, files);
+
+  const response = await client.messages.create({
+    model: version,
+    max_tokens,
+    system: DQ_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content }],
+  });
+
+  return response.content[0]?.text || '';
+}
+
+function buildContent(prompt, files = []) {
+  if (!files.length) return prompt;
+
+  const parts = [];
+  for (const file of files) {
+    if (file.base64 && file.mediaType) {
+      parts.push({
+        type: 'document',
+        source: { type: 'base64', media_type: file.mediaType, data: file.base64 },
+      });
+    }
+  }
+  parts.push({ type: 'text', text: prompt });
+  return parts;
+}
+
+// Legacy direct handler (kept for backward compat)
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
 
-  const { prompt, system } = req.body;
-  if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+  const { messages, system } = req.body;
+  if (!messages?.length) return res.status(400).json({ error: 'No messages' });
 
   try {
-    const response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 8000,
-        system: system || 'You are an expert decision quality analyst. Return ONLY valid JSON with no markdown fences, no preamble, no explanation. Output only the JSON object.',
-        messages: [{ role: 'user', content: prompt }],
-      }),
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      system: system || DQ_SYSTEM_PROMPT,
+      messages,
     });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(response.status).json({ error: `Anthropic API error: ${response.status}`, detail: errText });
-    }
-
-    const data = await response.json();
-    const rawText = data.content?.[0]?.text || '';
-
-    // Try to parse as JSON
-    try {
-      const clean = rawText.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(clean);
-      return res.json(parsed);
-    } catch {
-      // Try extracting JSON block
-      const m = rawText.match(/\{[\s\S]*\}/);
-      if (m) {
-        try {
-          const parsed = JSON.parse(m[0]);
-          return res.json(parsed);
-        } catch { /* fall through */ }
-      }
-      // Return raw text for co-pilot use
-      return res.json({ _raw: rawText });
-    }
-  } catch (error) {
-    return res.status(500).json({ error: String(error) });
+    return res.status(200).json(response);
+  } catch (err) {
+    console.error('[CLAUDE]', err.message);
+    return res.status(500).json({ error: err.message });
   }
 }

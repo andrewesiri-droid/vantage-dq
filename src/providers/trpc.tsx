@@ -5,7 +5,7 @@
 import type { ReactNode } from 'react';
 
 const q = (data?: any) => ({ data: data ?? null, isLoading: false, refetch: () => Promise.resolve({ data: null }), error: null });
-const m = () => ({ mutate: () => {}, mutateAsync: () => Promise.resolve(null), isPending: false, isLoading: false });
+const _m = () => ({ mutate: () => {}, mutateAsync: () => Promise.resolve(null), isPending: false, isLoading: false });
 const mCb = () => ({ mutate: (_: any) => {}, mutateAsync: () => Promise.resolve(null), isPending: false, isLoading: false });
 
 export const trpc: any = {

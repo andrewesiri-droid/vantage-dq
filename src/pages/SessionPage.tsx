@@ -60,8 +60,8 @@ function useDemoHooks(sessionId: number) {
     deleteStakeholder: (i: any) => { demoApi.deleteStakeholder(i); refresh(); },
     createRisk: (i: any) => { demoApi.createRisk(i); refresh(); },
     deleteRisk: (i: any) => { demoApi.deleteRisk(i); refresh(); },
-    createScenario: (_i: any) => { refresh(); },
-    deleteScenario: (_i: any) => { refresh(); },
+    createScenario: (i: any) => { demoApi.createScenario(i); refresh(); },
+    deleteScenario: (i: any) => { demoApi.deleteScenario(i); refresh(); },
     updateSession: (i: any) => { demoApi.updateSession(i); refresh(); },
     analyse: (i: any) => { const r = demoApi.analyse(i); refresh(); return r; },
     listAISuggestions: (i: any) => demoApi.listAISuggestions(i),
@@ -106,16 +106,16 @@ function WorkshopInline({ data }: any) {
 
 function DemoSessionPage({ slug, activeModule, setActiveModule, activeTool, setActiveTool }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void; activeTool: ToolId | null; setActiveTool: (t: ToolId | null) => void }) {
   const data = getDemoData();
-  const hooks = useDemoHooks(data.session.id);
+  const hooks = useDemoHooks(data.session!.id);
   const ModuleComponent = MODULE_COMPONENTS[activeModule];
-  const moduleProps = { sessionId: data.session.id, data, hooks };
+  const moduleProps = { sessionId: data.session!.id, data, hooks };
 
   return (
-    <AppShell sessionName={data.session?.name || 'Demo Session'} sessionId={data.session.id}
+    <AppShell sessionName={data.session?.name || 'Demo Session'} sessionId={data.session!.id}
       activeModule={activeModule} onModuleChange={setActiveModule}
       activeTool={activeTool} onToolChange={setActiveTool}
       isSyncing={false} data={data}>
-      <AISuggestionsPanel sessionId={data.session.id} module={activeModule} />
+      <AISuggestionsPanel sessionId={data.session!.id} module={activeModule} />
       {activeTool ? renderTool(activeTool, moduleProps) : <ModuleComponent {...moduleProps} />}
     </AppShell>
   );

@@ -453,7 +453,7 @@ export const demoApi = {
         };
         break;
       case 'hierarchy':
-        const focusCount = data.decisions.filter((d: any) => d.tier === 'focus').length;
+        const focusCount = data.decisions?.filter((d: any) => d.tier === 'focus').length;
         result = {
           overallScore: focusCount <= 5 ? 88 : 65, confidence: 85,
           checks: [
@@ -520,6 +520,10 @@ export const demoApi = {
     return { success: true };
   },
 
+  createScenario: (input: any) => { return { id: Date.now(), ...input }; },
+  deleteScenario: (input: any) => { return { success: true }; },
+  createVOI: (input: any) => { return { id: Date.now(), ...input }; },
+  deleteVOI: (input: any) => { return { success: true }; },
   rejectAISuggestion: (input: { id: number }) => {
     updateDemoData(d => {
       const s = (d.aiSuggestions || []).find((x: any) => x.id === input.id);

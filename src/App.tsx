@@ -14,7 +14,7 @@ const DemoContext = createContext<DemoContextType>({ demoMode: false, setDemoMod
 export const useDemoContext = () => useContext(DemoContext);
 
 function AppInner() {
-  const navigate = useNavigate();
+  const _navigate = useNavigate(); void _navigate;
   const [demoMode, setDemoModeState] = useState(isDemoMode());
   const [user, setUser] = useState<any>(null);
   const [checking, setChecking] = useState(true);
