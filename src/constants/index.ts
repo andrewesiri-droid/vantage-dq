@@ -98,9 +98,7 @@ export const ISSUE_CATEGORIES = [
   { key: 'regulatory-trap', label: 'Regulatory Trap', short: 'Reg', icon: 'R', desc: 'Hidden regulatory or compliance risk', color: '#D97706', soft: '#FFFBEB' },
   { key: 'second-order', label: 'Second-Order Effect', short: '2nd', icon: '2', desc: 'Indirect consequences not immediately visible', color: '#6366F1', soft: '#EEF2FF' },
   { key: 'black-swan', label: 'Black Swan', short: 'Sw', icon: 'B', desc: 'Low probability, extreme impact event', color: '#1E293B', soft: '#F1F5F9' },
-  { key: "focus-decision", label: "Focus Decision", short: "Foc", icon: "F", desc: "Core strategic choice to promote to hierarchy", color: "#2563EB", soft: "#EFF6FF" },
-  { key: "option-forgotten", label: "Forgotten Option", short: "Opt", icon: "O", desc: "Upside or option that has been overlooked", color: "#10B981", soft: "#ECFDF5" },
-  { key: 'option-forgotten', label: 'Forgotten Option', short: 'Opt', icon: 'O', desc: 'Upside or option that has been overlooked', color: '#10B981', soft: '#ECFDF5' },
+  { key: 'focus-decision', label: 'Focus Decision', short: 'Foc', icon: 'F', desc: 'Core strategic choice to promote to hierarchy', color: '#2563EB', soft: '#EFF6FF' },
 ];
 
 export const SEVERITY_LEVELS = ['Critical', 'High', 'Medium', 'Low'];
@@ -181,16 +179,6 @@ export const IMPACT_LEVELS = ['Critical', 'High', 'Medium', 'Low'];
 export const CONTROL_LEVELS = ['High', 'Some', 'Low', 'None'];
 
 // Workshop phases per manual
-// ============================================
-// TOOLS — Top-bar dropdown (not sidebar)
-// ============================================
-export const TOOLS: { id: import('@/types').ToolId; label: string; description: string; color: string }[] = [
-  { id: 'game-theory', label: 'Strategic Gaming', description: 'Game theory analysis — players, incentives, equilibria, reactions', color: '#7C3AED' },
-  { id: 'workshop', label: 'Workshop Mode', description: 'Collaborative team workshop with real-time facilitation', color: '#0891B2' },
-  { id: 'new-workspace', label: 'New Workspace', description: 'Create a fresh decision workspace', color: '#10B981' },
-  { id: 'export-advanced', label: 'Advanced Export', description: 'Export to Excel, PowerPoint, PDF with full formatting', color: '#F59E0B' },
-];
-
 export const WORKSHOP_PHASES = [
   { id: 'p1', label: 'Decision Context', time: 10, desc: 'Align the room on what decision is being made' },
   { id: 'p2', label: 'Stakeholder Mapping', time: 15, desc: 'Map who has a stake, who decides, who must act' },
@@ -202,4 +190,16 @@ export const WORKSHOP_PHASES = [
   { id: 'p8', label: 'Scenario Testing', time: 20, desc: 'Stress-test strategies against possible futures' },
   { id: 'p9', label: 'Trade-off Discussion', time: 20, desc: 'Make explicit the trade-offs the team is accepting' },
   { id: 'p10', label: 'Commitment & Actions', time: 15, desc: 'Agree direction, owners, deadlines, and next steps' },
+];
+
+// ============================================
+// TOOLS — Top-bar dropdown
+// ============================================
+export type ToolId = 'game-theory' | 'workshop' | 'deep-dive' | 'export-advanced';
+
+export const TOOLS: { id: ToolId; label: string; description: string; color: string; icon: string }[] = [
+  { id: 'game-theory', label: 'Strategic Gaming', description: 'Game theory — players, incentives, equilibria, reactions', color: '#7C3AED', icon: 'Swords' },
+  { id: 'workshop', label: 'Workshop Mode', description: 'Collaborative team workshop with real-time facilitation', color: '#0891B2', icon: 'Presentation' },
+  { id: 'deep-dive', label: 'AI Deep Dive', description: 'Full AI analysis across all 6 DQ dimensions', color: '#10B981', icon: 'Brain' },
+  { id: 'export-advanced', label: 'Advanced Export', description: 'Export to PDF with full decision package formatting', color: '#F59E0B', icon: 'FileSpreadsheet' },
 ];

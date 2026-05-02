@@ -1,337 +1,493 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS, ISSUE_CATEGORIES, SEVERITY_LEVELS } from '@/constants';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  AlertTriangle, Plus, ThumbsUp, Trash2, Eye, LayoutGrid, Flame,
-  BrainCircuit, CheckCircle2, XCircle, Lightbulb, ChevronRight, ArrowRight
-} from 'lucide-react';
+import { Sparkles, Plus, ThumbsUp, Trash2, Filter, AlertTriangle, Eye, ChevronRight, Lightbulb, ArrowRight } from 'lucide-react';
 
-// ============================================================================
-// TYPES — 10-field structured issue
-// ============================================================================
 interface IssueItem {
-  id: number;
-  text: string;
-  category: string;
-  severity: string;
-  status: string;
-  votes: number;
-  owner: string;
-  impact: string;
-  probability: string;
-  mitigation: string;
-  source: string;
+  id: number; text: string; category: string; severity: string;
+  status: string; votes: number; owner?: string; description?: string;
 }
 
-// ============================================================================
-// DEMO DATA — 12 issues across 10 categories
-// ============================================================================
-const DEMO_ISSUES: IssueItem[] = [
-  { id: 1, text: 'Competitors (TechFlow Asia, ProcessMax) already entrenched in Singapore and Tokyo with 18-month head start', category: 'uncertainty-external', severity: 'Critical', status: 'open', votes: 5, owner: 'CSO', impact: 'Revenue delay 6-12 months, pricing pressure', probability: 'Certain', mitigation: 'Differentiate on service quality. Lock enterprise clients early with integration depth.', source: 'Market intelligence' },
-  { id: 2, text: 'Local data residency requirements in Japan may force complete architecture redesign — 4-6 month delay', category: 'regulatory-trap', severity: 'Critical', status: 'open', votes: 4, owner: 'General Counsel', impact: 'Product launch delay, $2-3M additional engineering cost', probability: 'High', mitigation: 'Engage regulatory consultant by Week 2. Pre-submission meeting with authorities.', source: 'Legal review' },
-  { id: 3, text: 'Partnership model preserves capital but reduces operational control and customer relationship ownership', category: 'stakeholder-concern', severity: 'High', status: 'open', votes: 3, owner: 'CEO', impact: 'Margin compression, brand dilution, limited customer insight', probability: 'High', mitigation: 'Contractual control provisions. Monthly governance reviews. Retain direct customer feedback loop.', source: 'Executive discussion' },
-  { id: 4, text: 'Team has zero APAC go-to-market experience — hiring risk is existential', category: 'assumption', severity: 'Critical', status: 'open', votes: 5, owner: 'COO', impact: 'Execution failure if key hires do not perform', probability: 'Medium', mitigation: 'Executive search with APAC network. Internal transfer + local deputy. Partner GTM fallback.', source: 'HR assessment' },
-  { id: 5, text: 'Regulatory approval timeline in Japan is completely unknown — could be 3 months or 18 months', category: 'information-gap', severity: 'High', status: 'open', votes: 3, owner: 'General Counsel', impact: 'Timeline uncertainty prevents reliable planning', probability: 'Unknown', mitigation: 'Commission regulatory study ($150K). Parallel-track Singapore entry as hedge.', source: 'Due diligence' },
-  { id: 6, text: 'APAC TAM may be significantly larger than current $2.8B estimate — upside not captured in models', category: 'opportunity', severity: 'Medium', status: 'open', votes: 1, owner: 'CFO', impact: 'Underinvestment if market is larger than modelled', probability: 'Medium', mitigation: 'Commission independent TAM study. Build upside scenario into capital planning.', source: 'Analyst report' },
-  { id: 7, text: '$25M capital ceiling is non-negotiable — Board resolution, no flexibility', category: 'constraint', severity: 'High', status: 'open', votes: 2, owner: 'CFO', impact: 'Hard budget cap across all scenarios', probability: 'Certain', mitigation: 'None — constraint is binding. All strategies must fit within ceiling.', source: 'Board resolution' },
-  { id: 8, text: 'If we wait 12 months, competitive position in Singapore becomes uncatchable — TechFlow locking in enterprise clients', category: 'brutal-truth', severity: 'Critical', status: 'open', votes: 5, owner: 'CSO', impact: 'Permanent market share loss in primary market', probability: 'High', mitigation: 'Accelerate entry. Prioritise Singapore over Japan despite regulatory simplicity of Singapore.', source: 'Competitive intelligence' },
-  { id: 9, text: 'Hidden regulatory requirement for local data centre in Indonesia if we expand beyond initial 3 markets', category: 'regulatory-trap', severity: 'High', status: 'open', votes: 2, owner: 'General Counsel', impact: 'Unplanned infrastructure investment for Phase 2', probability: 'Medium', mitigation: 'Include Indonesia in regulatory study scope. Architecture design for data portability.', source: 'Legal review' },
-  { id: 10, text: 'Partner default could trigger reputational damage in domestic market — customers may question our execution capability', category: 'second-order', severity: 'Medium', status: 'open', votes: 1, owner: 'CEO', impact: 'Brand damage in core US market', probability: 'Low', mitigation: 'Contractual exit clauses. Public communication plan. Maintain independent track record.', source: 'Risk workshop' },
-  { id: 11, text: 'Currency hedging costs not factored — AUD and JPY volatility could erode 8-15% of returns', category: 'uncertainty-internal', severity: 'Medium', status: 'open', votes: 2, owner: 'CFO', impact: 'FX-adjusted ROI may fall below hurdle rate', probability: 'High', mitigation: 'Hedge 70% of committed capital. Quarterly rebalancing. USD-denominated contracts.', source: 'Financial model' },
-  { id: 12, text: 'Singapore government grants for tech entrants could offset $2-3M of setup costs — not in current financial model', category: 'option-forgotten', severity: 'Low', status: 'open', votes: 0, owner: 'CFO', impact: 'Unclaimed capital reduces effective budget constraint', probability: 'Medium', mitigation: 'Engage EDB (Economic Development Board) by Month 1. Include grants in financial model.', source: 'Desk research' },
-];
-
-const FALLBACK_CATEGORY = ISSUE_CATEGORIES[0];
-
-const catMeta = (key: string) => ISSUE_CATEGORIES.find(c => c.key === key) || FALLBACK_CATEGORY;
-
-const severityMeta = (s: string) => {
-  const map: Record<string, { color: string; soft: string; score: number }> = {
-    'Critical': { color: '#DC2626', soft: '#FEF2F2', score: 4 },
-    'High': { color: '#D97706', soft: '#FFFBEB', score: 3 },
-    'Medium': { color: '#2563EB', soft: '#EFF6FF', score: 2 },
-    'Low': { color: '#64748B', soft: '#F1F5F9', score: 1 },
-  };
-  return map[s] || map['Low'];
+const SEV_COLORS: Record<string, { color: string; soft: string; label: string }> = {
+  Critical: { color: DS.danger, soft: DS.dangerSoft, label: 'CRITICAL' },
+  High:     { color: DS.warning, soft: DS.warnSoft, label: 'HIGH' },
+  Medium:   { color: '#64748B', soft: '#F1F5F9', label: 'MEDIUM' },
+  Low:      { color: DS.inkDis, soft: DS.bg, label: 'LOW' },
 };
 
-// ============================================================================
-// AI ANALYSIS ENGINE
-// ============================================================================
-function generateAIInsights(issues: IssueItem[]) {
-  const insights: { type: 'critical' | 'warning' | 'info'; icon: string; title: string; body: string }[] = [];
-  const openIssues = issues.filter(i => i.status === 'open');
-  const criticalCount = openIssues.filter(i => i.severity === 'Critical').length;
-  const highCount = openIssues.filter(i => i.severity === 'High').length;
-  const coveredCats = new Set(openIssues.map(i => i.category));
-  const uncovered = ISSUE_CATEGORIES.filter(c => !coveredCats.has(c.key));
+const CAT_ICONS: Record<string, string> = {
+  'uncertainty-external': '🌊', 'uncertainty-internal': '⚙️',
+  'stakeholder-concern': '👥', 'assumption': '💭',
+  'information-gap': '📊', 'opportunity': '✦',
+  'constraint': '🔒', 'brutal-truth': '⚡',
+  'regulatory-trap': '⚠️', 'second-order': '🔗',
+  'black-swan': '🦢', 'focus-decision': '🎯',
+  'option-forgotten': '💡',
+};
 
-  if (criticalCount >= 3) {
-    insights.push({ type: 'critical', icon: 'flame', title: `${criticalCount} Critical Issues Open`, body: 'Multiple critical issues indicate high decision risk. At least 2 should be resolved or mitigated before commitment.' });
-  }
-  if (uncovered.length > 0) {
-    insights.push({ type: 'warning', icon: 'eye', title: `${uncovered.length} Blind Spot Categories`, body: `No issues raised in: ${uncovered.slice(0, 3).map(c => c.label).join(', ')}. This does not mean these areas are safe — it may mean they have not been examined.` });
-  }
-  const noMitigation = openIssues.filter(i => !i.mitigation || i.mitigation.length < 10);
-  if (noMitigation.length > 0) {
-    insights.push({ type: 'warning', icon: 'shield', title: `${noMitigation.length} Issues Without Mitigation`, body: 'Issues without mitigation plans are unmanaged risks. Every High/Critical issue should have an owner and a mitigation approach.' });
-  }
-  const highVotes = [...openIssues].sort((a, b) => b.votes - a.votes).slice(0, 3);
-  if (highVotes[0]?.votes >= 4) {
-    insights.push({ type: 'info', icon: 'users', title: `Team Consensus: "${highVotes[0].text.slice(0, 50)}..."`, body: `This issue received ${highVotes[0].votes} votes — the highest team concern. Prioritise resolution or assign executive owner.` });
-  }
-  if (openIssues.filter(i => i.category === 'opportunity' || i.category === 'option-forgotten').length <= 1) {
-    insights.push({ type: 'info', icon: 'lightbulb', title: 'Opportunity Scan Weak', body: 'Fewer than 2 upside issues identified. The team may be loss-averse. Consider a dedicated "opportunity brainstorm" session.' });
-  }
-  return insights;
-}
+const TABS = [
+  { id: 'raise', num: '1', label: 'Raise Issues' },
+  { id: 'categorise', num: '2', label: 'Categorise' },
+  { id: 'heatmap', num: '3', label: 'Heat Map' },
+  { id: 'blindspots', num: '4', label: 'Blind Spots' },
+];
 
-// ============================================================================
-// COMPONENT
-// ============================================================================
+const DQ_PRINCIPLES: Record<string, string> = {
+  raise: 'Issue raising is most effective when separated from issue solving. The goal here is quantity and honesty — surface everything before filtering anything. Brutal truths and forgotten options are the most valuable issues.',
+  categorise: 'Categorisation reveals patterns. A good issue list has representation across all 12 DQ categories. Heavy concentration in one category is often a signal that the team has a blind spot in others.',
+  heatmap: 'The heat map shows where risk is concentrated. High-severity + high-vote issues are the ones that could derail the decision. These need owners and mitigations before commitment.',
+  blindspots: 'AI blind spot analysis identifies categories that are systematically underrepresented. The most dangerous issues are often the ones no one thought to raise.',
+};
+
 export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
-  const [issues, setIssues] = useState<IssueItem[]>(DEMO_ISSUES);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('list');
-
-  // Form state
+  const { call, busy } = useAI();
+  const [activeTab, setActiveTab] = useState('raise');
+  const [issues, setIssues] = useState<IssueItem[]>([]);
   const [newText, setNewText] = useState('');
-  const [newCategory, setNewCategory] = useState('uncertainty-external');
-  const [newSeverity, setNewSeverity] = useState('Medium');
-  const [newOwner, setNewOwner] = useState('');
-  const [newImpact, setNewImpact] = useState('');
-  const [newProbability, setNewProbability] = useState('Medium');
-  const [newMitigation, setNewMitigation] = useState('');
-  const [newSource, setNewSource] = useState('');
+  const [newCat, setNewCat] = useState('uncertainty-external');
+  const [newSev, setNewSev] = useState('High');
+  const [filterSev, setFilterSev] = useState('all');
+  const [filterCat, setFilterCat] = useState('all');
+  const [blindSpots, setBlindSpots] = useState<any>(null);
+  const [generating, setGenerating] = useState(false);
 
-  // Sync from database
   useEffect(() => {
-    if (data?.issues && data.issues.length > 0) {
+    if (data?.issues?.length) {
       setIssues(data.issues.map((i: any) => ({
-        id: i.id, text: i.text, category: i.category, severity: i.severity, status: i.status || 'open', votes: i.votes || 0,
-        owner: i.owner || '', impact: i.impact || '', probability: i.probability || 'Medium', mitigation: i.mitigation || '', source: i.source || '',
+        id: i.id, text: i.text, category: i.category,
+        severity: i.severity, status: i.status || 'open',
+        votes: i.votes || 0, owner: i.owner || '', description: i.description || '',
       })));
     }
   }, [data?.issues]);
 
-  const addIssue = () => {
+  const add = () => {
     if (!newText.trim()) return;
-    const newIssue: IssueItem = {
-      id: Date.now(), text: newText.trim(), category: newCategory, severity: newSeverity, status: 'open', votes: 0,
-      owner: newOwner, impact: newImpact, probability: newProbability, mitigation: newMitigation, source: newSource,
-    };
-    setIssues(prev => [newIssue, ...prev]);
-    hooks?.createIssue?.({ sessionId, text: newText.trim(), category: newCategory, severity: newSeverity });
-    setNewText(''); setNewOwner(''); setNewImpact(''); setNewMitigation(''); setNewSource('');
+    const n: IssueItem = { id: Date.now(), text: newText.trim(), category: newCat, severity: newSev, status: 'open', votes: 0 };
+    setIssues(p => [n, ...p]);
+    hooks?.createIssue?.({ sessionId, text: newText.trim(), category: newCat, severity: newSev });
+    setNewText('');
   };
 
-  const vote = (id: number) => {
-    setIssues(prev => prev.map(i => i.id === id ? { ...i, votes: i.votes + 1 } : i));
-    hooks?.voteIssue?.({ id });
+  const remove = (id: number) => { setIssues(p => p.filter(i => i.id !== id)); hooks?.deleteIssue?.({ id }); };
+  const vote = (id: number) => { setIssues(p => p.map(i => i.id === id ? { ...i, votes: i.votes + 1 } : i)); hooks?.voteIssue?.({ id }); };
+  const promote = (issue: IssueItem) => {
+    hooks?.createDecision?.({ sessionId, label: issue.text, choices: ['Option A', 'Option B', 'Option C'], tier: 'focus' });
+    setIssues(p => p.map(i => i.id === issue.id ? { ...i, category: 'focus-decision' } : i));
   };
 
-  const closeIssue = (id: number) => {
-    setIssues(prev => prev.map(i => i.id === id ? { ...i, status: i.status === 'closed' ? 'open' : 'closed' } : i));
+  const aiGenerate = () => {
+    setGenerating(true);
+    const s = data?.session || {};
+    const existing = issues.slice(0, 8).map(i => i.text).join('; ');
+    const prompt = `Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionStatement || ''}"\nContext: ${(s.context || '').slice(0, 250)}\nConstraints: ${s.constraints || ''}\nExisting issues (do not duplicate): ${existing}\n\nReturn JSON: { issues: [{text, category (from: uncertainty-external, uncertainty-internal, stakeholder-concern, assumption, information-gap, opportunity, constraint, brutal-truth, regulatory-trap, second-order, black-swan, focus-decision), severity (Critical/High/Medium/Low), owner, description}] }`;
+    call(prompt, (r) => {
+      let result = r;
+      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { setGenerating(false); return; } }
+      const newIssues = (result?.issues || []).map((i: any, idx: number) => ({
+        id: Date.now() + idx, text: i.text || '', category: i.category || 'uncertainty-external',
+        severity: i.severity || 'High', status: 'open', votes: 0,
+        owner: i.owner || '', description: i.description || '',
+      }));
+      setIssues(p => [...p, ...newIssues]);
+      newIssues.forEach((i: any) => hooks?.createIssue?.({ sessionId, text: i.text, category: i.category, severity: i.severity }));
+      setGenerating(false);
+    });
   };
 
-  const deleteIssue = (id: number) => {
-    setIssues(prev => prev.filter(i => i.id !== id));
-    hooks?.deleteIssue?.({ id });
+  const aiCategorise = () => {
+    const issueList = issues.map(i => `"${i.text}" [current: ${i.category}]`).join('\n');
+    const prompt = `Review and re-categorise these issues for accuracy.\nIssues:\n${issueList}\n\nReturn JSON: { reclassifications: [{id (original array index 0-based), text, suggestedCategory, reason}] }`;
+    call(prompt, (r) => {
+      let result = r;
+      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
+      (result?.reclassifications || []).forEach((rc: any) => {
+        if (rc.id >= 0 && rc.id < issues.length) {
+          setIssues(p => p.map((issue, idx) => idx === rc.id ? { ...issue, category: rc.suggestedCategory } : issue));
+        }
+      });
+    });
   };
 
-  const sorted = useMemo(() => [...issues].sort((a, b) => b.votes - a.votes || SEVERITY_LEVELS.indexOf(a.severity) - SEVERITY_LEVELS.indexOf(b.severity)), [issues]);
-  const aiInsights = useMemo(() => generateAIInsights(issues), [issues]);
+  const aiBlindSpots = () => {
+    const cats = [...new Set(issues.map(i => i.category))];
+    const prompt = `Analyse this issue list for blind spots.\nDecision: ${data?.session?.decisionStatement || ''}\nIssues (${issues.length}): ${issues.map(i => `[${i.category}/${i.severity}] ${i.text}`).join('; ')}\nCategories present: ${cats.join(', ')}\n\nReturn JSON: { coverageScore: 0-100, coverageSummary: string, missingCategories: [{category, title, why, exampleIssue, severity}], patternInsight: string, topBlindSpot: string }`;
+    call(prompt, (r) => {
+      let result = r;
+      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
+      if (result && !result.error) { setBlindSpots(result); setActiveTab('blindspots'); }
+    });
+  };
 
-  const severityCounts = SEVERITY_LEVELS.map(s => ({ severity: s, count: issues.filter(i => i.severity === s).length }));
-  const categoryCounts = ISSUE_CATEGORIES.map(c => ({ ...c, count: issues.filter(i => i.category === c.key).length })).filter(c => c.count > 0);
+  // Stats
+  const critCount = issues.filter(i => i.severity === 'Critical').length;
+  const highCount = issues.filter(i => i.severity === 'High').length;
+  const focusCount = issues.filter(i => i.category === 'focus-decision').length;
   const openCount = issues.filter(i => i.status === 'open').length;
-  const criticalCount = issues.filter(i => i.severity === 'Critical' && i.status === 'open').length;
+
+  // Filtered list
+  const filtered = issues.filter(i =>
+    (filterSev === 'all' || i.severity === filterSev) &&
+    (filterCat === 'all' || i.category === filterCat)
+  ).sort((a, b) => b.votes - a.votes || (b.severity === 'Critical' ? 1 : 0) - (a.severity === 'Critical' ? 1 : 0));
+
+  // Category counts for filter bar
+  const catCounts = ISSUE_CATEGORIES.reduce((acc, c) => {
+    acc[c.key] = issues.filter(i => i.category === c.key).length;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Heat map data
+  const heatMap = SEVERITY_LEVELS.map(sev => ({
+    sev,
+    cats: ISSUE_CATEGORIES.filter(c => issues.some(i => i.severity === sev && i.category === c.key)).map(c => ({
+      ...c,
+      issues: issues.filter(i => i.severity === sev && i.category === c.key),
+    })),
+  })).filter(r => r.cats.length > 0);
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
-            <AlertTriangle size={22} style={{ color: DS.warning }} /> Issue Generation
-          </h2>
-          <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{issues.length} issues &middot; {openCount} open &middot; {criticalCount} critical &middot; {issues.reduce((s, i) => s + i.votes, 0)} team votes</p>
+    <div className="space-y-0">
+      {/* Module header */}
+      <div className="flex items-start gap-3 mb-4 flex-wrap">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-[10px] font-black px-2 py-1 rounded text-white" style={{ background: DS.warning }}>02</span>
+            <h2 className="text-lg font-bold" style={{ color: DS.ink }}>Issue Raising & Categorisation</h2>
+          </div>
         </div>
-        <Button size="sm" variant="outline" className="h-8 text-[10px] gap-1" onClick={() => setAiOpen(!aiOpen)}>
-          <BrainCircuit size={12} /> {aiOpen ? 'Hide AI Analysis' : 'AI Analysis'}
-        </Button>
+        {/* Stats badges */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge style={{ background: DS.bg, color: DS.inkSub, border: `1px solid ${DS.border}` }}>{issues.length} TOTAL</Badge>
+          {critCount > 0 && <Badge style={{ background: DS.dangerSoft, color: DS.danger, border: 'none' }}>{critCount} CRITICAL</Badge>}
+          {highCount > 0 && <Badge style={{ background: DS.warnSoft, color: DS.warning, border: 'none' }}>{highCount} HIGH</Badge>}
+          {focusCount > 0 && <Badge style={{ background: DS.accentSoft, color: DS.accent, border: 'none' }}>{focusCount} FOCUS DECISIONS</Badge>}
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiCategorise} disabled={busy || !issues.length}>
+            <Sparkles size={11} /> AI Categorise
+          </Button>
+          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.warning }} onClick={aiGenerate} disabled={busy || generating}>
+            <Sparkles size={11} /> {generating ? 'Generating…' : 'AI Generate'}
+          </Button>
+        </div>
       </div>
 
-      {/* AI Panel */}
-      {aiOpen && (
-        <Card className="border-0 shadow-md" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 100%)`, borderLeft: `4px solid #7C3AED` }}>
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <BrainCircuit size={14} style={{ color: '#7C3AED' }} />
-              <span className="text-xs font-bold" style={{ color: '#6D28D9' }}>AI Issue Analysis</span>
-              <Badge variant="outline" className="text-[9px] h-4 ml-auto" style={{ color: '#7C3AED', borderColor: '#DDD6FE' }}>{aiInsights.length} insights</Badge>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {aiInsights.map((insight, idx) => (
-                <div key={idx} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: insight.type === 'critical' ? '#FEF2F2' : insight.type === 'warning' ? '#FFFBEB' : '#F0FDFA' }}>
-                  {insight.type === 'critical' ? <XCircle size={12} style={{ color: '#DC2626', marginTop: 2 }} /> : insight.type === 'warning' ? <AlertTriangle size={12} style={{ color: '#D97706', marginTop: 2 }} /> : <Lightbulb size={12} style={{ color: '#059669', marginTop: 2 }} />}
-                  <div>
-                    <p className="text-[10px] font-semibold" style={{ color: insight.type === 'critical' ? '#DC2626' : insight.type === 'warning' ? '#D97706' : '#059669' }}>{insight.title}</p>
-                    <p className="text-[10px] mt-0.5 leading-relaxed" style={{ color: DS.inkSub }}>{insight.body}</p>
-                  </div>
-                </div>
-              ))}
-              {aiInsights.length === 0 && <p className="text-xs" style={{ color: '#059669' }}>All clear. No critical patterns detected.</p>}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Tabs */}
+      <div className="flex border-b mb-4" style={{ borderColor: DS.borderLight }}>
+        {TABS.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium relative transition-colors"
+            style={{ color: activeTab === tab.id ? DS.warning : DS.inkTer, borderBottom: activeTab === tab.id ? `2px solid ${DS.warning}` : '2px solid transparent', marginBottom: -1 }}>
+            <span className="text-[9px] font-bold opacity-60">{tab.num}.</span> {tab.label}
+            {tab.id === 'raise' && issues.length > 0 && (
+              <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: DS.warning, color: '#fff' }}>{issues.length}</span>
+            )}
+            {tab.id === 'blindspots' && blindSpots && <span className="w-1.5 h-1.5 rounded-full ml-1" style={{ background: DS.danger }} />}
+          </button>
+        ))}
+      </div>
 
-      {/* Add Issue Card */}
-      <Card className="border-0 shadow-md" style={{ background: `linear-gradient(135deg, #FEF3C7 0%, ${DS.canvas} 100%)`, borderLeft: `4px solid ${DS.warning}` }}>
-        <CardContent className="pt-4 space-y-2">
-          <Textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder="What could go wrong? What is uncertain? What are we assuming? State the issue as a clear, specific concern." className="text-xs bg-white" rows={2} />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <Select value={newCategory} onValueChange={setNewCategory}>
-              <SelectTrigger className="h-8 text-[10px]"><SelectValue placeholder="Category" /></SelectTrigger>
-              <SelectContent>{ISSUE_CATEGORIES.map(c => <SelectItem key={c.key} value={c.key} className="text-xs">{c.icon} {c.label}</SelectItem>)}</SelectContent>
+      {/* === TAB: RAISE ISSUES === */}
+      {activeTab === 'raise' && (
+        <div className="space-y-3">
+          {/* Add issue row */}
+          <div className="flex gap-2 items-center p-3 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
+            <Input value={newText} onChange={e => setNewText(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()}
+              placeholder="Describe an issue, decision, uncertainty, assumption, or opportunity…"
+              className="flex-1 text-xs h-8 bg-white" />
+            <Select value={newCat} onValueChange={setNewCat}>
+              <SelectTrigger className="h-8 text-[10px] bg-white w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>{ISSUE_CATEGORIES.map(c => <SelectItem key={c.key} value={c.key} className="text-xs">{c.label}</SelectItem>)}</SelectContent>
             </Select>
-            <Select value={newSeverity} onValueChange={setNewSeverity}>
-              <SelectTrigger className="h-8 text-[10px]"><SelectValue placeholder="Severity" /></SelectTrigger>
+            <Select value={newSev} onValueChange={setNewSev}>
+              <SelectTrigger className="h-8 text-[10px] bg-white w-24"><SelectValue /></SelectTrigger>
               <SelectContent>{SEVERITY_LEVELS.map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}</SelectContent>
             </Select>
-            <Input value={newOwner} onChange={e => setNewOwner(e.target.value)} placeholder="Owner" className="h-8 text-[10px] bg-white" />
-            <Select value={newProbability} onValueChange={setNewProbability}>
-              <SelectTrigger className="h-8 text-[10px]"><SelectValue placeholder="Probability" /></SelectTrigger>
-              <SelectContent>{['Certain', 'High', 'Medium', 'Low', 'Unknown'].map(p => <SelectItem key={p} value={p} className="text-xs">{p}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <Textarea value={newImpact} onChange={e => setNewImpact(e.target.value)} placeholder="Impact if this issue materialises" className="text-[10px] bg-white" rows={1} />
-            <Textarea value={newMitigation} onChange={e => setNewMitigation(e.target.value)} placeholder="Mitigation approach" className="text-[10px] bg-white" rows={1} />
-          </div>
-          <div className="flex gap-2">
-            <Input value={newSource} onChange={e => setNewSource(e.target.value)} placeholder="Source (e.g. Market intelligence, Legal review)" className="text-[10px] bg-white h-8 flex-1" />
-            <Button size="sm" className="h-8 text-[10px] gap-1 shrink-0" onClick={addIssue} disabled={!newText.trim()} style={{ background: DS.warning }}>
-              <Plus size={12} /> Add Issue
+            <Button size="sm" className="h-8 px-3 gap-1 text-xs shrink-0" style={{ background: DS.warning }} onClick={add} disabled={!newText.trim()}>
+              <Plus size={12} /> Add
             </Button>
           </div>
-        </CardContent>
-      </Card>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="text-[10px]">
-          <TabsTrigger value="list" className="text-[10px] gap-1"><LayoutGrid size={10} /> Issue List ({openCount})</TabsTrigger>
-          <TabsTrigger value="heatmap" className="text-[10px] gap-1"><Flame size={10} /> Severity Map</TabsTrigger>
-          <TabsTrigger value="blindspots" className="text-[10px] gap-1"><Eye size={10} /> Blind Spots</TabsTrigger>
-        </TabsList>
+          {/* Category filter chips */}
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => setFilterCat('all')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all"
+              style={{ background: filterCat === 'all' ? DS.ink : DS.bg, color: filterCat === 'all' ? '#fff' : DS.inkSub, border: `1px solid ${filterCat === 'all' ? DS.ink : DS.border}` }}>
+              <Filter size={9} /> All
+            </button>
+            {ISSUE_CATEGORIES.filter(c => catCounts[c.key] > 0).map(c => (
+              <button key={c.key} onClick={() => setFilterCat(filterCat === c.key ? 'all' : c.key)}
+                className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition-all"
+                style={{ background: filterCat === c.key ? c.color : DS.bg, color: filterCat === c.key ? '#fff' : DS.inkSub, border: `1px solid ${filterCat === c.key ? c.color : DS.border}` }}>
+                <span>{CAT_ICONS[c.key] || '●'}</span> ({catCounts[c.key]})
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-1">
+              {SEVERITY_LEVELS.map(s => (
+                <button key={s} onClick={() => setFilterSev(filterSev === s ? 'all' : s)}
+                  className="px-2 py-1 rounded text-[9px] font-bold transition-all"
+                  style={{ background: filterSev === s ? SEV_COLORS[s]?.color : DS.bg, color: filterSev === s ? '#fff' : DS.inkSub, border: `1px solid ${filterSev === s ? SEV_COLORS[s]?.color : DS.border}` }}>
+                  {s}
+                </button>
+              ))}
+              <span className="text-[9px] ml-1" style={{ color: DS.inkDis }}>{filtered.length} shown</span>
+            </div>
+          </div>
 
-        {/* LIST TAB */}
-        <TabsContent value="list" className="mt-3 space-y-2">
-          {sorted.map(issue => {
-            const c = catMeta(issue.category);
-            const sev = severityMeta(issue.severity);
-            const isClosed = issue.status === 'closed';
-            return (
-              <Card key={issue.id} className={`overflow-hidden transition-all border-0 shadow-sm ${isClosed ? 'opacity-40' : ''}`}>
-                <CardContent className="p-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0" style={{ background: c.soft, color: c.color }}>{c.icon}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-medium" style={{ color: DS.ink }}>{issue.text}</span>
-                        <Badge style={{ background: c.soft, color: c.color, borderColor: c.color + '30' }} variant="outline" className="text-[9px] h-4 px-1">{c.short}</Badge>
-                        <Badge style={{ background: sev.soft, color: sev.color, borderColor: sev.color + '30' }} variant="outline" className="text-[9px] h-4 px-1">{issue.severity}</Badge>
-                        {issue.votes >= 4 && <Badge variant="outline" className="text-[8px] h-4" style={{ color: '#DC2626', borderColor: '#FECACA' }}><Flame size={8} /> Hot</Badge>}
-                      </div>
-                      {/* 10-field metadata row */}
-                      <div className="flex items-center gap-3 mt-2 flex-wrap">
-                        {issue.owner && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: DS.bg, color: DS.inkSub }}>Owner: {issue.owner}</span>}
-                        {issue.probability && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: DS.bg, color: DS.inkSub }}>P: {issue.probability}</span>}
-                        {issue.impact && <span className="text-[10px] px-1.5 py-0.5 rounded truncate max-w-[200px]" style={{ background: DS.bg, color: DS.inkSub }} title={issue.impact}>Impact: {issue.impact}</span>}
-                      </div>
-                      {issue.mitigation && <p className="text-[10px] mt-1.5 p-1.5 rounded" style={{ background: '#F0FDFA', color: '#065F46' }}><strong>Mitigation:</strong> {issue.mitigation}</p>}
-                      <div className="flex items-center gap-3 mt-2">
-                        <button onClick={() => vote(issue.id)} className="flex items-center gap-1 text-[10px] transition-colors hover:text-blue-600" style={{ color: DS.inkTer }}><ThumbsUp size={10} /> {issue.votes}</button>
-                        <button onClick={() => closeIssue(issue.id)} className="text-[10px]" style={{ color: isClosed ? '#059669' : DS.inkTer }}>{isClosed ? 'Reopen' : 'Close'}</button>
-                        <button onClick={() => deleteIssue(issue.id)} className="text-gray-400 hover:text-red-500 text-[10px]"><Trash2 size={10} /></button>
-                        {issue.source && <span className="text-[9px] ml-auto" style={{ color: DS.inkDis }}>Source: {issue.source}</span>}
-                      </div>
+          {/* Issue list */}
+          <div className="space-y-1.5">
+            {filtered.map(issue => {
+              const cat = ISSUE_CATEGORIES.find(c => c.key === issue.category);
+              const sev = SEV_COLORS[issue.severity] || SEV_COLORS.Medium;
+              return (
+                <div key={issue.id} className="flex items-stretch rounded-xl overflow-hidden transition-all"
+                  style={{ background: DS.canvas, border: `1px solid ${DS.borderLight}`, opacity: issue.status === 'closed' ? 0.5 : 1 }}>
+                  {/* Vote column */}
+                  <button onClick={() => vote(issue.id)} className="flex flex-col items-center justify-center px-3 py-3 transition-colors hover:bg-gray-50 shrink-0" style={{ borderRight: `1px solid ${DS.borderLight}`, minWidth: 44 }}>
+                    <span className="text-[9px]">▲</span>
+                    <span className="text-sm font-black" style={{ color: issue.votes > 0 ? DS.accent : DS.inkDis }}>{issue.votes}</span>
+                  </button>
+                  {/* Severity stripe */}
+                  <div className="w-1 shrink-0" style={{ background: sev.color }} />
+                  {/* Content */}
+                  <div className="flex-1 px-3 py-2.5 min-w-0">
+                    <p className="text-xs font-medium mb-1.5" style={{ color: DS.ink, textDecoration: issue.status === 'closed' ? 'line-through' : 'none' }}>{issue.text}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {cat && (
+                        <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: cat.soft, color: cat.color }}>
+                          {CAT_ICONS[issue.category] || ''} {cat.label.toUpperCase()}
+                        </span>
+                      )}
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: sev.soft, color: sev.color }}>{sev.label}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: DS.bg, color: DS.inkDis }}>OPEN</span>
+                      {issue.owner && <span className="text-[9px]" style={{ color: DS.inkDis }}>◎ {issue.owner}</span>}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 px-2 shrink-0">
+                    {issue.category !== 'focus-decision' && (
+                      <button onClick={() => promote(issue)} title="Promote to Hierarchy" className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" style={{ color: DS.accent }}>
+                        <ArrowRight size={13} />
+                      </button>
+                    )}
+                    <button onClick={() => remove(issue.id)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                      <Trash2 size={13} style={{ color: DS.inkDis }} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="text-center py-12 rounded-xl" style={{ background: DS.bg }}>
+                <AlertTriangle size={28} className="mx-auto mb-2 opacity-20" style={{ color: DS.warning }} />
+                <p className="text-xs font-medium" style={{ color: DS.inkSub }}>No issues yet — use AI Generate or add manually above</p>
+              </div>
+            )}
+          </div>
+          <DQPrinciple text={DQ_PRINCIPLES.raise} color={DS.warning} />
+        </div>
+      )}
+
+      {/* === TAB: CATEGORISE === */}
+      {activeTab === 'categorise' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs" style={{ color: DS.inkSub }}>Review and adjust the category for each issue. Click AI Categorise to let AI suggest recategorisations.</p>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiCategorise} disabled={busy}>
+              <Sparkles size={11} /> AI Categorise
+            </Button>
+          </div>
+          {ISSUE_CATEGORIES.map(cat => {
+            const catIssues = issues.filter(i => i.category === cat.key);
+            if (catIssues.length === 0) return null;
+            return (
+              <div key={cat.key}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm">{CAT_ICONS[cat.key]}</span>
+                  <span className="text-xs font-bold" style={{ color: cat.color }}>{cat.label}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold text-white" style={{ background: cat.color }}>{catIssues.length}</span>
+                </div>
+                <div className="space-y-1 pl-5 border-l-2 mb-3" style={{ borderColor: cat.soft }}>
+                  {catIssues.map(issue => {
+                    const sev = SEV_COLORS[issue.severity] || SEV_COLORS.Medium;
+                    return (
+                      <div key={issue.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: DS.bg }}>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: sev.soft, color: sev.color }}>{issue.severity}</span>
+                        <span className="text-xs flex-1 min-w-0 truncate" style={{ color: DS.ink }}>{issue.text}</span>
+                        <Select value={issue.category} onValueChange={v => setIssues(p => p.map(i => i.id === issue.id ? { ...i, category: v } : i))}>
+                          <SelectTrigger className="h-6 text-[9px] w-36 shrink-0"><SelectValue /></SelectTrigger>
+                          <SelectContent>{ISSUE_CATEGORIES.map(c => <SelectItem key={c.key} value={c.key} className="text-xs">{c.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
-        </TabsContent>
+          <DQPrinciple text={DQ_PRINCIPLES.categorise} color={DS.warning} />
+        </div>
+      )}
 
-        {/* HEATMAP TAB */}
-        <TabsContent value="heatmap" className="mt-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card><CardContent className="pt-5">
-              <p className="text-xs font-bold mb-3" style={{ color: DS.ink }}>Severity Distribution</p>
-              {severityCounts.map(s => (
-                <div key={s.severity} className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] w-14 font-medium" style={{ color: DS.inkSub }}>{s.severity}</span>
-                  <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ background: DS.borderLight }}>
-                    <div className="h-full rounded-full transition-all" style={{ width: `${issues.length ? (s.count / issues.length) * 100 : 0}%`, background: s.severity === 'Critical' ? '#EF4444' : s.severity === 'High' ? '#F59E0B' : s.severity === 'Medium' ? '#3B82F6' : '#94A3B8' }} />
+      {/* === TAB: HEAT MAP === */}
+      {activeTab === 'heatmap' && (
+        <div className="space-y-4">
+          <p className="text-xs" style={{ color: DS.inkSub }}>Issues mapped by severity. Highest severity + most votes = highest priority for mitigation.</p>
+          {heatMap.length === 0 ? (
+            <div className="text-center py-12" style={{ color: DS.inkDis }}>
+              <p className="text-xs">Add issues to see the heat map</p>
+            </div>
+          ) : (
+            heatMap.map(row => {
+              const sev = SEV_COLORS[row.sev] || SEV_COLORS.Medium;
+              return (
+                <div key={row.sev}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: sev.color }} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: sev.color }}>{row.sev}</span>
+                    <span className="text-[9px]" style={{ color: DS.inkDis }}>{row.cats.reduce((a, c) => a + c.issues.length, 0)} issues</span>
                   </div>
-                  <span className="text-[10px] font-bold w-4 text-right" style={{ color: DS.ink }}>{s.count}</span>
+                  <div className="grid gap-1.5 pl-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                    {row.cats.flatMap(c => c.issues).sort((a, b) => b.votes - a.votes).map(issue => {
+                      const cat = ISSUE_CATEGORIES.find(c => c.key === issue.category);
+                      return (
+                        <div key={issue.id} className="p-2.5 rounded-xl text-xs" style={{ background: sev.soft, borderLeft: `3px solid ${sev.color}` }}>
+                          <div className="font-medium mb-1" style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }} style={{ color: DS.ink }}>{issue.text}</div>
+                          <div className="flex items-center gap-1.5">
+                            {cat && <span className="text-[8px]" style={{ color: cat.color }}>{CAT_ICONS[issue.category]}</span>}
+                            {issue.votes > 0 && <span className="text-[9px] font-bold" style={{ color: DS.accent }}>▲ {issue.votes}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              ))}
-            </CardContent></Card>
-            <Card><CardContent className="pt-5">
-              <p className="text-xs font-bold mb-3" style={{ color: DS.ink }}>Category Coverage</p>
-              <div className="grid grid-cols-2 gap-2">
-                {ISSUE_CATEGORIES.map(c => {
-                  const count = issues.filter(i => i.category === c.key).length;
-                  return (
-                    <div key={c.key} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: count > 0 ? c.soft : '#F8FAFC', opacity: count > 0 ? 1 : 0.5 }}>
-                      <span className="text-[10px] font-bold" style={{ color: count > 0 ? c.color : '#94A3B8' }}>{count}</span>
-                      <span className="text-[10px]" style={{ color: count > 0 ? c.color : '#94A3B8' }}>{c.short}</span>
-                      <span className="text-[9px] ml-auto" style={{ color: '#94A3B8' }}>{c.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent></Card>
-          </div>
-        </TabsContent>
+              );
+            })
+          )}
+          <DQPrinciple text={DQ_PRINCIPLES.heatmap} color={DS.warning} />
+        </div>
+      )}
 
-        {/* BLINDSPOTS TAB */}
-        <TabsContent value="blindspots" className="mt-3">
-          <Card className="border-0 shadow-sm" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, ${DS.canvas} 100%)`, borderLeft: `4px solid #7C3AED` }}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3"><Eye size={14} style={{ color: '#7C3AED' }} /><span className="text-xs font-bold" style={{ color: '#6D28D9' }}>Blind Spot Analysis</span></div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {ISSUE_CATEGORIES.map(c => {
-                  const count = issues.filter(i => i.category === c.key).length;
-                  const hasIssues = count > 0;
-                  return (
-                    <div key={c.key} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: hasIssues ? c.soft : '#F8FAFC' }}>
-                      <span className="text-[10px] font-bold w-5 text-center" style={{ color: hasIssues ? c.color : '#94A3B8' }}>{hasIssues ? <CheckCircle2 size={12} /> : <XCircle size={12} />}</span>
-                      <span className="text-[10px] font-medium" style={{ color: hasIssues ? c.color : '#94A3B8' }}>{c.label}</span>
-                      <Badge variant="outline" className="text-[8px] h-4 ml-auto" style={{ color: hasIssues ? '#059669' : '#D97706', borderColor: hasIssues ? '#A7F3D0' : '#FDE68A' }}>{hasIssues ? `${count} issues` : 'No issues'}</Badge>
-                    </div>
-                  );
-                })}
+      {/* === TAB: BLIND SPOTS === */}
+      {activeTab === 'blindspots' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs" style={{ color: DS.inkSub }}>AI analysis of which issue categories are missing or underrepresented in your list.</p>
+            <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.warning }} onClick={aiBlindSpots} disabled={busy}>
+              <Sparkles size={11} /> {busy ? 'Analysing…' : 'Find Blind Spots'}
+            </Button>
+          </div>
+
+          {!blindSpots ? (
+            <div className="text-center py-14 rounded-xl" style={{ background: DS.bg }}>
+              <Eye size={32} className="mx-auto mb-3 opacity-20" style={{ color: DS.warning }} />
+              <p className="text-sm font-medium mb-1" style={{ color: DS.ink }}>AI Blind Spot Analysis</p>
+              <p className="text-xs max-w-sm mx-auto mb-4" style={{ color: DS.inkTer }}>Analyses your issue list against all 12 DQ categories and flags what's missing.</p>
+              <Button style={{ background: DS.warning }} onClick={aiBlindSpots} disabled={busy} className="gap-2">
+                <Eye size={14} /> Find Blind Spots
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Coverage score */}
+              <div className="rounded-xl p-4 flex items-center gap-4" style={{ background: DS.warnSoft, border: `1px solid ${DS.warning}30` }}>
+                <div className="text-4xl font-black" style={{ color: blindSpots.coverageScore >= 70 ? DS.success : blindSpots.coverageScore >= 45 ? DS.warning : DS.danger }}>
+                  {blindSpots.coverageScore}
+                </div>
+                <div>
+                  <div className="text-sm font-bold mb-0.5" style={{ color: DS.ink }}>Issue Coverage Score</div>
+                  <p className="text-xs" style={{ color: DS.inkSub }}>{blindSpots.coverageSummary}</p>
+                  {blindSpots.topBlindSpot && <p className="text-xs mt-1 font-semibold" style={{ color: DS.danger }}>Top blind spot: {blindSpots.topBlindSpot}</p>}
+                </div>
               </div>
-              {issues.filter(i => !i.mitigation).length > 0 && (
-                <div className="mt-3 p-2 rounded-lg" style={{ background: '#FEF2F2' }}>
-                  <p className="text-[10px] font-semibold" style={{ color: '#DC2626' }}><AlertTriangle size={10} className="inline mr-1" /> {issues.filter(i => !i.mitigation).length} issues have no mitigation plan</p>
+
+              {/* Missing categories */}
+              {blindSpots.missingCategories?.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: DS.inkDis }}>Missing or Underrepresented Categories</p>
+                  {blindSpots.missingCategories.map((mc: any, i: number) => {
+                    const cat = ISSUE_CATEGORIES.find(c => c.key === mc.category || c.label.toLowerCase().includes((mc.category || '').toLowerCase()));
+                    return (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl" style={{ background: DS.canvas, border: `1px solid ${DS.borderLight}` }}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg shrink-0" style={{ background: cat?.soft || DS.bg }}>
+                          {CAT_ICONS[mc.category] || '●'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-xs font-bold" style={{ color: DS.ink }}>{mc.title || mc.category}</span>
+                            <Badge style={{ background: SEV_COLORS[mc.severity]?.soft || DS.bg, color: SEV_COLORS[mc.severity]?.color || DS.inkSub, border: 'none', fontSize: 9 }}>{mc.severity}</Badge>
+                          </div>
+                          <p className="text-[10px] mb-1.5" style={{ color: DS.inkSub }}>{mc.why}</p>
+                          {mc.exampleIssue && (
+                            <div className="text-[9px] px-2 py-1 rounded" style={{ background: DS.bg, color: DS.inkTer }}>
+                              e.g. "{mc.exampleIssue}"
+                            </div>
+                          )}
+                        </div>
+                        <Button size="sm" variant="outline" className="h-6 text-[9px] shrink-0 gap-1" onClick={() => {
+                          setNewText(mc.exampleIssue || mc.title || '');
+                          setNewCat(mc.category || 'uncertainty-external');
+                          setNewSev(mc.severity || 'High');
+                          setActiveTab('raise');
+                        }}>
+                          <Plus size={9} /> Add
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+
+              {blindSpots.patternInsight && (
+                <div className="p-3 rounded-xl" style={{ background: DS.accentSoft, border: `1px solid ${DS.accent}30` }}>
+                  <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: DS.accent }}>Pattern Insight</div>
+                  <p className="text-xs" style={{ color: DS.inkSub }}>{blindSpots.patternInsight}</p>
+                </div>
+              )}
+            </>
+          )}
+          <DQPrinciple text={DQ_PRINCIPLES.blindspots} color={DS.warning} />
+        </div>
+      )}
+
+      {/* Bottom bar */}
+      <div className="flex items-center justify-between pt-4 mt-4 border-t" style={{ borderColor: DS.borderLight }}>
+        <div className="flex items-center gap-3 text-[10px]" style={{ color: DS.inkDis }}>
+          <span>{issues.length} issues raised</span>
+          <span>·</span>
+          <span style={{ color: critCount > 0 ? DS.danger : DS.inkDis }}>{critCount} critical</span>
+          <span>·</span>
+          <span>{openCount} open</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={aiBlindSpots} disabled={busy || !issues.length}>
+            <Eye size={11} /> Check Blind Spots
+          </Button>
+          <Button size="sm" className="h-7 text-xs gap-1" style={{ background: DS.warning }}
+            onClick={() => setActiveTab(TABS[Math.min(TABS.findIndex(t => t.id === activeTab) + 1, TABS.length - 1)].id)}>
+            Next <ChevronRight size={11} />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DQPrinciple({ text, color = DS.frame.fill }: { text: string; color?: string }) {
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-xl mt-2" style={{ background: `${color}10`, border: `1px solid ${color}25` }}>
+      <Lightbulb size={14} style={{ color, flexShrink: 0, marginTop: 2 }} />
+      <div>
+        <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5" style={{ color }}>DQ PRINCIPLE</div>
+        <p className="text-[11px] leading-relaxed" style={{ color: DS.inkSub }}>{text}</p>
+      </div>
     </div>
   );
 }

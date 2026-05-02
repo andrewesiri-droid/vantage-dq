@@ -1,380 +1,401 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Slider } from '@/components/ui/slider';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Users, Plus, Trash2, MapPin, BarChart3, CheckSquare, BrainCircuit,
-  Target, Shield, MessageSquare, TrendingUp, TrendingDown, ArrowRight,
-  UserCircle, AlertTriangle, CheckCircle2, Lightbulb, Star
-} from 'lucide-react';
+import { Sparkles, Plus, Trash2, Lightbulb, ChevronRight, Users, AlertTriangle, CheckCircle } from 'lucide-react';
 
-// ============================================================================
-// TYPES — 10-field structured stakeholder
-// ============================================================================
-interface StakeholderItem {
-  id: number;
-  name: string;
-  role: string;
-  influence: number;
-  interest: number;
-  alignment: string;
-  concerns: string;
-  engagementStrategy: string;
-  decisionAuthority: string;
-  supportNeeded: string;
-}
+interface SH { id: number; name: string; role: string; influence: number; interest: number; alignment: string; concerns: string; engagementAction: string; }
 
-// ============================================================================
-// DEMO DATA
-// ============================================================================
-const DEMO_STAKEHOLDERS: StakeholderItem[] = [
-  { id: 1, name: 'CEO', role: 'Chief Executive Officer', influence: 95, interest: 90, alignment: 'supportive', concerns: 'Speed of execution and maintaining board confidence through the entry process', engagementStrategy: 'Direct weekly briefings. Frame as legacy-defining strategic move.', decisionAuthority: 'Final decision + capital approval', supportNeeded: 'Board presentation deck, competitor response playbook' },
-  { id: 2, name: 'CFO', role: 'Chief Financial Officer', influence: 90, interest: 95, alignment: 'cautious', concerns: 'ROI timeline, capital efficiency, FX exposure on $25M deployment', engagementStrategy: 'Provide detailed financial model with scenario analysis. Stress-test each strategy.', decisionAuthority: 'Capital allocation + financial risk', supportNeeded: 'NPV model with sensitivity analysis, currency hedging plan' },
-  { id: 3, name: 'CSO', role: 'Chief Strategy Officer', influence: 75, interest: 95, alignment: 'supportive', concerns: 'Market timing and competitive response speed. Fear of missing the window.', engagementStrategy: 'Co-create strategy table. Make them architect of the approach.', decisionAuthority: 'Strategy selection + partner evaluation', supportNeeded: 'Competitive intelligence report, partner scorecard' },
-  { id: 4, name: 'CTO', role: 'Chief Technology Officer', influence: 70, interest: 70, alignment: 'neutral', concerns: 'Technical integration complexity, hiring APAC engineering talent, data residency architecture', engagementStrategy: 'Technical roadmap with clear phases. Autonomy on architecture decisions.', decisionAuthority: 'Technology approach + localisation', supportNeeded: 'Architecture review timeline, APAC engineering hiring plan' },
-  { id: 5, name: 'General Counsel', role: 'Legal & Compliance', influence: 65, interest: 80, alignment: 'concerned', concerns: 'Japan data residency, regulatory risk, IP protection in partnerships, contractual liability', engagementStrategy: 'Early involvement in partnership structuring. Clear risk appetite boundaries.', decisionAuthority: 'Regulatory + contractual risk veto', supportNeeded: 'Regulatory study budget, partnership term sheet template' },
-  { id: 6, name: 'Board of Directors', role: 'Governance', influence: 98, interest: 85, alignment: 'supportive', concerns: 'Strategic alignment, risk oversight, investor narrative for next funding round', engagementStrategy: 'Quarterly deep-dive with scenario updates. Clear go/no-go gates.', decisionAuthority: 'Strategic direction + CEO mandate', supportNeeded: 'Board pack with risk-adjusted returns, milestone dashboard' },
-  { id: 7, name: 'Regional GM APAC', role: 'Operations Lead (to be hired)', influence: 60, interest: 90, alignment: 'supportive', concerns: 'Local talent availability, execution bandwidth, cultural integration, authority clarity', engagementStrategy: 'Hire before decision. Include in strategy development. Give P&L ownership.', decisionAuthority: 'Execution + local market decisions', supportNeeded: 'Hiring budget, clear mandate letter, autonomy framework' },
-  { id: 8, name: 'Head of Sales', role: 'Revenue Owner', influence: 55, interest: 75, alignment: 'neutral', concerns: 'Sales cycle length in APAC, pricing model adaptation, partner GTM quality vs direct control', engagementStrategy: 'Sales compensation clarity. APAC revenue target with timeline. Input on partner selection.', decisionAuthority: 'GTM approach + pricing', supportNeeded: 'APAC pricing study, partner GTM quality framework, comp plan' },
+const ALIGN_MAP: Record<string, { color: string; soft: string; label: string }> = {
+  champion:   { color: '#047857', soft: '#ECFDF5', label: 'Champion' },
+  supportive: { color: DS.success, soft: DS.successSoft, label: 'Supportive' },
+  neutral:    { color: '#64748B', soft: '#F1F5F9', label: 'Neutral' },
+  cautious:   { color: DS.warning, soft: DS.warnSoft, label: 'Cautious' },
+  concerned:  { color: '#EA580C', soft: '#FFF7ED', label: 'Concerned' },
+  opposed:    { color: DS.danger, soft: DS.dangerSoft, label: 'Opposed' },
+};
+
+const TABS = [
+  { id: 'map', label: 'Alignment Map' },
+  { id: 'actions', label: 'Engagement Actions' },
+  { id: 'analysis', label: 'AI Analysis' },
 ];
 
-// ============================================================================
-// HELPERS
-// ============================================================================
-const alignmentConfig = (a: string) => {
-  const map: Record<string, { color: string; soft: string; label: string; action: string }> = {
-    supportive: { color: '#059669', soft: '#ECFDF5', label: 'Supportive', action: 'Leverage as champion' },
-    cautious: { color: '#D97706', soft: '#FFFBEB', label: 'Cautious', action: 'Address concerns with data' },
-    concerned: { color: '#DC2626', soft: '#FEF2F2', label: 'Concerned', action: 'Direct engagement required' },
-    neutral: { color: '#64748B', soft: '#F1F5F9', label: 'Neutral', action: 'Convert to supportive' },
-    opposed: { color: '#7F1D1D', soft: '#FEF2F2', label: 'Opposed', action: 'Urgent intervention needed' },
-  };
-  return map[a] || map.neutral;
+const DQ_PRINCIPLES: Record<string, string> = {
+  map: 'Stakeholder alignment is a DQ quality gate. A decision with a strong analytical foundation but weak stakeholder alignment will not be committed to or executed. Map alignment honestly — not how you wish it were.',
+  actions: 'Engagement actions should be specific and assigned. "Brief the CFO on the financial model" is an action. "Engage stakeholders" is not. The most important stakeholders to act on are the high-influence ones who are not yet supportive.',
+  analysis: 'The alignment score measures readiness for commitment, not just support. A 60% supportive rate with 2 high-influence holdouts is worse than 50% supportive with all holdouts being low-influence.',
 };
 
-const quadrant = (influence: number, interest: number) => {
-  if (influence >= 60 && interest >= 60) return { label: 'Key Player', color: '#DC2626', soft: '#FEF2F2', desc: 'High influence + high interest — manage closely' };
-  if (influence >= 60 && interest < 60) return { label: 'Keep Satisfied', color: '#D97706', soft: '#FFFBEB', desc: 'High influence + low interest — keep satisfied, do not overwhelm' };
-  if (influence < 60 && interest >= 60) return { label: 'Keep Informed', color: '#2563EB', soft: '#EFF6FF', desc: 'Low influence + high interest — keep informed, protect from surprises' };
-  return { label: 'Monitor', color: '#64748B', soft: '#F1F5F9', desc: 'Low influence + low interest — monitor periodically' };
-};
-
-// ============================================================================
-// AI ANALYSIS ENGINE
-// ============================================================================
-function generateAIInsights(stakeholders: StakeholderItem[]) {
-  const insights: { type: 'critical' | 'warning' | 'info'; title: string; body: string }[] = [];
-  const keyPlayers = stakeholders.filter(s => s.influence >= 60 && s.interest >= 60);
-  const unsatisfied = stakeholders.filter(s => s.alignment !== 'supportive');
-  const highInfluenceOpposed = stakeholders.filter(s => s.influence >= 80 && s.alignment !== 'supportive');
-
-  if (highInfluenceOpposed.length > 0) {
-    insights.push({ type: 'critical', title: `${highInfluenceOpposed.length} High-Influence Stakeholder${highInfluenceOpposed.length > 1 ? 's' : ''} Not Fully Supportive`, body: `${highInfluenceOpposed.map(s => s.name).join(', ')} have significant influence but are ${highInfluenceOpposed[0].alignment}. Address before commitment.` });
-  }
-  if (unsatisfied.length > 3) {
-    insights.push({ type: 'warning', title: `${unsatisfied.length} Stakeholders Need Attention`, body: 'More than half of mapped stakeholders are not fully supportive. Broad engagement campaign recommended.' });
-  }
-  if (keyPlayers.length > 5) {
-    insights.push({ type: 'warning', title: `${keyPlayers.length} Key Players — Coordination Risk`, body: 'Too many stakeholders in the "manage closely" quadrant. Decision process may slow down. Consider delegating to sub-groups.' });
-  }
-  const noStrategy = stakeholders.filter(s => !s.engagementStrategy || s.engagementStrategy.length < 15);
-  if (noStrategy.length > 0) {
-    insights.push({ type: 'info', title: `${noStrategy.length} Stakeholders Lack Engagement Strategy`, body: 'Every non-supportive stakeholder should have a targeted engagement plan. Add specific actions for each.' });
-  }
-  const alignmentScore = Math.round((stakeholders.filter(s => s.alignment === 'supportive').length / stakeholders.length) * 100);
-  insights.push({ type: alignmentScore >= 70 ? 'info' : alignmentScore >= 50 ? 'warning' : 'critical', title: `Alignment Score: ${alignmentScore}%`, body: alignmentScore >= 70 ? 'Strong alignment base. Focus on converting neutral stakeholders.' : alignmentScore >= 50 ? 'Moderate alignment. Structured engagement required before decision commitment.' : 'Weak alignment. Do not commit until alignment is strengthened.' });
-  return insights;
-}
-
-// ============================================================================
-// COMPONENT
-// ============================================================================
 export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
-  const [stakeholders, setStakeholders] = useState<StakeholderItem[]>(DEMO_STAKEHOLDERS);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('matrix');
-  const [editingId, setEditingId] = useState<number | null>(null);
-
+  const { call, busy } = useAI();
+  const [activeTab, setActiveTab] = useState('map');
+  const [stakeholders, setStakeholders] = useState<SH[]>([]);
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('');
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (data?.stakeholderEntries && data.stakeholderEntries.length > 0) {
+    if (data?.stakeholderEntries?.length) {
       setStakeholders(data.stakeholderEntries.map((s: any) => ({
-        id: s.id, name: s.name, role: s.role || '', influence: s.influence || 50, interest: s.interest || 50,
-        alignment: s.alignment || 'neutral', concerns: s.concerns || '', engagementStrategy: s.engagementStrategy || '',
-        decisionAuthority: s.decisionAuthority || '', supportNeeded: s.supportNeeded || '',
+        id: s.id, name: s.name, role: s.role || '',
+        influence: s.influence || 50, interest: s.interest || 50,
+        alignment: s.alignment || 'neutral', concerns: s.concerns || '',
+        engagementAction: s.engagementAction || '',
       })));
     }
   }, [data?.stakeholderEntries]);
 
-  const addStakeholder = () => {
+  const add = () => {
     if (!newName.trim()) return;
-    const newS: StakeholderItem = {
-      id: Date.now(), name: newName.trim(), role: newRole, influence: 50, interest: 50,
-      alignment: 'neutral', concerns: '', engagementStrategy: '', decisionAuthority: '', supportNeeded: '',
-    };
-    setStakeholders(p => [...p, newS]);
-    hooks?.createStakeholder?.({ sessionId, name: newName.trim(), role: newRole });
+    const n: SH = { id: Date.now(), name: newName.trim(), role: newRole.trim(), influence: 50, interest: 50, alignment: 'neutral', concerns: '', engagementAction: '' };
+    setStakeholders(p => [...p, n]);
+    hooks?.createStakeholder?.({ sessionId, name: newName.trim(), role: newRole.trim(), influence: 50, interest: 50, alignment: 'neutral' });
     setNewName(''); setNewRole('');
   };
 
-  const deleteSt = (id: number) => {
-    setStakeholders(p => p.filter(s => s.id !== id));
-    hooks?.deleteStakeholder?.({ id });
+  const remove = (id: number) => { setStakeholders(p => p.filter(s => s.id !== id)); hooks?.deleteStakeholder?.({ id }); };
+  const update = (id: number, field: string, val: any) => setStakeholders(p => p.map(s => s.id === id ? { ...s, [field]: val } : s));
+
+  const aiGenerate = () => {
+    const existing = stakeholders.map(s => s.name).join(', ');
+    const prompt = `Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisionStatement || ''}\nContext: ${(data?.session?.context || '').slice(0, 200)}\nExisting: ${existing}\n\nReturn JSON: { stakeholders: [{name, role, influence: 0-100, interest: 0-100, alignment (champion/supportive/neutral/cautious/concerned/opposed), concerns, engagementAction}] }`;
+    call(prompt, (r) => {
+      let result = r;
+      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+      const newSHs = (result?.stakeholders || []).map((s: any, i: number) => ({
+        id: Date.now()+i, name: s.name||'', role: s.role||'',
+        influence: Math.min(100, Math.max(0, Number(s.influence)||50)),
+        interest: Math.min(100, Math.max(0, Number(s.interest)||50)),
+        alignment: s.alignment||'neutral', concerns: s.concerns||'', engagementAction: s.engagementAction||'',
+      }));
+      setStakeholders(p => [...p, ...newSHs]);
+    });
   };
 
-  const updateField = (id: number, field: keyof StakeholderItem, value: any) => {
-    setStakeholders(p => p.map(s => s.id === id ? { ...s, [field]: value } : s));
+  const aiAnalyse = () => {
+    const shSummary = stakeholders.map(s => `${s.name} (${s.role}): inf=${s.influence}, int=${s.interest}, align=${s.alignment}, concerns="${s.concerns}"`).join('\n');
+    const prompt = `Analyse stakeholder alignment for this decision.\nDecision: ${data?.session?.decisionStatement||''}\n\nStakeholders:\n${shSummary}\n\nReturn JSON: { alignmentScore: 0-100, riskLevel: Green|Amber|Red, readinessStatement: string, criticalGaps: [string], engagementPriorities: [{name, action, urgency: critical|high|medium}], insight: string }`;
+    call(prompt, (r) => {
+      let result = r;
+      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+      if (result && !result.error) { setAnalysis(result); setActiveTab('analysis'); }
+    });
   };
 
-  const aiInsights = useMemo(() => generateAIInsights(stakeholders), [stakeholders]);
-  const alignmentScore = Math.round((stakeholders.filter(s => s.alignment === 'supportive').length / stakeholders.length) * 100);
+  const supporters = stakeholders.filter(s => ['champion','supportive'].includes(s.alignment)).length;
+  const resistors = stakeholders.filter(s => ['concerned','opposed'].includes(s.alignment)).length;
+  const alignPct = stakeholders.length ? Math.round((supporters / stakeholders.length) * 100) : 0;
+  const selected = selectedId ? stakeholders.find(s => s.id === selectedId) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-0">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
-            <Users size={22} style={{ color: '#7C3AED' }} /> Stakeholder Alignment
-          </h2>
-          <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{stakeholders.length} stakeholders &middot; {stakeholders.filter(s => s.alignment === 'supportive').length} supportive &middot; Alignment: {alignmentScore}%</p>
+      <div className="flex items-start gap-3 mb-4 flex-wrap">
+        <div className="flex-1">
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 07</div>
+          <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Stakeholder Alignment</h2>
         </div>
-        <Button size="sm" variant="outline" className="h-8 text-[10px] gap-1" onClick={() => setAiOpen(!aiOpen)}>
-          <BrainCircuit size={12} /> {aiOpen ? 'Hide AI Analysis' : 'AI Analysis'}
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={add} disabled={!newName.trim()}>
+            <Plus size={11} /> Add Stakeholder
+          </Button>
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiGenerate} disabled={busy}>
+            <Sparkles size={11} /> AI Generate
+          </Button>
+          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.commitment.fill }} onClick={aiAnalyse} disabled={busy}>
+            <Sparkles size={11} /> Analyse Alignment
+          </Button>
+        </div>
       </div>
 
-      {/* AI Panel */}
-      {aiOpen && (
-        <Card className="border-0 shadow-md" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 100%)`, borderLeft: `4px solid #7C3AED` }}>
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <BrainCircuit size={14} style={{ color: '#7C3AED' }} />
-              <span className="text-xs font-bold" style={{ color: '#6D28D9' }}>AI Stakeholder Analysis</span>
-              <div className="ml-auto flex items-center gap-2">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: alignmentScore >= 70 ? '#ECFDF5' : alignmentScore >= 50 ? '#FFFBEB' : '#FEF2F2', color: alignmentScore >= 70 ? '#059669' : alignmentScore >= 50 ? '#D97706' : '#DC2626' }}>{alignmentScore}% aligned</span>
+      {/* Tabs */}
+      <div className="flex border-b mb-5" style={{ borderColor: DS.borderLight }}>
+        {TABS.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className="px-4 py-2.5 text-xs font-medium transition-colors"
+            style={{ color: activeTab === tab.id ? DS.commitment.fill : DS.inkTer, borderBottom: activeTab === tab.id ? `2px solid ${DS.commitment.fill}` : '2px solid transparent', marginBottom: -1 }}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* === ALIGNMENT MAP TAB === */}
+      {activeTab === 'map' && (
+        <div className="space-y-4">
+          {/* Add row */}
+          <div className="flex gap-2 p-3 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
+            <Input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()}
+              placeholder="Name or role title…" className="flex-1 text-xs h-8 bg-white" />
+            <Input value={newRole} onChange={e => setNewRole(e.target.value)}
+              placeholder="Position…" className="flex-1 text-xs h-8 bg-white" />
+            <Button size="sm" className="h-8 px-3 gap-1 text-xs shrink-0" style={{ background: DS.commitment.fill }} onClick={add} disabled={!newName.trim()}>
+              <Plus size={12} /> Add
+            </Button>
+          </div>
+
+          {/* Stats */}
+          {stakeholders.length > 0 && (
+            <div className="flex items-center gap-3 text-xs">
+              <span style={{ color: DS.inkDis }}>{stakeholders.length} stakeholders</span>
+              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: DS.bg }}>
+                <div className="h-full rounded-full" style={{ width: `${alignPct}%`, background: DS.success }} />
               </div>
+              <span className="font-bold" style={{ color: alignPct >= 70 ? DS.success : DS.warning }}>{alignPct}% aligned</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {aiInsights.map((insight, idx) => (
-                <div key={idx} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: insight.type === 'critical' ? '#FEF2F2' : insight.type === 'warning' ? '#FFFBEB' : '#F0FDFA' }}>
-                  {insight.type === 'critical' ? <AlertTriangle size={12} style={{ color: '#DC2626', marginTop: 2 }} /> : insight.type === 'warning' ? <AlertTriangle size={12} style={{ color: '#D97706', marginTop: 2 }} /> : <Lightbulb size={12} style={{ color: '#059669', marginTop: 2 }} />}
-                  <div>
-                    <p className="text-[10px] font-semibold" style={{ color: insight.type === 'critical' ? '#DC2626' : insight.type === 'warning' ? '#D97706' : '#059669' }}>{insight.title}</p>
-                    <p className="text-[10px] mt-0.5 leading-relaxed" style={{ color: DS.inkSub }}>{insight.body}</p>
+          )}
+
+          <div className="flex gap-4">
+            {/* Map canvas */}
+            <div className="flex-1 relative rounded-xl overflow-hidden border" style={{ borderColor: DS.borderLight, background: '#F7F8FA', height: stakeholders.length > 0 ? 320 : 280 }}>
+              {stakeholders.length === 0 ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: DS.borderLight }}>
+                    <Users size={20} style={{ color: DS.inkDis }} />
                   </div>
+                  <p className="text-sm font-medium mb-1" style={{ color: DS.inkSub }}>No stakeholders mapped yet</p>
+                  <p className="text-xs mb-4 text-center max-w-xs" style={{ color: DS.inkDis }}>Map who has a stake in this decision — who must approve it, who must implement it, and who could block it.</p>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={aiGenerate} disabled={busy}>
+                    <Sparkles size={11} /> AI Generate Stakeholders
+                  </Button>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Add Stakeholder */}
-      <Card className="border-0 shadow-sm" style={{ background: `linear-gradient(135deg, #F5F3FF 0%, ${DS.canvas} 100%)`, borderLeft: `4px solid #7C3AED` }}>
-        <CardContent className="pt-4 flex gap-2">
-          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Name (e.g. CFO, Board Chair)" className="text-xs bg-white" />
-          <Input value={newRole} onChange={e => setNewRole(e.target.value)} placeholder="Role / Function" className="text-xs bg-white" />
-          <Button size="sm" style={{ background: '#7C3AED' }} onClick={addStakeholder} disabled={!newName.trim()}><Plus size={12} /></Button>
-        </CardContent>
-      </Card>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="text-[10px]">
-          <TabsTrigger value="matrix" className="text-[10px] gap-1"><MapPin size={10} /> Power/Interest Matrix</TabsTrigger>
-          <TabsTrigger value="cards" className="text-[10px] gap-1"><UserCircle size={10} /> Stakeholder Cards</TabsTrigger>
-          <TabsTrigger value="actions" className="text-[10px] gap-1"><CheckSquare size={10} /> Action Plan</TabsTrigger>
-        </TabsList>
-
-        {/* MATRIX TAB */}
-        <TabsContent value="matrix" className="mt-3">
-          <Card className="border-0 shadow-md"><CardContent className="pt-4">
-            <div className="relative w-full overflow-hidden rounded-lg" style={{ background: DS.bg, minHeight: 420 }}>
-              {/* SVG Quadrant Background */}
-              <svg width="100%" height="420" viewBox="0 0 600 420" className="rounded-lg">
-                {/* Quadrant backgrounds */}
-                <rect x="60" y="10" width="245" height="195" fill="#FEF2F2" stroke="#FECACA" strokeWidth={1} rx="4" />
-                <rect x="315" y="10" width="245" height="195" fill="#FFFBEB" stroke="#FDE68A" strokeWidth={1} rx="4" />
-                <rect x="60" y="215" width="245" height="185" fill="#F1F5F9" stroke="#CBD5E1" strokeWidth={1} rx="4" />
-                <rect x="315" y="215" width="245" height="185" fill="#F0FDFA" stroke="#A7F3D0" strokeWidth={1} rx="4" />
-
-                {/* Labels */}
-                <text x="182" y="30" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#DC2626">Key Players</text>
-                <text x="182" y="48" textAnchor="middle" fontSize="9" fill="#EF4444">High Influence · High Interest</text>
-                <text x="437" y="30" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#D97706">Keep Satisfied</text>
-                <text x="437" y="48" textAnchor="middle" fontSize="9" fill="#F59E0B">High Influence · Low Interest</text>
-                <text x="182" y="235" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#64748B">Monitor</text>
-                <text x="182" y="253" textAnchor="middle" fontSize="9" fill="#94A3B8">Low Influence · Low Interest</text>
-                <text x="437" y="235" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#059669">Keep Informed</text>
-                <text x="437" y="253" textAnchor="middle" fontSize="9" fill="#10B981">Low Influence · High Interest</text>
-
-                {/* Axis lines */}
-                <line x1="60" y1="400" x2="560" y2="400" stroke="#94A3B8" strokeWidth={2} />
-                <line x1="60" y1="10" x2="60" y2="400" stroke="#94A3B8" strokeWidth={2} />
-                <text x="310" y="415" textAnchor="middle" fontSize="10" fill="#64748B">Interest →</text>
-                <text x="35" y="205" textAnchor="middle" fontSize="10" fill="#64748B" transform="rotate(-90 35 205)">Influence →</text>
-
-                {/* Stakeholder dots */}
-                {stakeholders.map((s) => {
-                  const x = 65 + (s.interest / 100) * 490;
-                  const y = 395 - (s.influence / 100) * 380;
-                  const ac = alignmentConfig(s.alignment);
-                  const q = quadrant(s.influence, s.interest);
-                  return (
-                    <g key={s.id}>
-                      <circle cx={x} cy={y} r={18} fill={ac.soft} stroke={ac.color} strokeWidth={2} />
-                      <text x={x} y={y + 4} textAnchor="middle" fontSize="9" fontWeight="bold" fill={ac.color}>{s.name.slice(0, 3)}</text>
-                      {/* Tooltip on hover — simplified label */}
-                      <text x={x} y={y - 24} textAnchor="middle" fontSize="8" fill={DS.inkSub}>{s.name}</text>
-                    </g>
-                  );
-                })}
-              </svg>
+              ) : (
+                <>
+                  {/* Axis labels */}
+                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-[8px] font-bold" style={{ color: DS.inkDis }}>INTEREST →</div>
+                  <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-[8px] font-bold" style={{ color: DS.inkDis, writingMode: 'vertical-rl', transform: 'rotate(180deg) translateY(50%)' }}>↑ INFLUENCE</div>
+                  {/* Grid lines */}
+                  <div className="absolute top-1/2 left-0 right-0 h-px" style={{ background: DS.borderLight }} />
+                  <div className="absolute left-1/2 top-0 bottom-0 w-px" style={{ background: DS.borderLight }} />
+                  {/* Stakeholder dots */}
+                  {stakeholders.map(s => {
+                    const al = ALIGN_MAP[s.alignment] || ALIGN_MAP.neutral;
+                    const x = 8 + (s.interest / 100) * 84;
+                    const y = 8 + ((100 - s.influence) / 100) * 84;
+                    const isSelected = selectedId === s.id;
+                    return (
+                      <button key={s.id} className="absolute flex flex-col items-center transition-transform hover:scale-110"
+                        style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%,-50%)' }}
+                        onClick={() => setSelectedId(isSelected ? null : s.id)}>
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md"
+                          style={{ background: al.color, border: isSelected ? '3px solid white' : '2px solid white', boxShadow: isSelected ? `0 0 0 3px ${al.color}` : '0 2px 8px rgba(0,0,0,0.15)' }}>
+                          {s.name.slice(0,2).toUpperCase()}
+                        </div>
+                        <span className="text-[8px] mt-0.5 px-1 rounded bg-white shadow-sm font-medium" style={{ color: DS.ink }}>{s.name.slice(0,12)}</span>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </div>
 
-            {/* Legend */}
-            <div className="flex flex-wrap gap-3 mt-3">
-              {['supportive', 'cautious', 'concerned', 'neutral', 'opposed'].map(a => {
-                const ac = alignmentConfig(a);
-                const count = stakeholders.filter(s => s.alignment === a).length;
-                return (
-                  <div key={a} className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: ac.color }} />
-                    <span className="text-[10px]" style={{ color: DS.inkSub }}>{ac.label} ({count})</span>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent></Card>
-        </TabsContent>
-
-        {/* CARDS TAB */}
-        <TabsContent value="cards" className="mt-3 space-y-3">
-          {stakeholders.map(s => {
-            const ac = alignmentConfig(s.alignment);
-            const q = quadrant(s.influence, s.interest);
-            const isEditing = editingId === s.id;
-            return (
-              <Card key={s.id} className="overflow-hidden border-0 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ background: ac.soft, color: ac.color }}>{s.name.charAt(0)}</div>
+            {/* Detail panel */}
+            <div className="w-64 shrink-0 space-y-2">
+              {selected ? (
+                <div className="rounded-xl overflow-hidden border" style={{ borderColor: DS.borderLight }}>
+                  <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: ALIGN_MAP[selected.alignment]?.color || DS.inkSub }}>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-white/20">{selected.name.slice(0,2).toUpperCase()}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold" style={{ color: DS.ink }}>{s.name}</span>
-                        <span className="text-[10px]" style={{ color: DS.inkTer }}>{s.role}</span>
-                        <Badge style={{ background: ac.soft, color: ac.color, borderColor: ac.color + '30' }} variant="outline" className="text-[9px] h-4 capitalize">{s.alignment}</Badge>
-                        <Badge style={{ background: q.soft, color: q.color, borderColor: q.color + '30' }} variant="outline" className="text-[9px] h-4">{q.label}</Badge>
-                      </div>
-
-                      {/* Influence / Interest bars */}
-                      <div className="flex items-center gap-4 mt-2">
-                        <div className="flex items-center gap-1.5 flex-1">
-                          <span className="text-[10px] w-12" style={{ color: DS.inkTer }}>Influence</span>
-                          <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: DS.borderLight }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${s.influence}%`, background: '#7C3AED' }} />
-                          </div>
-                          <span className="text-[10px] font-bold w-6" style={{ color: '#7C3AED' }}>{s.influence}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 flex-1">
-                          <span className="text-[10px] w-12" style={{ color: DS.inkTer }}>Interest</span>
-                          <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: DS.borderLight }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${s.interest}%`, background: '#2563EB' }} />
-                          </div>
-                          <span className="text-[10px] font-bold w-6" style={{ color: '#2563EB' }}>{s.interest}</span>
-                        </div>
-                      </div>
-
-                      {isEditing ? (
-                        <div className="mt-3 space-y-2">
-                          <Textarea value={s.concerns} onChange={e => updateField(s.id, 'concerns', e.target.value)} placeholder="Key concerns" className="text-[10px]" rows={1} />
-                          <Textarea value={s.engagementStrategy} onChange={e => updateField(s.id, 'engagementStrategy', e.target.value)} placeholder="Engagement strategy" className="text-[10px]" rows={1} />
-                          <Textarea value={s.decisionAuthority} onChange={e => updateField(s.id, 'decisionAuthority', e.target.value)} placeholder="Decision authority" className="text-[10px]" rows={1} />
-                          <Textarea value={s.supportNeeded} onChange={e => updateField(s.id, 'supportNeeded', e.target.value)} placeholder="Support needed" className="text-[10px]" rows={1} />
-                          <div className="flex gap-2">
-                            <div className="flex-1"><label className="text-[9px] block mb-1" style={{ color: DS.inkTer }}>Influence</label><Slider value={[s.influence]} onValueChange={v => updateField(s.id, 'influence', v[0])} max={100} step={5} /></div>
-                            <div className="flex-1"><label className="text-[9px] block mb-1" style={{ color: DS.inkTer }}>Interest</label><Slider value={[s.interest]} onValueChange={v => updateField(s.id, 'interest', v[0])} max={100} step={5} /></div>
-                          </div>
-                          <Button size="sm" className="h-7 text-[10px]" onClick={() => setEditingId(null)}>Done</Button>
-                        </div>
-                      ) : (
-                        <div className="mt-2 space-y-1.5">
-                          {s.concerns && <p className="text-[10px] p-1.5 rounded" style={{ background: '#FEF2F2', color: '#991B1B' }}><strong>Concern:</strong> {s.concerns}</p>}
-                          {s.engagementStrategy && <p className="text-[10px] p-1.5 rounded" style={{ background: '#F0FDFA', color: '#065F46' }}><strong>Strategy:</strong> {s.engagementStrategy}</p>}
-                          {s.decisionAuthority && <p className="text-[10px] p-1.5 rounded" style={{ background: DS.bg, color: DS.inkSub }}><strong>Authority:</strong> {s.decisionAuthority}</p>}
-                          {s.supportNeeded && <p className="text-[10px] p-1.5 rounded" style={{ background: '#FFFBEB', color: '#92400E' }}><strong>Needs:</strong> {s.supportNeeded}</p>}
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 mt-2">
-                        <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={() => setEditingId(isEditing ? null : s.id)}>
-                          {isEditing ? 'Close' : 'Edit'}
-                        </Button>
-                        <button onClick={() => deleteSt(s.id)} className="text-gray-400 hover:text-red-500 ml-auto"><Trash2 size={12} /></button>
+                      <div className="text-xs font-bold text-white">{selected.name}</div>
+                      <div className="text-[9px] text-white/70">{selected.role}</div>
+                    </div>
+                    <button onClick={() => setSelectedId(null)} className="text-white/60 hover:text-white">×</button>
+                  </div>
+                  <div className="p-3 space-y-2.5">
+                    <div>
+                      <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>ALIGNMENT</div>
+                      <div className="flex flex-wrap gap-1">
+                        {Object.entries(ALIGN_MAP).map(([key, val]) => (
+                          <button key={key} onClick={() => update(selected.id, 'alignment', key)}
+                            className="text-[9px] px-2 py-0.5 rounded-full font-medium transition-all"
+                            style={{ background: selected.alignment === key ? val.color : val.soft, color: selected.alignment === key ? '#fff' : val.color }}>
+                            {val.label}
+                          </button>
+                        ))}
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>INFLUENCE</div>
+                        <input type="range" min="0" max="100" value={selected.influence} onChange={e => update(selected.id, 'influence', parseInt(e.target.value))} className="w-full h-1" style={{ accentColor: DS.commitment.fill }} />
+                        <div className="text-[9px] font-bold" style={{ color: DS.ink }}>{selected.influence}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>INTEREST</div>
+                        <input type="range" min="0" max="100" value={selected.interest} onChange={e => update(selected.id, 'interest', parseInt(e.target.value))} className="w-full h-1" style={{ accentColor: DS.commitment.fill }} />
+                        <div className="text-[9px] font-bold" style={{ color: DS.ink }}>{selected.interest}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>KEY CONCERNS</div>
+                      <textarea value={selected.concerns} onChange={e => update(selected.id, 'concerns', e.target.value)} rows={2}
+                        placeholder="What concerns do they have?" className="w-full text-[10px] p-1.5 rounded border resize-none" style={{ borderColor: DS.borderLight }} />
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>ENGAGEMENT ACTION</div>
+                      <textarea value={selected.engagementAction} onChange={e => update(selected.id, 'engagementAction', e.target.value)} rows={2}
+                        placeholder="Specific action to take…" className="w-full text-[10px] p-1.5 rounded border resize-none" style={{ borderColor: DS.borderLight }} />
+                    </div>
+                    <button onClick={() => remove(selected.id)} className="text-[9px] flex items-center gap-1" style={{ color: DS.danger }}>
+                      <Trash2 size={10} /> Remove stakeholder
+                    </button>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </TabsContent>
+                </div>
+              ) : (
+                <div className="rounded-xl p-4 text-center" style={{ background: DS.bg, border: `1px dashed ${DS.border}` }}>
+                  <p className="text-xs" style={{ color: DS.inkDis }}>Click any stakeholder card to edit their details</p>
+                </div>
+              )}
 
-        {/* ACTIONS TAB */}
-        <TabsContent value="actions" className="mt-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Card className="border-0 shadow-sm" style={{ background: `linear-gradient(135deg, #FEF2F2 0%, ${DS.canvas} 100%)`, borderLeft: `4px solid #DC2626` }}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3"><AlertTriangle size={14} style={{ color: '#DC2626' }} /><span className="text-xs font-bold" style={{ color: '#DC2626' }}>Urgent: Non-Supportive</span></div>
-                {stakeholders.filter(s => s.alignment !== 'supportive').length === 0 ? (
-                  <p className="text-xs" style={{ color: '#059669' }}><CheckCircle2 size={12} className="inline mr-1" /> All stakeholders are supportive. Excellent alignment.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {stakeholders.filter(s => s.alignment !== 'supportive').map(s => {
-                      const ac = alignmentConfig(s.alignment);
-                      const q = quadrant(s.influence, s.interest);
-                      return (
-                        <div key={s.id} className="p-2.5 rounded-lg" style={{ background: ac.soft }}>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold" style={{ color: ac.color }}>{s.name}</span>
-                            <Badge style={{ background: ac.soft, color: ac.color, borderColor: ac.color + '30' }} variant="outline" className="text-[8px] h-4">{ac.label}</Badge>
-                            <Badge style={{ background: q.soft, color: q.color, borderColor: q.color + '30' }} variant="outline" className="text-[8px] h-4">{q.label}</Badge>
-                          </div>
-                          <p className="text-[10px] mt-1" style={{ color: ac.color }}><strong>Action:</strong> {ac.action}</p>
-                          {s.engagementStrategy && <p className="text-[9px] mt-0.5" style={{ color: DS.inkSub }}>{s.engagementStrategy}</p>}
+              {/* Alignment legend */}
+              <div className="rounded-xl p-3" style={{ background: DS.bg }}>
+                {Object.entries(ALIGN_MAP).map(([key, val]) => {
+                  const count = stakeholders.filter(s => s.alignment === key).length;
+                  if (count === 0) return null;
+                  return (
+                    <div key={key} className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full" style={{ background: val.color }} />
+                      <span className="text-[10px]" style={{ color: DS.inkSub }}>{val.label}</span>
+                      <span className="text-[10px] font-bold ml-auto" style={{ color: val.color }}>{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <DQPrinciple text={DQ_PRINCIPLES.map} color={DS.commitment.fill} />
+        </div>
+      )}
+
+      {/* === ENGAGEMENT ACTIONS TAB === */}
+      {activeTab === 'actions' && (
+        <div className="space-y-3">
+          <p className="text-xs" style={{ color: DS.inkSub }}>Specific actions for each stakeholder who is not yet fully supportive. Assign owners and deadlines.</p>
+          {['champion','supportive','neutral','cautious','concerned','opposed'].map(align => {
+            const group = stakeholders.filter(s => s.alignment === align);
+            if (!group.length) return null;
+            const al = ALIGN_MAP[align];
+            return (
+              <div key={align}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full" style={{ background: al.color }} />
+                  <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: al.color }}>{al.label}</span>
+                  <span className="text-[9px]" style={{ color: DS.inkDis }}>{group.length} stakeholders</span>
+                </div>
+                <div className="space-y-1.5 pl-4">
+                  {group.map(s => (
+                    <div key={s.id} className="flex items-start gap-3 p-3 rounded-xl" style={{ background: DS.canvas, border: `1px solid ${DS.borderLight}` }}>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0" style={{ background: al.color }}>
+                        {s.name.slice(0,2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-semibold" style={{ color: DS.ink }}>{s.name}</span>
+                          <span className="text-[9px]" style={{ color: DS.inkDis }}>{s.role}</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-sm" style={{ background: `linear-gradient(135deg, #F0FDFA 0%, ${DS.canvas} 100%)`, borderLeft: `4px solid #059669` }}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3"><CheckCircle2 size={14} style={{ color: '#059669' }} /><span className="text-xs font-bold" style={{ color: '#059669' }}>Leverage: Supportive Champions</span></div>
-                <div className="space-y-2">
-                  {stakeholders.filter(s => s.alignment === 'supportive').map(s => (
-                    <div key={s.id} className="p-2 rounded-lg flex items-center gap-2" style={{ background: '#ECFDF5' }}>
-                      <Star size={12} style={{ color: '#059669' }} />
-                      <span className="text-[11px] font-semibold" style={{ color: '#065F46' }}>{s.name}</span>
-                      {s.engagementStrategy && <span className="text-[9px]" style={{ color: DS.inkSub }}>— {s.engagementStrategy}</span>}
+                        {s.concerns && <p className="text-[10px] mb-1.5 italic" style={{ color: DS.inkDis }}>Concern: {s.concerns}</p>}
+                        <textarea value={s.engagementAction} onChange={e => update(s.id, 'engagementAction', e.target.value)}
+                          placeholder="Specific engagement action — who does what by when?" rows={2}
+                          className="w-full text-[10px] p-1.5 rounded border resize-none" style={{ borderColor: DS.borderLight }} />
+                      </div>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+              </div>
+            );
+          })}
+          {stakeholders.length === 0 && (
+            <div className="text-center py-12" style={{ color: DS.inkDis }}>
+              <p className="text-xs">Add stakeholders on the Alignment Map tab first</p>
+            </div>
+          )}
+          <DQPrinciple text={DQ_PRINCIPLES.actions} color={DS.commitment.fill} />
+        </div>
+      )}
+
+      {/* === AI ANALYSIS TAB === */}
+      {activeTab === 'analysis' && (
+        <div className="space-y-4">
+          {!analysis ? (
+            <div className="text-center py-14 rounded-xl" style={{ background: DS.bg }}>
+              <Users size={32} className="mx-auto mb-3 opacity-20" style={{ color: DS.commitment.fill }} />
+              <p className="text-sm font-medium mb-1" style={{ color: DS.ink }}>AI Alignment Analysis</p>
+              <p className="text-xs mb-4" style={{ color: DS.inkTer }}>Analyses your stakeholder map and generates engagement priorities for commitment readiness.</p>
+              <Button style={{ background: DS.commitment.fill }} onClick={aiAnalyse} disabled={busy} className="gap-2">
+                <Sparkles size={14} /> Analyse Alignment
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-xl p-4 flex items-center gap-4" style={{ background: analysis.riskLevel === 'Green' ? DS.successSoft : analysis.riskLevel === 'Amber' ? DS.warnSoft : DS.dangerSoft, border: `1px solid ${analysis.riskLevel === 'Green' ? DS.success : analysis.riskLevel === 'Amber' ? DS.warning : DS.danger}30` }}>
+                <div className="text-4xl font-black" style={{ color: analysis.riskLevel === 'Green' ? DS.success : analysis.riskLevel === 'Amber' ? DS.warning : DS.danger }}>{analysis.alignmentScore}</div>
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-bold" style={{ color: DS.ink }}>Alignment Score</span>
+                    <Badge style={{ background: analysis.riskLevel === 'Green' ? DS.success : analysis.riskLevel === 'Amber' ? DS.warning : DS.danger, color: '#fff', border: 'none' }}>{analysis.riskLevel}</Badge>
+                  </div>
+                  <p className="text-xs" style={{ color: DS.inkSub }}>{analysis.readinessStatement}</p>
+                </div>
+              </div>
+              {(analysis.criticalGaps||[]).length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: DS.inkDis }}>CRITICAL GAPS</div>
+                  {analysis.criticalGaps.map((g: string, i: number) => (
+                    <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: DS.dangerSoft }}>
+                      <AlertTriangle size={12} style={{ color: DS.danger, flexShrink: 0, marginTop: 1 }} />
+                      <p className="text-xs" style={{ color: DS.inkSub }}>{g}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(analysis.engagementPriorities||[]).length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: DS.inkDis }}>ENGAGEMENT PRIORITIES</div>
+                  {analysis.engagementPriorities.map((ep: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl" style={{ background: DS.canvas, border: `1px solid ${DS.borderLight}` }}>
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white shrink-0" style={{ background: ep.urgency === 'critical' ? DS.danger : ep.urgency === 'high' ? DS.warning : DS.inkDis }}>{i+1}</div>
+                      <div><div className="text-xs font-semibold" style={{ color: DS.ink }}>{ep.name}</div><div className="text-[10px]" style={{ color: DS.inkSub }}>{ep.action}</div></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {analysis.insight && <div className="p-3 rounded-xl" style={{ background: DS.accentSoft }}><p className="text-xs" style={{ color: DS.inkSub }}>{analysis.insight}</p></div>}
+            </div>
+          )}
+          <DQPrinciple text={DQ_PRINCIPLES.analysis} color={DS.commitment.fill} />
+        </div>
+      )}
+
+      {/* Bottom bar */}
+      <div className="flex items-center justify-between pt-4 mt-4 border-t" style={{ borderColor: DS.borderLight }}>
+        <div className="flex items-center gap-3 text-[10px]" style={{ color: DS.inkDis }}>
+          <span>{stakeholders.length} stakeholders</span>
+          <span>·</span>
+          <span style={{ color: DS.success }}>{supporters} supportive</span>
+          <span>·</span>
+          <span style={{ color: resistors > 0 ? DS.danger : DS.inkDis }}>{resistors} resistant</span>
+        </div>
+        <Button size="sm" className="h-7 text-xs gap-1" style={{ background: DS.commitment.fill }}
+          onClick={() => setActiveTab(TABS[Math.min(TABS.findIndex(t=>t.id===activeTab)+1,TABS.length-1)].id)}>
+          Next <ChevronRight size={11} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DQPrinciple({ text, color = DS.commitment.fill }: { text: string; color?: string }) {
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-xl mt-2" style={{ background: `${color}10`, border: `1px solid ${color}25` }}>
+      <Lightbulb size={14} style={{ color, flexShrink: 0, marginTop: 2 }} />
+      <div>
+        <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5" style={{ color }}>DQ PRINCIPLE</div>
+        <p className="text-[11px] leading-relaxed" style={{ color: DS.inkSub }}>{text}</p>
+      </div>
     </div>
   );
 }

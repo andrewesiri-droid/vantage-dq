@@ -1,2 +1,2 @@
-export { GameTheory } from './GameTheory';
-export { WorkshopMode } from './WorkshopMode';
+export { DeepDiveTool } from './DeepDiveTool';
+export { AdvancedExportTool } from './AdvancedExportTool';

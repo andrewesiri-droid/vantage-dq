@@ -4,11 +4,10 @@ import { trpc } from '@/providers/trpc';
 import { useSessionData } from '@/hooks/useSessionData';
 import { useDemoContext } from '@/App';
 import { demoApi, getDemoData, isDemoMode } from '@/lib/demoData';
-import { MODULES, DS } from '@/constants';
-import type { ModuleId, ToolId, ModuleData } from '@/types';
+import { MODULES, DS, type ToolId } from '@/constants';
+import type { ModuleId } from '@/types';
 import { AppShell } from '@/components/layout/AppShell';
 import { AISuggestionsPanel } from '@/components/layout/AISuggestionsPanel';
-import { GameTheory, WorkshopMode } from '@/components/tools';
 import { ProblemFrame } from '@/components/modules/ProblemFrame';
 import { IssueGeneration } from '@/components/modules/IssueGeneration';
 import { DecisionHierarchy } from '@/components/modules/DecisionHierarchy';
@@ -21,11 +20,9 @@ import { InfluenceDiagram } from '@/components/modules/InfluenceDiagram';
 import { ScenarioPlanning } from '@/components/modules/ScenarioPlanning';
 import { ValueOfInformation } from '@/components/modules/ValueOfInformation';
 import { DecisionRiskTimeline } from '@/components/modules/DecisionRiskTimeline';
-
-const TOOL_COMPONENTS: Record<string, React.ComponentType<any>> = {
-  'game-theory': GameTheory,
-  'workshop': WorkshopMode,
-};
+import { GameTheoryModule } from '@/components/modules/GameTheoryModule';
+import { DeepDiveTool } from '@/components/tools/DeepDiveTool';
+import { AdvancedExportTool } from '@/components/tools/AdvancedExportTool';
 
 const MODULE_COMPONENTS: Record<ModuleId, React.ComponentType<any>> = {
   problem: ProblemFrame,
@@ -42,127 +39,111 @@ const MODULE_COMPONENTS: Record<ModuleId, React.ComponentType<any>> = {
   'risk-timeline': DecisionRiskTimeline,
 };
 
-// Build demo hooks that wrap demoApi and trigger re-renders
 function useDemoHooks(sessionId: number) {
   const [, setTick] = useState(0);
   const refresh = () => setTick(t => t + 1);
-
   return useMemo(() => ({
-    data: getDemoData(),
-    isLoading: false,
-    // Issues
-    createIssue: (input: any) => { demoApi.createIssue(input); refresh(); },
-    deleteIssue: (input: any) => { demoApi.deleteIssue(input); refresh(); },
-    voteIssue: (input: any) => { demoApi.voteIssue(input); refresh(); },
-    // Decisions
-    createDecision: (input: any) => { demoApi.createDecision(input); refresh(); },
-    deleteDecision: (input: any) => { demoApi.deleteDecision(input); refresh(); },
-    // Strategies
-    createStrategy: (input: any) => { demoApi.createStrategy(input); refresh(); },
-    deleteStrategy: (input: any) => { demoApi.deleteStrategy(input); refresh(); },
-    // Criteria
-    createCriterion: (input: any) => { demoApi.createCriterion(input); refresh(); },
-    deleteCriterion: (input: any) => { demoApi.deleteCriterion(input); refresh(); },
-    // Scores
-    setScore: (input: any) => { demoApi.setScore(input); refresh(); },
-    // Uncertainties
-    createUncertainty: (input: any) => { demoApi.createUncertainty(input); refresh(); },
-    deleteUncertainty: (input: any) => { demoApi.deleteUncertainty(input); refresh(); },
-    // Stakeholders
-    createStakeholder: (input: any) => { demoApi.createStakeholder(input); refresh(); },
-    deleteStakeholder: (input: any) => { demoApi.deleteStakeholder(input); refresh(); },
-    // Risks
-    createRisk: (input: any) => { demoApi.createRisk(input); refresh(); },
-    deleteRisk: (input: any) => { demoApi.deleteRisk(input); refresh(); },
-    // Session
-    updateSession: (input: any) => { demoApi.updateSession(input); refresh(); },
-    // AI
-    analyse: (input: any) => { const r = demoApi.analyse(input); refresh(); return r; },
-    listAISuggestions: (input: any) => demoApi.listAISuggestions(input),
-    acceptAISuggestion: (input: any) => { demoApi.acceptAISuggestion(input); refresh(); },
-    rejectAISuggestion: (input: any) => { demoApi.rejectAISuggestion(input); refresh(); },
+    data: getDemoData(), isLoading: false,
+    createIssue: (i: any) => { demoApi.createIssue(i); refresh(); },
+    deleteIssue: (i: any) => { demoApi.deleteIssue(i); refresh(); },
+    voteIssue: (i: any) => { demoApi.voteIssue(i); refresh(); },
+    createDecision: (i: any) => { demoApi.createDecision(i); refresh(); },
+    deleteDecision: (i: any) => { demoApi.deleteDecision(i); refresh(); },
+    createStrategy: (i: any) => { demoApi.createStrategy(i); refresh(); },
+    deleteStrategy: (i: any) => { demoApi.deleteStrategy(i); refresh(); },
+    createCriterion: (i: any) => { demoApi.createCriterion(i); refresh(); },
+    deleteCriterion: (i: any) => { demoApi.deleteCriterion(i); refresh(); },
+    setScore: (i: any) => { demoApi.setScore(i); refresh(); },
+    createUncertainty: (i: any) => { demoApi.createUncertainty(i); refresh(); },
+    deleteUncertainty: (i: any) => { demoApi.deleteUncertainty(i); refresh(); },
+    createStakeholder: (i: any) => { demoApi.createStakeholder(i); refresh(); },
+    deleteStakeholder: (i: any) => { demoApi.deleteStakeholder(i); refresh(); },
+    createRisk: (i: any) => { demoApi.createRisk(i); refresh(); },
+    deleteRisk: (i: any) => { demoApi.deleteRisk(i); refresh(); },
+    createScenario: (i: any) => { demoApi.createScenario(i); refresh(); },
+    deleteScenario: (i: any) => { demoApi.deleteScenario(i); refresh(); },
+    updateSession: (i: any) => { demoApi.updateSession(i); refresh(); },
+    analyse: (i: any) => { const r = demoApi.analyse(i); refresh(); return r; },
+    listAISuggestions: (i: any) => demoApi.listAISuggestions(i),
+    acceptAISuggestion: (i: any) => { demoApi.acceptAISuggestion(i); refresh(); },
+    rejectAISuggestion: (i: any) => { demoApi.rejectAISuggestion(i); refresh(); },
   }), [sessionId]);
 }
 
 export function SessionPage() {
-  const { slug } = useParams<{ slug: string }>()
-;
+  const { slug } = useParams<{ slug: string }>();
   const [activeModule, setActiveModule] = useState<ModuleId>('problem');
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
   const { demoMode } = useDemoContext();
 
-  const handleModuleChange = (id: ModuleId) => {
-    setActiveModule(id);
-    setActiveTool(null);
-  };
+  const handleModuleChange = (id: ModuleId) => { setActiveModule(id); setActiveTool(null); };
+  const handleToolChange = (id: ToolId | null) => setActiveTool(id);
 
-  // Demo mode: use localStorage data directly
   if (demoMode || isDemoMode()) {
-    return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={setActiveTool} />;
+    return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
   }
+  return <BackendSessionPage slug={slug || ''} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
+}
 
-  // Normal mode: use tRPC + backend
-  return <BackendSessionPage slug={slug || ''} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={setActiveTool} />;
+function renderTool(toolId: ToolId, props: { sessionId?: number; data?: any; hooks?: any }) {
+  switch (toolId) {
+    case 'game-theory': return <GameTheoryModule {...props} />;
+    case 'deep-dive': return <DeepDiveTool {...props} />;
+    case 'export-advanced': return <AdvancedExportTool {...props} />;
+    case 'workshop': return <WorkshopInline {...props} />;
+    default: return null;
+  }
+}
+
+function WorkshopInline({ data }: any) {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold" style={{ color: '#0B1D3A' }}>Workshop Mode</h2>
+      <p className="text-sm" style={{ color: '#64748B' }}>Use the Workshop button in the top bar to launch the full facilitated workshop experience.</p>
+    </div>
+  );
 }
 
 function DemoSessionPage({ slug, activeModule, setActiveModule, activeTool, setActiveTool }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void; activeTool: ToolId | null; setActiveTool: (t: ToolId | null) => void }) {
   const data = getDemoData();
   const hooks = useDemoHooks(data.session.id);
-  const sessionName = data.session?.name || 'Demo Session';
-
-  const ActiveComponent = activeTool ? TOOL_COMPONENTS[activeTool] : MODULE_COMPONENTS[activeModule];
+  const ModuleComponent = MODULE_COMPONENTS[activeModule];
+  const moduleProps = { sessionId: data.session.id, data, hooks };
 
   return (
-    <AppShell
-      sessionName={sessionName}
-      sessionId={data.session.id}
-      activeModule={activeModule}
-      onModuleChange={setActiveModule}
-      activeTool={activeTool}
-      onToolChange={setActiveTool}
-      isSyncing={false}
-    >
-      {!activeTool && <AISuggestionsPanel sessionId={data.session.id} module={activeModule} />}
-      <ActiveComponent sessionId={data.session.id} data={data} hooks={hooks} />
+    <AppShell sessionName={data.session?.name || 'Demo Session'} sessionId={data.session.id}
+      activeModule={activeModule} onModuleChange={setActiveModule}
+      activeTool={activeTool} onToolChange={setActiveTool}
+      isSyncing={false} data={data}>
+      <AISuggestionsPanel sessionId={data.session.id} module={activeModule} />
+      {activeTool ? renderTool(activeTool, moduleProps) : <ModuleComponent {...moduleProps} />}
     </AppShell>
   );
 }
 
 function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, setActiveTool }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void; activeTool: ToolId | null; setActiveTool: (t: ToolId | null) => void }) {
-  const { data: sessionMeta } = trpc.session.getBySlug.useQuery(
-    { slug },
-    { enabled: !!slug }
-  );
-
+  const { data: sessionMeta } = trpc.session.getBySlug.useQuery({ slug }, { enabled: !!slug });
   const sessionId = sessionMeta?.id;
-  const sessionName = sessionMeta?.name || 'Loading...';
   const sessionData = useSessionData(sessionId);
-
   if (!sessionMeta) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: DS.bg }}>
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-sm" style={{ color: DS.inkSub }}>Loading session...</p>
         </div>
       </div>
     );
   }
-
-  const ActiveComponent = activeTool ? TOOL_COMPONENTS[activeTool] : MODULE_COMPONENTS[activeModule];
-
+  const ModuleComponent = MODULE_COMPONENTS[activeModule];
+  const moduleProps = { sessionId, data: sessionData.data, hooks: sessionData };
   return (
-    <AppShell
-      sessionName={sessionName}
-      sessionId={sessionId}
-      activeModule={activeModule}
-      onModuleChange={setActiveModule}
-      activeTool={activeTool}
-      onToolChange={setActiveTool}
-      isSyncing={sessionData.isLoading}
-    >
-      {sessionId && !activeTool && <AISuggestionsPanel sessionId={sessionId} module={activeModule} />}
-      <ActiveComponent sessionId={sessionId} data={sessionData.data} hooks={sessionData} />
+    <AppShell sessionName={sessionMeta?.name || 'Session'} sessionId={sessionId}
+      activeModule={activeModule} onModuleChange={setActiveModule}
+      activeTool={activeTool} onToolChange={setActiveTool}
+      isSyncing={sessionData.isLoading} data={sessionData.data}>
+      {sessionId && <AISuggestionsPanel sessionId={sessionId} module={activeModule} />}
+      {activeTool ? renderTool(activeTool, moduleProps) : <ModuleComponent {...moduleProps} />}
     </AppShell>
   );
 }

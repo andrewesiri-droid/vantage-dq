@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { MODULES, TOOLS, DS } from '@/constants';
-import type { ModuleId, ToolId } from '@/types';
-import { Sparkles, Menu, X, Users, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Wrench, Swords, Presentation, FileSpreadsheet, PlusSquare } from 'lucide-react';
+import { MODULES, DS, TOOLS, type ToolId } from '@/constants';
+import type { ModuleId } from '@/types';
+import { Sparkles, Menu, X, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Users, Wrench, Swords, Presentation, Brain, FileSpreadsheet, PlusSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AIPanel } from './AIPanel';
-import { WorkshopPanel } from './WorkshopPanel';
 import { AICoPilot } from './AICoPilot';
+import { WorkshopPanel } from './WorkshopPanel';
 
-const TOOL_ICONS: Record<string, typeof Wrench> = {
+const TOOL_ICONS: Record<string, any> = {
   'game-theory': Swords,
   'workshop': Presentation,
-  'new-workspace': PlusSquare,
+  'deep-dive': Brain,
   'export-advanced': FileSpreadsheet,
 };
 
@@ -24,23 +23,23 @@ interface AppShellProps {
   onToolChange?: (id: ToolId | null) => void;
   isSyncing?: boolean;
   children: React.ReactNode;
+  data?: any;
 }
 
-export function AppShell({ sessionName, sessionId, activeModule, onModuleChange, activeTool, onToolChange, isSyncing, children }: AppShellProps) {
+export function AppShell({ sessionName, sessionId, activeModule, onModuleChange, activeTool, onToolChange, isSyncing, children, data }: AppShellProps) {
   const navigate = useNavigate();
-  const [aiOpen, setAiOpen] = useState(false);
   const [workshopOpen, setWorkshopOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [coPilotOpen, setCoPilotOpen] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   const currentModule = MODULES.find(m => m.id === activeModule)!;
   const currentTool = activeTool ? TOOLS.find(t => t.id === activeTool) : null;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ background: DS.bg }}>
-      {/* === TOP BAR === */}
+      {/* TOP BAR */}
       <header className="h-12 shrink-0 flex items-center gap-2 px-3 border-b z-30" style={{ background: DS.brand, borderColor: DS.chromeMid }}>
         <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-1.5 rounded-lg hover:bg-white/10 transition-colors">
           <Menu size={18} className="text-white/70" />
@@ -58,14 +57,13 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           </div>
           <span className="text-[11px] font-bold text-white hidden sm:inline tracking-wide">VANTAGE DQ</span>
         </div>
-
         <div className="w-px h-4 bg-white/20 mx-1 hidden sm:block" />
-
         <div className="flex-1 min-w-0">
           <span className="text-[11px] text-white/60 truncate block">{sessionName}</span>
         </div>
 
-        <div className="flex items-center gap-2 mr-2">
+        {/* Current module/tool badge */}
+        <div className="flex items-center gap-2 mr-1">
           {currentTool ? (
             <>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white" style={{ background: currentTool.color }}>TOOL</span>
@@ -73,20 +71,16 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
             </>
           ) : (
             <>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white" style={{ background: DS.accent }}>{currentModule.num}</span>
-              <span className="text-[11px] text-white font-medium hidden sm:inline">{currentModule.label}</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white" style={{ background: DS.accent }}>{currentModule?.num}</span>
+              <span className="text-[11px] text-white font-medium hidden sm:inline">{currentModule?.label}</span>
             </>
           )}
         </div>
 
-        {isSyncing && (
-          <div className="flex items-center gap-1 mr-2" title="Syncing with server">
-            <RefreshCw size={12} className="text-white/50 animate-spin" />
-          </div>
-        )}
+        {isSyncing && <RefreshCw size={12} className="text-white/50 animate-spin mr-1" />}
 
         <div className="flex items-center gap-1">
-          {/* Tools Dropdown */}
+          {/* Tools dropdown */}
           <div className="relative hidden sm:block">
             <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10" onClick={() => setToolsOpen(!toolsOpen)}>
               <Wrench size={12} /> Tools
@@ -95,8 +89,8 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
             {toolsOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setToolsOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border z-50 overflow-hidden">
-                  <div className="px-3 py-2 border-b" style={{ background: '#F8FAFC' }}>
+                <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl shadow-2xl border z-50 overflow-hidden" style={{ borderColor: DS.borderLight }}>
+                  <div className="px-3 py-2 border-b" style={{ background: DS.bg, borderColor: DS.borderLight }}>
                     <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: DS.inkTer }}>Strategic Tools</p>
                   </div>
                   {TOOLS.map(tool => {
@@ -104,16 +98,11 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
                     const isActive = activeTool === tool.id;
                     return (
                       <button key={tool.id} className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
-                        onClick={() => {
-                          if (onToolChange) {
-                            onToolChange(isActive ? null : tool.id);
-                            setToolsOpen(false);
-                          }
-                        }}>
-                        <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5" style={{ background: tool.color + '15' }}>
+                        onClick={() => { onToolChange?.(isActive ? null : tool.id); setToolsOpen(false); }}>
+                        <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5" style={{ background: tool.color + '18' }}>
                           <ToolIcon size={14} style={{ color: tool.color }} />
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <span className="text-[11px] font-semibold" style={{ color: DS.ink }}>{tool.label}</span>
                             {isActive && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#4ADE80' }} />}
@@ -125,8 +114,9 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
                   })}
                   {activeTool && onToolChange && (
                     <>
-                      <div className="border-t" />
-                      <button className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors" onClick={() => { onToolChange(null); setToolsOpen(false); }}>
+                      <div className="border-t" style={{ borderColor: DS.borderLight }} />
+                      <button className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
+                        onClick={() => { onToolChange(null); setToolsOpen(false); }}>
                         <span className="text-[10px]" style={{ color: DS.inkTer }}>← Return to Modules</span>
                       </button>
                     </>
@@ -138,14 +128,17 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
 
           <div className="w-px h-4 bg-white/20 hidden sm:block" />
 
-          <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setAiOpen(true)}>
+          <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setWorkshopOpen(true)}>
+            <Users size={12} /> Workshop
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setCoPilotOpen(!coPilotOpen)}>
             <Bot size={12} /> AI
           </Button>
           <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ml-1" style={{ background: DS.accent }}>JD</div>
         </div>
       </header>
 
-      {/* === MOBILE MENU === */}
+      {/* MOBILE MENU */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setMobileMenuOpen(false)} />
@@ -154,57 +147,78 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
               <span className="text-xs font-bold text-white tracking-wide">MODULES</span>
               <button onClick={() => setMobileMenuOpen(false)} className="text-white/70 hover:text-white"><X size={18} /></button>
             </div>
-            <SidebarContent activeModule={activeModule} onModuleChange={(id) => { onModuleChange(id); setMobileMenuOpen(false); }} />
+            <SidebarContent activeModule={activeModule} onModuleChange={(id) => { onModuleChange(id); setMobileMenuOpen(false); }} activeTool={activeTool} onToolChange={onToolChange} />
           </div>
         </div>
       )}
 
-      {/* === MAIN LAYOUT === */}
+      {/* MAIN LAYOUT */}
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && (
           <nav className="hidden md:flex w-64 flex-col bg-white border-r shrink-0 overflow-y-auto" style={{ borderColor: DS.borderLight }}>
-            <SidebarContent activeModule={activeModule} onModuleChange={onModuleChange} />
+            <SidebarContent activeModule={activeModule} onModuleChange={onModuleChange} activeTool={activeTool} onToolChange={onToolChange} />
           </nav>
         )}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-6xl mx-auto px-4 py-5 md:px-8">
+          <div className="max-w-5xl mx-auto px-4 py-5 md:px-8">
             {children}
           </div>
         </main>
-        {/* AI Co-Pilot Sidebar */}
-        <AICoPilot module={activeModule} sessionId={sessionId} collapsed={!coPilotOpen} onToggle={() => setCoPilotOpen(!coPilotOpen)} />
+        <AICoPilot module={activeModule} sessionId={sessionId} data={data} collapsed={!coPilotOpen} onToggle={() => setCoPilotOpen(!coPilotOpen)} />
       </div>
 
-      {aiOpen && <AIPanel onClose={() => setAiOpen(false)} module={activeModule} sessionId={sessionId} />}
       {workshopOpen && <WorkshopPanel onClose={() => setWorkshopOpen(false)} sessionId={sessionId} />}
     </div>
   );
 }
 
-function SidebarContent({ activeModule, onModuleChange }: { activeModule: ModuleId; onModuleChange: (id: ModuleId) => void }) {
+function SidebarContent({ activeModule, onModuleChange, activeTool, onToolChange }: {
+  activeModule: ModuleId;
+  onModuleChange: (id: ModuleId) => void;
+  activeTool?: ToolId | null;
+  onToolChange?: (id: ToolId | null) => void;
+}) {
   return (
-    <div className="py-2">
+    <div className="py-2 flex flex-col h-full">
       <div className="px-3 py-1.5">
         <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: DS.accent }}>Phase 1: Core Process</p>
       </div>
       {MODULES.filter(m => m.phase === 1).map(m => (
-        <ModuleButton key={m.id} module={m} active={activeModule === m.id} onClick={() => onModuleChange(m.id)} />
+        <ModuleButton key={m.id} module={m} active={activeModule === m.id && !activeTool} onClick={() => { onModuleChange(m.id); onToolChange?.(null); }} />
       ))}
       <div className="px-3 py-1.5 mt-3">
         <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: DS.inkDis }}>Phase 2: Advanced</p>
       </div>
       {MODULES.filter(m => m.phase === 2).map(m => (
-        <ModuleButton key={m.id} module={m} active={activeModule === m.id} onClick={() => onModuleChange(m.id)} />
+        <ModuleButton key={m.id} module={m} active={activeModule === m.id && !activeTool} onClick={() => { onModuleChange(m.id); onToolChange?.(null); }} />
       ))}
+
+      {/* Tools section in sidebar */}
+      <div className="mt-auto border-t mx-3 pt-3 pb-2" style={{ borderColor: DS.borderLight }}>
+        <p className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: DS.inkDis }}>Strategic Tools</p>
+        {TOOLS.map(tool => {
+          const isActive = activeTool === tool.id;
+          return (
+            <button key={tool.id} onClick={() => onToolChange?.(isActive ? null : tool.id)}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md mb-0.5 text-left transition-all"
+              style={{ background: isActive ? tool.color + '18' : 'transparent' }}>
+              <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ background: isActive ? tool.color : DS.bg }}>
+                <Wrench size={9} style={{ color: isActive ? '#fff' : DS.inkDis }} />
+              </div>
+              <span className="text-[10px] font-medium truncate" style={{ color: isActive ? tool.color : DS.inkSub }}>{tool.label}</span>
+              {isActive && <span className="w-1.5 h-1.5 rounded-full ml-auto shrink-0" style={{ background: '#4ADE80' }} />}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 function ModuleButton({ module, active, onClick }: { module: { id: string; label: string; sub: string; num: string }; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all rounded-md mx-1.5 mb-0.5 group"
-      style={{ background: active ? DS.accentSoft : 'transparent' }}
-    >
+    <button onClick={onClick} className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all rounded-md mx-1.5 mb-0.5"
+      style={{ background: active ? DS.accentSoft : 'transparent', width: 'calc(100% - 12px)' }}>
       <span className="text-[10px] font-bold w-5 text-center shrink-0 tabular-nums" style={{ color: active ? DS.accent : DS.inkDis }}>{module.num}</span>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-semibold truncate" style={{ color: active ? DS.brand : DS.inkSub }}>{module.label}</div>

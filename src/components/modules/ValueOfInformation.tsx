@@ -1,108 +1,147 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { useAI } from '@/hooks/useAI';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Info, Plus, Trash2, Calculator, CheckCircle, XCircle } from 'lucide-react';
+import { Info, Plus, Trash2, Sparkles, CheckCircle, XCircle, TrendingUp } from 'lucide-react';
 
-interface VOIItem { id: number; name: string; prior: number; vBest: number; vWorst: number; cost: number; evpi: number; evsi: number; }
+interface VOIItem { id: number; name: string; prior: number; vBest: number; vWorst: number; cost: number; evpi: number; evsi: number; classification?: string; bestAction?: string; }
 
-const DEMO_VOI: VOIItem[] = [
-  { id: 1, name: 'APAC Market Research Study', prior: 0.18, vBest: 45, vWorst: 25, cost: 3, evpi: 20, evsi: 14.2 },
-  { id: 2, name: 'Japan Regulatory Consultation', prior: 0.5, vBest: 30, vWorst: 15, cost: 2, evpi: 15, evsi: 10.5 },
-  { id: 3, name: 'Partner Due Diligence', prior: 0.4, vBest: 35, vWorst: 20, cost: 1.5, evpi: 15, evsi: 11.8 },
-];
+const calcEVPI = (prior: number, vBest: number, vWorst: number) => Math.max(0, prior * (vBest - vWorst));
+const calcEVSI = (prior: number, vBest: number, vWorst: number, cost: number) => Math.max(0, calcEVPI(prior, vBest, vWorst) * 0.7 - cost);
 
 export function ValueOfInformation({ sessionId, data, hooks }: ModuleProps) {
-  const [analyses, setAnalyses] = useState<VOIItem[]>(DEMO_VOI);
+  const { call, busy } = useAI();
+  const [analyses, setAnalyses] = useState<VOIItem[]>([]);
   const [newName, setNewName] = useState('');
   const [newPrior, setNewPrior] = useState('0.5');
   const [newVBest, setNewVBest] = useState('');
   const [newVWorst, setNewVWorst] = useState('');
   const [newCost, setNewCost] = useState('');
+  const [portfolio, setPortfolio] = useState<any>(null);
 
   useEffect(() => {
-    if (data?.voiAnalyses && data.voiAnalyses.length > 0) {
+    if (data?.voiAnalyses?.length) {
       setAnalyses(data.voiAnalyses.map((a: any) => ({
-        id: a.id, name: a.name, prior: a.priorProbability || 0.5,
-        vBest: a.valueWithInfo || 0, vWorst: a.valueWithoutInfo || 0,
-        cost: a.costOfInfo || 0, evpi: a.voiResult || 0, evsi: (a.voiResult || 0) - (a.costOfInfo || 0),
+        id: a.id, name: a.name, prior: a.priorProbability || 0.5, vBest: a.valueWithInfo || 0, vWorst: a.valueWithoutInfo || 0, cost: a.costOfInfo || 0,
+        evpi: a.voiResult || calcEVPI(a.priorProbability || 0.5, a.valueWithInfo || 0, a.valueWithoutInfo || 0),
+        evsi: (a.voiResult || 0) - (a.costOfInfo || 0), classification: a.classification || '', bestAction: a.bestAction || '',
       })));
     }
   }, [data?.voiAnalyses]);
 
-  const calcEVSI = (prior: number, vBest: number, vWorst: number, cost: number) => {
-    const evpi = Math.max(0, vBest - vWorst);
-    const evsi = Math.max(0, evpi * 0.7 - cost);
-    return { evpi, evsi };
-  };
-
   const add = () => {
-    if (!newName.trim() || !newVBest || !newVWorst || !sessionId) return;
+    if (!newName.trim()) return;
     const prior = parseFloat(newPrior) || 0.5;
-    const vw = parseFloat(newVBest);
-    const vwo = parseFloat(newVWorst);
+    const vBest = parseFloat(newVBest) || 0;
+    const vWorst = parseFloat(newVWorst) || 0;
     const cost = parseFloat(newCost) || 0;
-    const { evpi, evsi } = calcEVSI(prior, vw, vwo, cost);
-    const newA: VOIItem = { id: Date.now(), name: newName.trim(), prior, vBest: vw, vWorst: vwo, cost, evpi, evsi };
-    setAnalyses(p => [...p, newA]);
-    hooks?.createVOI?.({ sessionId, name: newName.trim(), priorProbability: prior, valueWithInfo: vw, valueWithoutInfo: vwo, costOfInfo: cost, voiResult: evpi });
+    const evpi = calcEVPI(prior, vBest, vWorst);
+    const evsi = calcEVSI(prior, vBest, vWorst, cost);
+    const n: VOIItem = { id: Date.now(), name: newName.trim(), prior, vBest, vWorst, cost, evpi, evsi };
+    setAnalyses(p => [...p, n]);
+    hooks?.createVOI?.({ sessionId, name: newName.trim(), priorProbability: prior, valueWithInfo: vBest, valueWithoutInfo: vWorst, costOfInfo: cost, voiResult: evpi });
     setNewName(''); setNewVBest(''); setNewVWorst(''); setNewCost('');
   };
 
-  const remove = (id: number) => {
-    setAnalyses(p => p.filter(a => a.id !== id));
-    hooks?.deleteVOI?.({ id });
+  const remove = (id: number) => { setAnalyses(p => p.filter(a => a.id !== id)); hooks?.deleteVOI?.({ id }); };
+
+  const aiAnalyse = () => {
+    const uncs = (data?.uncertainties || []).map((u: any) => `${u.label} [impact=${u.impact}]`).join(', ');
+    const existing = analyses.map(a => a.name).join(', ');
+    const prompt = `Conduct a Value of Information analysis for this decision.\nDecision: ${data?.session?.decisionStatement || ''}\nKey uncertainties: ${uncs}\nExisting analyses: ${existing}\n\nFor each key uncertainty estimate whether resolving it would change the decision.\n\nReturn JSON with key: assessments (array of {label, isDecisionCritical (boolean), classification (do_now/do_not/timing_dependent), bestAction (string), timeToLearn (string), estimatedEVPI (number), costRange (string)}), portfolioInsight (string), priorityOrder (array of labels).`;
+    call(prompt, (r) => {
+      let result = r;
+      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
+      if (result?.assessments?.length) {
+        const newItems: VOIItem[] = result.assessments.map((a: any, i: number) => ({
+          id: Date.now() + i, name: a.label, prior: 0.5, vBest: a.estimatedEVPI ? a.estimatedEVPI * 1.5 : 30, vWorst: 15, cost: 2, evpi: a.estimatedEVPI || 10, evsi: (a.estimatedEVPI || 10) - 2, classification: a.classification, bestAction: a.bestAction,
+        }));
+        setAnalyses(p => [...p, ...newItems.filter(n => !p.some(e => e.name === n.name))]);
+        setPortfolio(result);
+      }
+    });
   };
+
+  const sorted = [...analyses].sort((a, b) => b.evsi - a.evsi);
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
-          <Info size={22} style={{ color: '#0891B2' }} /> Value of Information
-        </h2>
-        <p className="text-xs mt-1" style={{ color: DS.inkSub }}>Calculate EVPI and EVSI to prioritise information gathering</p>
+      <div className="flex items-start justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}><Info size={22} style={{ color: DS.information.fill }} /> Value of Information</h2>
+          <p className="text-xs mt-1" style={{ color: DS.inkSub }}>{analyses.length} analyses · Prioritise what to learn before committing</p>
+        </div>
+        <Button size="sm" className="gap-1.5 text-xs" style={{ background: DS.information.fill }} onClick={aiAnalyse} disabled={busy}><Sparkles size={12} /> AI Analyse</Button>
       </div>
-      <Card className="border-0 shadow-sm" style={{ background: `linear-gradient(135deg, #ECFEFF 0%, ${DS.canvas} 100%)`, borderLeft: `4px solid #0891B2` }}>
-        <CardContent className="pt-4 space-y-2">
-          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Analysis name" className="text-xs bg-white" />
+
+      {/* Portfolio insight */}
+      {portfolio && (
+        <Card className="border-0 shadow-sm" style={{ borderLeft: `4px solid ${DS.information.fill}` }}>
+          <CardContent className="pt-3 pb-3 space-y-1.5">
+            <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: DS.inkDis }}>Portfolio Insight</div>
+            {portfolio.portfolioInsight && <p className="text-xs" style={{ color: DS.inkSub }}>{portfolio.portfolioInsight}</p>}
+            {portfolio.priorityOrder?.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {portfolio.priorityOrder.slice(0, 5).map((label: string, i: number) => (
+                  <Badge key={i} style={{ background: DS.information.soft, color: DS.information.dark, border: 'none' }}>#{i+1} {label.slice(0, 30)}</Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Add analysis */}
+      <Card className="border-0 shadow-sm" style={{ borderLeft: `4px solid ${DS.information.fill}`, background: DS.information.soft }}>
+        <CardContent className="pt-3 pb-3 space-y-2">
+          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Uncertainty / study name" className="text-xs bg-white h-8" />
           <div className="grid grid-cols-4 gap-2">
-            <Input type="number" step={0.05} min={0} max={1} value={newPrior} onChange={e => setNewPrior(e.target.value)} placeholder="Prior P" className="text-xs bg-white" />
-            <Input type="number" value={newVBest} onChange={e => setNewVBest(e.target.value)} placeholder="Value with info ($M)" className="text-xs bg-white" />
-            <Input type="number" value={newVWorst} onChange={e => setNewVWorst(e.target.value)} placeholder="Value without ($M)" className="text-xs bg-white" />
-            <Input type="number" value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="Cost ($M)" className="text-xs bg-white" />
+            <div><label className="text-[9px] font-bold" style={{ color: DS.inkDis }}>PRIOR PROB</label><Input type="number" value={newPrior} onChange={e => setNewPrior(e.target.value)} min="0" max="1" step="0.1" className="text-xs bg-white h-7 mt-0.5" /></div>
+            <div><label className="text-[9px] font-bold" style={{ color: DS.inkDis }}>V. WITH INFO ($M)</label><Input type="number" value={newVBest} onChange={e => setNewVBest(e.target.value)} placeholder="45" className="text-xs bg-white h-7 mt-0.5" /></div>
+            <div><label className="text-[9px] font-bold" style={{ color: DS.inkDis }}>V. WITHOUT ($M)</label><Input type="number" value={newVWorst} onChange={e => setNewVWorst(e.target.value)} placeholder="25" className="text-xs bg-white h-7 mt-0.5" /></div>
+            <div><label className="text-[9px] font-bold" style={{ color: DS.inkDis }}>COST ($M)</label><Input type="number" value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="2" className="text-xs bg-white h-7 mt-0.5" /></div>
           </div>
-          <Button size="sm" style={{ background: '#0891B2' }} onClick={add} disabled={!newName.trim() || !newVBest || !newVWorst}><Plus size={12} /> Calculate</Button>
+          <Button size="sm" className="h-7 gap-1 text-xs" style={{ background: DS.information.fill }} onClick={add} disabled={!newName.trim()}><Plus size={11} /> Add Analysis</Button>
         </CardContent>
       </Card>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {analyses.map(a => (
-          <Card key={a.id} className="overflow-hidden border-0 shadow-md"><CardContent className="pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold" style={{ color: DS.ink }}>{a.name}</span>
-              <button onClick={() => remove(a.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={10} /></button>
-            </div>
-            <div className="space-y-1.5">
-              {[{ l: 'Prior Probability', v: `${(a.prior * 100).toFixed(0)}%`, c: '#0891B2' }, { l: 'Value With Info', v: `$${a.vBest}M`, c: '#059669' }, { l: 'Value Without', v: `$${a.vWorst}M`, c: '#64748B' }, { l: 'EVPI', v: `$${a.evpi.toFixed(1)}M`, c: '#2563EB' }, { l: 'EVSI', v: `$${a.evsi.toFixed(1)}M`, c: a.evsi > a.cost ? '#059669' : '#DC2626' }].map(item => (
-                <div key={item.l} className="flex justify-between text-xs"><span style={{ color: DS.inkTer }}>{item.l}</span><span className="font-bold" style={{ color: item.c }}>{item.v}</span></div>
-              ))}
-              <Badge style={{ background: a.evsi > a.cost ? '#ECFDF5' : '#FEF2F2', color: a.evsi > a.cost ? '#059669' : '#DC2626' }} variant="outline" className="text-[10px] w-full justify-center mt-2 h-5">
-                {a.evsi > a.cost ? <><CheckCircle size={10} className="mr-1" /> Worth the investment</> : <><XCircle size={10} className="mr-1" /> Not worth the cost</>}
-              </Badge>
-            </div>
-          </CardContent></Card>
-        ))}
-      </div>
-      <Card className="border-0 shadow-sm"><CardContent className="pt-4">
-        <div className="flex items-center gap-2 mb-2"><Calculator size={14} style={{ color: '#0891B2' }} /><span className="text-xs font-bold" style={{ color: DS.ink }}>Methodology</span></div>
-        <div className="space-y-1 text-xs" style={{ color: DS.inkSub }}>
-          <p><strong>EVPI</strong> = Value with perfect information − Value without information</p>
-          <p><strong>EVSI</strong> = Expected value with study − Value without info − Cost of study</p>
-          <p className="mt-2 font-medium" style={{ color: '#0891B2' }}>A study is worth conducting when EVSI {'>'} Cost of Information</p>
+
+      {/* VoI table */}
+      {sorted.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: DS.inkDis }}>Prioritised by EVSI</div>
+          {sorted.map((a, rank) => {
+            const doNow = a.evsi > 0 && a.classification !== 'do_not';
+            const classColor = a.classification === 'do_now' ? DS.success : a.classification === 'do_not' ? DS.danger : DS.warning;
+            return (
+              <Card key={a.id} className="border-0 shadow-sm">
+                <CardContent className="pt-2.5 pb-2.5">
+                  <div className="flex items-start gap-2">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white shrink-0" style={{ background: doNow ? DS.information.fill : DS.inkDis }}>#{rank+1}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <span className="text-xs font-semibold" style={{ color: DS.ink }}>{a.name}</span>
+                        {doNow ? <CheckCircle size={12} style={{ color: DS.success }} /> : <XCircle size={12} style={{ color: DS.danger }} />}
+                        {a.classification && <Badge style={{ background: `${classColor}20`, color: classColor, border: 'none' }}>{a.classification.replace('_', ' ')}</Badge>}
+                      </div>
+                      <div className="flex gap-4 text-[10px]" style={{ color: DS.inkSub }}>
+                        <span>EVPI: <strong style={{ color: DS.information.fill }}>${a.evpi.toFixed(1)}M</strong></span>
+                        <span>EVSI: <strong style={{ color: a.evsi > 0 ? DS.success : DS.danger }}>${a.evsi.toFixed(1)}M</strong></span>
+                        <span>Cost: <strong>${a.cost.toFixed(1)}M</strong></span>
+                      </div>
+                      {a.bestAction && <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>→ {a.bestAction}</p>}
+                    </div>
+                    <button onClick={() => remove(a.id)} className="shrink-0"><Trash2 size={11} style={{ color: DS.inkDis }} /></button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
-      </CardContent></Card>
+      )}
     </div>
   );
 }

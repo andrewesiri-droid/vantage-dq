@@ -1,130 +1,194 @@
 import { useState, useMemo } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS, DQ_ELEMENTS, DQ_SCORE_BANDS } from '@/constants';
-import { Card, CardContent } from '@/components/ui/card';
+import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Printer, Download, CheckCircle, AlertTriangle, XCircle, Zap } from 'lucide-react';
+import { FileText, Printer, Sparkles, CheckCircle, XCircle, Eye, EyeOff, Lightbulb } from 'lucide-react';
+
+const MODULE_CHECKS = [
+  { key: 'problem', label: 'Problem Definition', check: (d: any) => !!d.session?.decisionStatement, detail: (d: any) => d.session?.owner ? `Owner: ${d.session.owner}` : 'No owner set' },
+  { key: 'issues', label: 'Issues Raised', check: (d: any) => (d.issues||[]).length >= 5, detail: (d: any) => `${(d.issues||[]).length} issues · ${(d.issues||[]).filter((i:any)=>i.severity==='Critical').length} critical` },
+  { key: 'hierarchy', label: 'Decision Hierarchy', check: (d: any) => (d.decisions||[]).filter((d:any)=>d.tier==='focus').length > 0, detail: (d: any) => `${(d.decisions||[]).filter((d:any)=>d.tier==='focus').length} focus decisions · ${(d.criteria||[]).length} criteria` },
+  { key: 'strategy', label: 'Strategy Table', check: (d: any) => (d.strategies||[]).length >= 2, detail: (d: any) => `${(d.strategies||[]).length} strategies` },
+  { key: 'assessment', label: 'Qualitative Assessment', check: (d: any) => (d.assessmentScores||[]).length > 0, detail: (d: any) => `${(d.assessmentScores||[]).length} scores recorded` },
+  { key: 'scorecard', label: 'DQ Scorecard', check: (d: any) => Object.keys(d.session?.dqScores||{}).length >= 6, detail: (d: any) => { const vals = Object.values(d.session?.dqScores||{}) as number[]; return vals.length ? `Score: ${Math.round(vals.reduce((a,b)=>a+b,0)/vals.length)}/100` : 'Not scored'; } },
+];
 
 export function ExportReport({ sessionId, data, hooks }: ModuleProps) {
-  const [generating, setGenerating] = useState(false);
+  const { call, busy } = useAI();
+  const [pack, setPack] = useState<any>(null);
+  const [previewing, setPreviewing] = useState(false);
 
-  const session = data?.session;
+  const session = data?.session || {};
   const issues = data?.issues || [];
   const decisions = data?.decisions || [];
   const strategies = data?.strategies || [];
   const criteria = data?.criteria || [];
-  const scores = data?.assessmentScores || [];
-  const stakeholders = data?.stakeholderEntries || [];
-  const uncertainties = data?.uncertainties || [];
-  const risks = data?.riskItems || [];
-  const dqScores = session?.dqScores || { frame: 75, alternatives: 60, information: 45, values: 80, reasoning: 55, commitment: 30 };
+  const dqScores = session.dqScores || {};
+  const vals = Object.values(dqScores) as number[];
+  const overall = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : 0;
+  const band = DQ_SCORE_BANDS.find(b=>overall>=b.min&&overall<=b.max) || DQ_SCORE_BANDS[4];
 
-  const vals = Object.values(dqScores);
-  const overall = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
-  const band = DQ_SCORE_BANDS.find(b => overall >= b.min && overall <= b.max) || DQ_SCORE_BANDS[4];
+  const checks = MODULE_CHECKS.map(m => ({ ...m, pass: m.check(data||{}), detail: m.detail(data||{}) }));
+  const passedCount = checks.filter(c=>c.pass).length;
+  const completionPct = Math.round((passedCount/checks.length)*100);
 
-  const focusDecisions = decisions.filter((d: any) => d.tier === 'focus');
-  const givenDecisions = decisions.filter((d: any) => d.tier === 'given');
-  const deferredDecisions = decisions.filter((d: any) => d.tier === 'deferred');
-
-  const preflightChecks = useMemo(() => [
-    { label: 'Decision statement is defined', pass: !!session?.decisionStatement, module: 'Problem Frame' },
-    { label: 'Decision statement is a genuine open question', pass: !!(session?.decisionStatement && !session.decisionStatement.toLowerCase().includes('should we proceed')), module: 'Problem Frame' },
-    { label: 'At least 5 issues raised', pass: issues.length >= 5, module: 'Issue Generation' },
-    { label: 'At least 3 distinct strategies', pass: strategies.length >= 3, module: 'Strategy Table' },
-    { label: 'Strategies differ on ≥50% of focus decisions', pass: strategies.length >= 2, module: 'Strategy Table' },
-    { label: 'Focus Five has ≤5 decisions', pass: focusDecisions.length <= 5 && focusDecisions.length > 0, module: 'Decision Hierarchy' },
-    { label: 'At least 4 criteria defined', pass: criteria.length >= 4, module: 'Qualitative Assessment' },
-    { label: 'All criteria scored for all strategies', pass: scores.length >= criteria.length * strategies.length * 0.5, module: 'Qualitative Assessment' },
-    { label: 'All 6 DQ elements scored', pass: Object.keys(dqScores).length >= 6, module: 'DQ Scorecard' },
-    { label: 'Key stakeholders mapped', pass: stakeholders.length >= 3, module: 'Stakeholder Alignment' },
-    { label: 'Stakeholder alignment ≥70% supportive', pass: stakeholders.filter((s: any) => s.alignment === 'supportive').length / Math.max(stakeholders.length, 1) >= 0.7, module: 'Stakeholder Alignment' },
-  ], [session, issues, strategies, focusDecisions, criteria, scores, dqScores, stakeholders]);
-
-  const passedCount = preflightChecks.filter(c => c.pass).length;
-
-  const printReport = () => {
-    setGenerating(true);
-    setTimeout(() => setGenerating(false), 500);
-    const html = `<!DOCTYPE html><html><head><title>Vantage DQ Report</title><style>body{font-family:Inter,system-ui,sans-serif;color:#0F172A;max-width:800px;margin:0 auto;padding:48px}h1{font-size:28px;font-weight:800;margin-bottom:4px}h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-top:36px;margin-bottom:14px;color:#C9A84C}.subtitle{font-size:13px;color:#64748B;margin-bottom:32px}.meta{font-size:11px;color:#94A3B8;margin-bottom:8px}.section{background:linear-gradient(135deg,#F8F9FC,#FFFFFF);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid #E2E5EC}.label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94A3B8;margin-bottom:6px}.score-big{font-size:48px;font-weight:800;color:${band.color}}.score-label{font-size:11px;color:#64748B;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:10px;background:#F8F9FC;font-weight:600;color:#475569}td{padding:10px;border-top:1px solid #E2E5EC;color:#334155}.recommendation{background:linear-gradient(135deg,#FDF8E8,#FFFFFF);border-left:4px solid #C9A84C;padding:16px;border-radius:8px}.footer{margin-top:48px;padding-top:16px;border-top:1px solid #E2E5EC;font-size:10px;color:#94A3B8}</style></head><body>
-<h1>Strategic Decision Report</h1><div class="subtitle">${session?.name || 'Decision Session'}</div><div class="meta">Generated ${new Date().toLocaleDateString()} · Confidential</div>
-<div class="section"><div class="score-big">${overall}</div><div class="score-label">Decision Quality Score — ${band.label}</div><table><tr><th style="width:60%">Element</th><th>Score</th></tr>${DQ_ELEMENTS.map(e => '<tr><td>' + e.num + ' ' + e.label + '</td><td style="font-weight:700;color:' + e.fill + '">' + (dqScores[e.key] || '—') + '</td></tr>').join('')}</table></div>
-<h2>Decision Summary</h2><div class="section"><p><strong>Statement:</strong> ${session?.decisionStatement || 'Not defined'}</p><p><strong>Context:</strong> ${session?.context || 'Not provided'}</p><p><strong>Focus Decisions:</strong> ${focusDecisions.length}</p><p><strong>Strategies:</strong> ${strategies.length}</p><p><strong>Issues:</strong> ${issues.length}</p></div>
-<div class="recommendation"><p style="font-size:14px;font-weight:700;color:#0F172A;margin-bottom:8px">Strategic Recommendation</p><p style="font-size:12px;color:#334155;line-height:1.6">Proceed with structured decision-making. Current DQ score of ${overall} indicates ${band.label.toLowerCase()} quality. Focus on strengthening the weakest DQ elements before final commitment.</p></div>
-<div class="footer">Generated by Vantage DQ · Decision Quality Platform · ${new Date().toLocaleString()}</div></body></html>`;
-    const w = window.open('', '_blank'); w?.document.write(html); w?.document.close(); w?.print();
+  const generate = () => {
+    const prompt = `Generate a comprehensive executive decision package.\nDecision: ${session.decisionStatement||''}\nOwner: ${session.owner||''} | Deadline: ${session.deadline||''}\nContext: ${(session.context||'').slice(0,250)}\nStrategies: ${strategies.map((s:any)=>s.name).join(', ')}\nCriteria: ${criteria.map((c:any)=>c.label).join(', ')}\nIssues: ${issues.length} (${issues.filter((i:any)=>i.severity==='Critical').length} critical)\nDQ Score: ${overall}/100 (${band.label})\n\nReturn JSON: { onePager: string, recommendation: string, boardNarrative: string, keyRisks: [string], successMetrics: [string], nextSteps: [{action, owner, deadline}], riskRegister: [{risk, likelihood, impact, mitigation}], stakeholderMessages: {board: string, executiveTeam: string} }`;
+    call(prompt, (r) => {
+      let result = r;
+      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+      if (result && !result.error) setPack(result);
+    });
   };
 
-  const exportJSON = () => {
-    const payload = {
-      session: session ? { name: session.name, decisionStatement: session.decisionStatement, context: session.context } : null,
-      decisions, strategies, criteria, issues, stakeholders, risks, uncertainties,
-      dqScores, overall, band: band.label,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `vantage-dq-${session?.name || 'report'}.json`;
-    a.click(); URL.revokeObjectURL(url);
+  const print = () => {
+    document.title = (session.name || session.decisionStatement?.slice(0,50) || 'Decision Package') + ' — Vantage DQ';
+    window.print();
+    document.title = 'Vantage DQ';
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: DS.ink }}>
-          <FileText size={22} style={{ color: DS.accent }} /> Export & Report
-        </h2>
-        <p className="text-xs mt-1" style={{ color: DS.inkSub }}>Pre-flight check before generating executive outputs</p>
+    <div className="space-y-0">
+      {/* Header */}
+      <div className="flex items-start gap-3 mb-4 flex-wrap">
+        <div className="flex-1">
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 07</div>
+          <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Export & Report</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold" style={{ color: completionPct >= 80 ? DS.success : DS.warning }}>{completionPct}% COMPLETE</span>
+        </div>
+        <div className="flex gap-2">
+          {pack && <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={print}><Printer size={11} /> Print / PDF</Button>}
+          {pack && <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={() => setPreviewing(!previewing)}>{previewing ? <EyeOff size={11} /> : <Eye size={11} />} Preview</Button>}
+          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.accent }} onClick={generate} disabled={busy}>
+            <Sparkles size={11} /> {busy ? 'Generating…' : 'Generate Executive Package'}
+          </Button>
+        </div>
       </div>
 
-      <Card className="border-0 shadow-lg" style={{ background: `linear-gradient(135deg, ${passedCount === preflightChecks.length ? '#ECFDF5' : passedCount >= 8 ? '#FFFBEB' : '#FEF2F2'} 0%, ${DS.canvas} 100%)`, borderTop: `4px solid ${passedCount === preflightChecks.length ? '#10B981' : passedCount >= 8 ? '#F59E0B' : '#EF4444'}` }}>
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              {passedCount === preflightChecks.length ? <CheckCircle size={16} style={{ color: '#10B981' }} /> : <AlertTriangle size={16} style={{ color: passedCount >= 8 ? '#F59E0B' : '#EF4444' }} />}
-              <span className="text-sm font-bold" style={{ color: DS.ink }}>Pre-flight Check</span>
-            </div>
-            <span className="text-xs font-bold" style={{ color: passedCount === preflightChecks.length ? '#059669' : passedCount >= 8 ? '#D97706' : '#DC2626' }}>{passedCount}/{preflightChecks.length} Passed</span>
-          </div>
-          <div className="space-y-1.5">
-            {preflightChecks.map((c, i) => (
-              <div key={i} className="flex items-center gap-2 p-1.5 rounded" style={{ background: c.pass ? '#ECFDF5' : '#FEF2F2' }}>
-                {c.pass ? <CheckCircle size={12} style={{ color: '#059669' }} /> : <XCircle size={12} style={{ color: '#DC2626' }} />}
-                <span className="text-[10px] flex-1" style={{ color: DS.inkSub }}>{c.label}</span>
-                <span className="text-[9px]" style={{ color: DS.inkDis }}>{c.module}</span>
+      {/* Decision banner */}
+      <div className="rounded-2xl p-6 mb-5" style={{ background: DS.brand }}>
+        <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: 'rgba(201,168,76,0.7)' }}>VANTAGE DQ · DECISION PACKAGE</div>
+        <h3 className="text-xl font-black text-white mb-1">{session.decisionStatement || session.name || 'Decision Package'}</h3>
+        {session.owner && <div className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>Decision Owner: {session.owner}</div>}
+      </div>
+
+      {/* Platform completion */}
+      <div className="rounded-xl overflow-hidden border mb-5" style={{ borderColor: DS.borderLight }}>
+        <div className="px-4 py-3 border-b" style={{ borderColor: DS.borderLight, background: DS.bg }}>
+          <h3 className="text-xs font-bold" style={{ color: DS.ink }}>Platform Completion</h3>
+        </div>
+        <div className="divide-y" style={{ borderColor: DS.borderLight }}>
+          {checks.map(c => (
+            <div key={c.key} className="flex items-center gap-3 px-4 py-3">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0`} style={{ background: c.pass ? DS.success : DS.bg, border: c.pass ? 'none' : `2px solid ${DS.borderLight}` }}>
+                {c.pass && <CheckCircle size={12} className="text-white" />}
               </div>
-            ))}
+              <span className="text-xs font-medium flex-1" style={{ color: c.pass ? DS.ink : DS.inkTer }}>{c.label}</span>
+              <span className="text-[10px]" style={{ color: c.pass ? DS.inkDis : DS.warning }}>{c.detail}</span>
+            </div>
+          ))}
+        </div>
+        {/* Progress bar */}
+        <div className="px-4 py-3 border-t" style={{ borderColor: DS.borderLight }}>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px]" style={{ color: DS.inkDis }}>Overall progress</span>
+            <span className="text-[10px] font-bold" style={{ color: completionPct >= 80 ? DS.success : DS.warning }}>{completionPct}% complete</span>
           </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Button variant="outline" className="h-14 text-xs gap-2 border-0 shadow-sm" style={{ background: `linear-gradient(135deg, ${DS.accentSoft}, ${DS.canvas})` }} onClick={printReport} disabled={generating}>
-          <Printer size={14} style={{ color: DS.accent }} /> {generating ? 'Generating...' : 'Print / PDF Report'}
-        </Button>
-        <Button variant="outline" className="h-14 text-xs gap-2 border-0 shadow-sm" style={{ background: DS.bg }} onClick={exportJSON}>
-          <Download size={14} style={{ color: DS.inkTer }} /> Export JSON
-        </Button>
-      </div>
-
-      <Card className="border-0 shadow-md"><CardContent className="pt-5 space-y-4">
-        <div className="flex items-center gap-2"><Zap size={14} style={{ color: DS.accent }} /><span className="text-xs font-bold" style={{ color: DS.ink }}>Executive Package Preview</span></div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="p-4 rounded-xl" style={{ background: `linear-gradient(135deg, ${DS.accentSoft}, ${DS.canvas})`, borderLeft: `3px solid ${DS.accent}` }}>
-            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#A68A3C' }}>Decision Quality</p>
-            <p className="text-3xl font-extrabold mt-1" style={{ color: band.color }}>{overall}</p>
-            <p className="text-xs font-semibold" style={{ color: band.color }}>{band.label}</p>
-            <p className="text-[10px] mt-1" style={{ color: DS.inkSub }}>{band.desc}</p>
-          </div>
-          <div className="p-4 rounded-xl" style={{ background: `linear-gradient(135deg, ${DS.alternatives.soft}, ${DS.canvas})`, borderLeft: `3px solid ${DS.alternatives.fill}` }}>
-            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: DS.alternatives.dark }}>Session Summary</p>
-            <p className="text-lg font-bold mt-1" style={{ color: DS.ink }}>{strategies.length} Strategies</p>
-            <p className="text-[10px] mt-1" style={{ color: DS.inkSub }}>{focusDecisions.length} focus &middot; {issues.length} issues &middot; {stakeholders.length} stakeholders</p>
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: DS.bg }}>
+            <div className="h-full rounded-full transition-all" style={{ width: `${completionPct}%`, background: completionPct >= 80 ? DS.success : DS.warning }} />
           </div>
         </div>
-      </CardContent></Card>
+      </div>
+
+      {/* Executive package */}
+      {pack && (
+        <div className="space-y-3">
+          {pack.recommendation && (
+            <div className="p-4 rounded-xl" style={{ background: DS.accentSoft, border: `1px solid ${DS.accent}30` }}>
+              <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: DS.accent }}>RECOMMENDATION</div>
+              <p className="text-sm font-bold" style={{ color: DS.ink }}>{pack.recommendation}</p>
+            </div>
+          )}
+          {pack.onePager && (
+            <div className="p-4 rounded-xl" style={{ background: DS.canvas, border: `1px solid ${DS.borderLight}` }}>
+              <div className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: DS.inkDis }}>EXECUTIVE SUMMARY</div>
+              <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: DS.inkSub }}>{pack.onePager}</p>
+            </div>
+          )}
+          {pack.nextSteps?.length > 0 && (
+            <div className="p-4 rounded-xl" style={{ background: DS.canvas, border: `1px solid ${DS.borderLight}` }}>
+              <div className="text-[9px] font-bold uppercase tracking-wider mb-3" style={{ color: DS.inkDis }}>NEXT STEPS</div>
+              {pack.nextSteps.map((s:any, i:number) => (
+                <div key={i} className="flex items-start gap-2.5 mb-2.5">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white shrink-0" style={{ background: DS.accent }}>{i+1}</div>
+                  <div><div className="text-xs font-medium" style={{ color: DS.ink }}>{s.action}</div>{(s.owner||s.deadline) && <div className="text-[9px]" style={{ color: DS.inkDis }}>{s.owner}{s.deadline ? ` · by ${s.deadline}` : ''}</div>}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Print preview */}
+      {previewing && pack && (
+        <div className="fixed inset-0 z-50 bg-black/60 overflow-y-auto py-8 px-4 flex flex-col items-center">
+          <div className="flex gap-3 mb-4 w-full max-w-3xl items-center">
+            <span className="text-white text-sm font-bold flex-1">{session.name || 'Decision Package'} — Preview</span>
+            <Button size="sm" style={{ background: DS.accent }} onClick={print} className="gap-1"><Printer size={12} /> Print / Save PDF</Button>
+            <Button size="sm" variant="outline" className="gap-1 text-white border-white/30 hover:bg-white/10 hover:text-white" onClick={() => setPreviewing(false)}><EyeOff size={12} /> Close</Button>
+          </div>
+          <div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl p-12" style={{ fontFamily: 'Georgia, serif', color: '#1a1a2e', lineHeight: 1.7 }}>
+            <div style={{ borderBottom: '3px solid #0B1D3A', paddingBottom: 24, marginBottom: 32 }}>
+              <div style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#6b75a0', marginBottom: 8 }}>Vantage DQ · Executive Decision Package</div>
+              <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.2, marginBottom: 10 }}>{session.name || session.decisionStatement?.slice(0,70) || 'Decision Package'}</div>
+              <div style={{ display: 'flex', gap: 24, fontSize: 12, color: '#6b75a0', flexWrap: 'wrap' as const }}>
+                {session.owner && <span><strong>Owner:</strong> {session.owner}</span>}
+                {session.deadline && <span><strong>Deadline:</strong> {session.deadline}</span>}
+                <span><strong>Date:</strong> {new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</span>
+                <span style={{ color: band.color }}><strong>DQ Score:</strong> {overall}/100 — {band.label}</span>
+              </div>
+            </div>
+            {pack.recommendation && <div style={{ padding:'14px 18px', background:'#eff6ff', borderRadius:6, border:'1px solid #bfdbfe', marginBottom:28 }}>
+              <div style={{ fontSize:11, fontWeight:700, marginBottom:6, color:'#2563eb', textTransform:'uppercase' as const, letterSpacing:1 }}>Recommendation</div>
+              <div style={{ fontSize:14, fontWeight:600 }}>{pack.recommendation}</div>
+            </div>}
+            {pack.onePager && <div style={{ marginBottom:28 }}>
+              <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:1, marginBottom:10, color:'#2563eb' }}>Executive Summary</div>
+              <div style={{ fontSize:13, whiteSpace:'pre-line' as const }}>{pack.onePager}</div>
+            </div>}
+            {pack.boardNarrative && <div style={{ marginBottom:28 }}>
+              <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:1, marginBottom:10, color:'#2563eb' }}>Board Narrative</div>
+              <div style={{ fontSize:13, fontStyle:'italic' }}>{pack.boardNarrative}</div>
+            </div>}
+            {pack.riskRegister?.length > 0 && <div style={{ marginBottom:28 }}>
+              <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:1, marginBottom:10, color:'#2563eb' }}>Risk Register</div>
+              <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:12 }}>
+                <thead><tr style={{ background:'#f1f5f9' }}>{['Risk','Likelihood','Impact','Mitigation'].map(h=><th key={h} style={{ padding:'8px 12px', textAlign:'left' as const, fontWeight:700, borderBottom:'2px solid #e2e8f0' }}>{h}</th>)}</tr></thead>
+                <tbody>{pack.riskRegister.map((r:any,i:number)=><tr key={i} style={{ borderBottom:'1px solid #e2e8f0', background:i%2===0?'#fff':'#f8fafc' }}>
+                  <td style={{ padding:'8px 12px' }}>{r.risk}</td>
+                  <td style={{ padding:'8px 12px', fontWeight:600, color:r.likelihood==='High'?'#dc2626':r.likelihood==='Medium'?'#d97706':'#059669' }}>{r.likelihood}</td>
+                  <td style={{ padding:'8px 12px', fontWeight:600, color:r.impact==='High'?'#dc2626':r.impact==='Medium'?'#d97706':'#059669' }}>{r.impact}</td>
+                  <td style={{ padding:'8px 12px' }}>{r.mitigation}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>}
+            {pack.nextSteps?.length > 0 && <div style={{ marginBottom:24 }}>
+              <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:1, marginBottom:10, color:'#2563eb' }}>Next Steps</div>
+              {pack.nextSteps.map((s:any,i:number)=><div key={i} style={{ marginBottom:10, padding:'10px 14px', background:'#f8faff', borderRadius:6, borderLeft:'3px solid #2563eb' }}>
+                <div style={{ fontSize:13, fontWeight:600, marginBottom:3 }}>{s.action}</div>
+                <div style={{ fontSize:11, color:'#6b75a0', display:'flex', gap:16 }}>{s.owner&&<span>Owner: {s.owner}</span>}{s.deadline&&<span>By: {s.deadline}</span>}</div>
+              </div>)}
+            </div>}
+            <div style={{ borderTop:'1px solid #e2e8f0', paddingTop:16, fontSize:10, color:'#9ca3af', display:'flex', justifyContent:'space-between' as const }}>
+              <span>Generated by Vantage DQ</span><span>{new Date().toLocaleDateString()}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
