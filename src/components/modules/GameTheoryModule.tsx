@@ -1,9 +1,6 @@
 /**
  * Strategic Gaming Module
- * Based on Papayoanou's "Strategic Gaming" framework:
- * Dynamic Framing → Strategy Evaluation → Execution Planning
- * Game Types: Competitive | Collaboration | Coordination
- * Integrated with DQ methodology (decision + uncertainty + values)
+ * Strategic Gaming module integrated with DQ methodology
  */
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
@@ -64,31 +61,31 @@ interface GameModel {
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const TABS = [
-  { id: 'frame',    label: '1. Dynamic Framing' },
+  { id: 'frame',    label: '1. Frame the Game' },
   { id: 'players',  label: '2. Players & Incentives' },
   { id: 'matrix',   label: '3. Strategy Evaluation' },
   { id: 'signals',  label: '4. Signals & Escalation' },
-  { id: 'plan',     label: '5. Execution Planning' },
+  { id: 'plan',     label: '5. Execution Roadmap' },
 ];
 
-const GAME_TYPES: Record<GameType, { color: string; soft: string; icon: any; label: string; desc: string; papayoanouNote: string }> = {
+const GAME_TYPES: Record<GameType, { color: string; soft: string; icon: any; label: string; desc: string; note: string }> = {
   competitive: {
     color: DS.danger, soft: DS.dangerSoft, icon: Swords,
     label: 'Competitive Game',
     desc: 'Zero-sum or near-zero-sum. One party\'s gain is the other\'s loss. Classic Prisoner\'s Dilemma dynamics. Defection dominates even when cooperation would be Pareto superior.',
-    papayoanouNote: 'Papayoanou: In competitive games, identify your dominant strategy first. If none exists, look for mixed strategy equilibria. Avoid being predictable.',
+    note: 'In competitive games, identify your dominant strategy first. If none exists, look for mixed strategy equilibria. Avoid being predictable.',
   },
   collaboration: {
     color: DS.success, soft: DS.successSoft, icon: Handshake,
     label: 'Collaboration Game',
     desc: 'Positive-sum. Parties can create more value together than apart. The challenge is dividing the surplus. Trust, commitment devices, and information sharing are critical.',
-    papayoanouNote: 'Papayoanou: In collaboration games, focus on credible commitment mechanisms and fair surplus division. The biggest risk is defection after value is created.',
+    note: 'In collaboration games, focus on credible commitment mechanisms and fair surplus division. The biggest risk is defection after value is created.',
   },
   coordination: {
     color: DS.accent, soft: DS.accentSoft, icon: Target,
     label: 'Coordination Game',
     desc: 'Both parties benefit from aligning on the same choice, but may prefer different coordination points. First-mover advantage and signaling matter enormously.',
-    papayoanouNote: 'Papayoanou: In coordination games, whoever moves first and signals credibly typically wins. Ambiguity is your enemy — clarity and commitment are your tools.',
+    note: 'In coordination games, whoever moves first and signals credibly typically wins. Ambiguity is your enemy — clarity and commitment are your tools.',
   },
 };
 
@@ -103,11 +100,11 @@ const PAYOFF_LABELS = ['Very Bad', 'Bad', 'Neutral', 'Good', 'Very Good'];
 const PAYOFF_COLORS = [DS.danger, '#EA580C', '#64748B', DS.success, '#047857'];
 
 const DQ_PRINCIPLES: Record<string, string> = {
-  frame: 'Dynamic Framing (Papayoanou Step 1): Before solving the game, correctly identify it. Most strategic errors come from misclassifying a coordination game as competitive, or a collaboration game as competitive. The game type determines everything about the right strategy.',
-  players: 'Strategic Empathy: Understanding an opponent\'s incentives and constraints is more valuable than understanding your own options. Papayoanou: "You cannot play the game well if you don\'t know what game your opponents think they\'re playing."',
-  matrix: 'Strategy Evaluation (Papayoanou Step 2): Build the payoff matrix, find dominant strategies, identify Nash equilibria, and check for Pareto improvements. A strategy that looks best in isolation often looks different once opponent reactions are modelled.',
-  signals: 'Signaling & Commitment: Papayoanou emphasises that credible signals and commitment devices change the game structure itself. A threat is only as powerful as its credibility. A promise is only as valuable as its enforceability.',
-  plan: 'Execution Planning (Papayoanou Step 3): The dynamic roadmap shows how player interactions unfold over time. Identify trigger points, contingent moves, and the tactical sequence that implements your strategy.',
+  frame: 'Dynamic Framing (Step 1): Before solving the game, correctly identify it. Most strategic errors come from misclassifying a coordination game as competitive, or a collaboration game as competitive. The game type determines everything about the right strategy.',
+  players: 'Strategic Empathy: Understanding an opponent\'s incentives and constraints is more valuable than understanding your own options. The best strategists think deeply about what others want, fear, and believe.',
+  matrix: 'Strategy Evaluation (Step 2): Build the payoff matrix, find dominant strategies, identify Nash equilibria, and check for Pareto improvements. A strategy that looks best in isolation often looks different once opponent reactions are modelled.',
+  signals: 'Signaling & Commitment: Credible signals and commitment devices change the game structure itself. A threat is only as powerful as its credibility. A promise is only as valuable as its enforceability.',
+  plan: 'Execution Planning (Step 3): The dynamic roadmap shows how player interactions unfold over time. Identify trigger points, contingent moves, and the tactical sequence that implements your strategy.',
 };
 
 // ── COMPONENT ─────────────────────────────────────────────────────────────────
@@ -188,7 +185,7 @@ export function GameTheoryModule({ sessionId, data }: ModuleProps) {
       `(${activeModel.ourMoves[c.row]?.label || 'R' + c.row}, ${activeModel.opponentMoves[c.col]?.label || 'C' + c.col}): us=${c.usPayoff}, them=${c.opponentPayoff}`
     ).join('; ');
 
-    const prompt = `You are a strategic gaming analyst using Papayoanou's methodology.
+    const prompt = `You are a strategic gaming analyst.
 
 Decision context: ${decisionContext}
 Game type: ${activeModel.gameType}
@@ -197,7 +194,7 @@ Opponent moves: ${activeModel.opponentMoves.map(m => m.label).join(', ')}
 Payoff matrix: ${matrixStr}
 Players: ${playerList}
 
-Apply Papayoanou's Strategic Gaming process:
+Apply structured game theory analysis:
 1. DYNAMIC FRAMING: Is this game correctly typed? What is the true nature of this strategic interaction?
 2. STRATEGY EVALUATION: Identify dominant strategies, Nash equilibrium, Pareto improvements
 3. STRATEGIC INSIGHTS: What does the payoff structure tell us about optimal play?
@@ -209,7 +206,7 @@ Return JSON: {
   paretoOptimal: string,
   recommendedStrategy: string,
   keyRisk: string,
-  papayoanouInsight: string,
+  strategicInsight: string,
   warnings: [string],
   executionHints: [string]
 }`;
@@ -222,7 +219,7 @@ Return JSON: {
   };
 
   const aiGeneratePlayers = () => {
-    const prompt = `Identify the key players for this strategic decision using Papayoanou's player analysis framework.
+    const prompt = `Identify the key players for this strategic decision using strategic player analysis framework.
 
 Decision: ${decisionContext}
 Objective: ${strategicObjective}
@@ -256,7 +253,7 @@ Game type: ${gameType}
 Players: ${players.map(p => `${p.name}: ${p.objective}`).join('; ')}
 ${activeModel ? `Our strategy: ${activeModel.ourMoves.map(m => m.label).join(' vs ')}` : ''}
 
-Using Papayoanou's framework, identify:
+Identify the following:
 1. Escalation chains — what moves trigger what counter-moves
 2. Credible vs incredible threats
 3. Signaling opportunities — what can we signal to change the game
@@ -281,7 +278,7 @@ Return JSON: {
   };
 
   const aiExecutionPlan = () => {
-    const prompt = `Create a dynamic execution roadmap using Papayoanou's Execution Planning step.
+    const prompt = `Create a dynamic execution roadmap for this strategic decision.
 
 Decision: ${decisionContext}
 Game type: ${gameType}
@@ -330,7 +327,7 @@ Return JSON: {
             <span className="text-[10px] font-bold px-2 py-1 rounded text-white" style={{ background: gt.color }}>
               STRATEGIC GAMING
             </span>
-            <span className="text-[9px]" style={{ color: DS.inkDis }}>Papayoanou Methodology</span>
+            <span className="text-[9px]" style={{ color: DS.inkDis }}>Strategic Game Theory</span>
           </div>
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Game Theory Analysis</h2>
         </div>
@@ -381,9 +378,9 @@ Return JSON: {
           <div className="rounded-xl p-4" style={{ background: gt.soft, border: `1px solid ${gt.color}25` }}>
             <div className="flex items-center gap-2 mb-2">
               <GTIcon size={16} style={{ color: gt.color }} />
-              <span className="text-xs font-bold" style={{ color: gt.color }}>PAPAYOANOU STEP 1 — DYNAMIC FRAMING</span>
+              <span className="text-xs font-bold" style={{ color: gt.color }}>STEP 1 — DYNAMIC FRAMING</span>
             </div>
-            <p className="text-xs" style={{ color: DS.inkSub }}>{gt.papayoanouNote}</p>
+            <p className="text-xs" style={{ color: DS.inkSub }}>{gt.note}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -553,11 +550,11 @@ Return JSON: {
                 </Button>
               </div>
 
-              {/* 2×2 Payoff Matrix — Papayoanou's core tool */}
+              {/* 2×2 Payoff Matrix */}
               <div className="rounded-xl overflow-hidden border" style={{ borderColor: DS.borderLight }}>
                 <div className="px-4 py-3 border-b" style={{ borderColor: DS.borderLight, background: DS.bg }}>
                   <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: DS.inkDis }}>
-                    PAYOFF MATRIX — Papayoanou 2×2 Strategic Analysis (1=Very Bad, 5=Very Good)
+                    PAYOFF MATRIX — 2×2 Strategic Analysis (1=Very Bad, 5=Very Good)
                   </div>
                 </div>
 
@@ -640,7 +637,7 @@ Return JSON: {
                   <div className="px-4 py-3 border-b" style={{ borderColor: DS.borderLight, background: gt.soft }}>
                     <div className="flex items-center gap-2">
                       <Sparkles size={13} style={{ color: gt.color }} />
-                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: gt.color }}>PAPAYOANOU AI ANALYSIS</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: gt.color }}>STRATEGIC GAME ANALYSIS</span>
                     </div>
                   </div>
                   <div className="p-4 grid grid-cols-2 gap-3">
@@ -656,8 +653,8 @@ Return JSON: {
                       </div>
                     ))}
                     <div className="col-span-2 p-3 rounded-xl" style={{ background: gt.soft, border: `1px solid ${gt.color}25` }}>
-                      <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: gt.color }}>PAPAYOANOU INSIGHT</div>
-                      <p className="text-xs" style={{ color: DS.inkSub }}>{aiAnalysis.papayoanouInsight}</p>
+                      <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: gt.color }}>STRATEGIC INSIGHT</div>
+                      <p className="text-xs" style={{ color: DS.inkSub }}>{aiAnalysis.strategicInsight}</p>
                     </div>
                     {aiAnalysis.warnings?.length > 0 && (
                       <div className="col-span-2 space-y-1">
@@ -684,7 +681,7 @@ Return JSON: {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs" style={{ color: DS.inkSub }}>Map escalation chains, signaling opportunities, and commitment devices. Papayoanou: credible signals change the game structure itself.</p>
+              <p className="text-xs" style={{ color: DS.inkSub }}>Map escalation chains, signaling opportunities, and commitment devices. Credible signals change the game structure itself.</p>
             </div>
             <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: gt.color }} onClick={aiEscalation} disabled={busy}>
               <Sparkles size={11} /> {busy ? 'Mapping…' : 'Map Signals & Escalation'}
@@ -783,7 +780,7 @@ Return JSON: {
       {activeTab === 'plan' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-xs" style={{ color: DS.inkSub }}>Papayoanou Step 3: Build the dynamic roadmap showing how player interactions unfold over time.</p>
+            <p className="text-xs" style={{ color: DS.inkSub }}>Step 3 — Execution Planning: Build the dynamic roadmap showing how player interactions unfold over time.</p>
             <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: gt.color }} onClick={aiExecutionPlan} disabled={busy}>
               <Sparkles size={11} /> {busy ? 'Building…' : 'Build Execution Roadmap'}
             </Button>
