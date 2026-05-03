@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { MODULES, DS, TOOLS, type ToolId } from '@/constants';
 import type { ModuleId } from '@/types';
-import { Sparkles, Menu, X, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Users, Wrench, Swords, Presentation, Brain, FileSpreadsheet } from 'lucide-react';
+import { Sparkles, Menu, X, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Users, Wrench, Swords, Presentation, Brain, FileSpreadsheet, Monitor } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AICoPilot } from './AICoPilot';
 import { WorkshopPanel } from './WorkshopPanel';
@@ -102,6 +102,36 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
                       </button>
                     )}
                   </div>
+                  {/* Workshop Mode — always first in Tools */}
+                  <button
+                    className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50 border-b"
+                    style={{ borderColor: DS.borderLight, background: workshopOpen ? '#0D9488' + '10' : undefined }}
+                    onClick={() => { setWorkshopOpen(!workshopOpen); setToolsOpen(false); }}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: workshopOpen ? '#0D9488' : '#0D948818' }}>
+                      <Users size={15} style={{ color: workshopOpen ? '#fff' : '#0D9488' }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold" style={{ color: workshopOpen ? '#0D9488' : DS.ink }}>Workshop Mode</span>
+                        {workshopOpen && <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white" style={{ background: '#0D9488' }}>ACTIVE</span>}
+                      </div>
+                      <p className="text-[9px] mt-0.5" style={{ color: DS.inkTer }}>{workshopOpen ? 'Click to close workshop' : 'Structured facilitation for teams'}</p>
+                    </div>
+                    {workshopOpen && <X size={13} className="shrink-0 mt-1" style={{ color: '#0D9488' }} />}
+                  </button>
+                  {/* Projector Mode */}
+                  <button
+                    className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50 border-b"
+                    style={{ borderColor: DS.borderLight }}
+                    onClick={() => { window.open(window.location.pathname + '/projector', '_blank'); setToolsOpen(false); }}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#7C3AED18' }}>
+                      <Monitor size={15} style={{ color: '#7C3AED' }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-semibold" style={{ color: DS.ink }}>Projector Mode</div>
+                      <p className="text-[9px] mt-0.5" style={{ color: DS.inkTer }}>Full-screen view for the room display</p>
+                    </div>
+                  </button>
                   {TOOLS.map(tool => {
                     const ToolIcon = TOOL_ICONS[tool.id] || Wrench;
                     const isActive = activeTool === tool.id;
@@ -139,9 +169,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
 
           <div className="w-px h-4 bg-white/20 hidden sm:block" />
 
-          <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setWorkshopOpen(true)}>
-            <Users size={12} /> Workshop
-          </Button>
+
           <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setCoPilotOpen(!coPilotOpen)}>
             <Bot size={12} /> AI
           </Button>
