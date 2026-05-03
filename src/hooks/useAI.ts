@@ -11,7 +11,7 @@
  * The hook returns an enriched result with trust metadata the UI can display.
  */
 import { useState, useCallback } from 'react';
-import { validateBeforeAI, classifyOutputTrust, detectCrossModuleContradictions, createAuditEntry } from './dq-ai-engine';
+import { validateBeforeAI, classifyOutputTrust, detectCrossModuleContradictions, createAuditEntry } from '@/lib/dq-ai-engine';
 
 type AICallback = (result: any) => void;
 
