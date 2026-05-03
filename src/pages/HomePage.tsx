@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { useAuth } from '@/hooks/useAuth';
+
 import { useDemoContext } from '@/App';
 import { enableDemoMode, initializeDemoData } from '@/lib/demoData';
 import { DS } from '@/constants';
@@ -11,7 +11,7 @@ import {
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { user, isLoading } = useAuth();
+  const isLoading = false;
   const { demoMode } = useDemoContext();
 
   const features = [

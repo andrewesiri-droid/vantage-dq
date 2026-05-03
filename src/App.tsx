@@ -1,16 +1,16 @@
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
-import { useEffect, useState, createContext, useContext } from 'react';
+import { useEffect, useState, createContext, useContext, lazy, Suspense } from 'react';
 import { enableDemoMode, isDemoMode, getDemoUser, initializeDemoData } from '@/lib/demoData';
 import { HomePage } from '@/pages/HomePage';
-import { Dashboard } from '@/pages/Dashboard';
-import { OnboardingPage } from '@/pages/OnboardingPage';
-import { SessionPage } from '@/pages/SessionPage';
+const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
+const SessionPage = lazy(() => import('@/pages/SessionPage').then(m => ({ default: m.SessionPage })));
 import { LoginPage } from '@/pages/LoginPage';
-import { AuthCallbackPage } from '@/pages/AuthCallbackPage';
+const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { DemoBanner } from '@/components/layout/DemoBanner';
-import { ProjectorPage } from '@/pages/ProjectorPage';
-import { JoinPage } from '@/pages/JoinPage';
+const ProjectorPage = lazy(() => import('@/pages/ProjectorPage').then(m => ({ default: m.ProjectorPage })));
+const JoinPage = lazy(() => import('@/pages/JoinPage').then(m => ({ default: m.JoinPage })));
 
 // Demo context
 interface DemoContextType { demoMode: boolean; setDemoMode: (v: boolean) => void; user: any; authUser: any; signOut: () => void; }
@@ -82,9 +82,19 @@ function AppInner() {
     );
   }
 
+  const PageLoader = () => (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#F8F9FC' }}>
+      <div className="text-center">
+        <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-xs" style={{ color: '#64748B' }}>Loading...</p>
+      </div>
+    </div>
+  );
+
   return (
     <DemoContext.Provider value={{ demoMode, setDemoMode, user, authUser, signOut }}>
       <div className="relative">
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -97,6 +107,7 @@ function AppInner() {
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
         <DemoBanner />
       </div>
     </DemoContext.Provider>
