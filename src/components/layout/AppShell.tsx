@@ -8,6 +8,7 @@ import { AICoPilot } from './AICoPilot';
 import { SessionInvitePanel } from '@/components/collaboration/SessionInvitePanel';
 import { PresenceBar } from '@/components/collaboration/PresenceBar';
 import { WorkshopPanel } from './WorkshopPanel';
+import { useDemoContext } from '@/App';
 
 const TOOL_ICONS: Record<string, any> = {
   'game-theory': Swords,
