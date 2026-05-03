@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { useWorkshopSync } from '@/hooks/useWorkshopSync';
+import { useDemoContext } from '@/App';
 import { DS } from '@/constants';
 import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
@@ -128,18 +130,29 @@ const PHASES = [
 
 interface Props { onClose: () => void; sessionId?: number; data?: any; }
 
-interface Note { id: number; text: string; author: string; votes: number; phase: string; category?: string; }
+interface Note { id: string; text: string; author: string; votes: number; phase: string; category?: string; isHighlighted?: boolean; }
 interface Tension { id: number; description: string; severity: 'high' | 'medium'; phase: string; }
 interface LogEntry { id: number; text: string; timestamp: Date; type: 'decision' | 'tension' | 'note'; }
 
 export function WorkshopPanel({ onClose, sessionId, data }: Props) {
   const { call, busy } = useAI();
+  const { authUser } = useDemoContext();
+  const sync = useWorkshopSync({
+    sessionId: sessionId || 1,
+    role: 'facilitator',
+    displayName: authUser?.displayName || 'Facilitator',
+    userId: authUser?.id,
+  });
   const [phaseIdx, setPhaseIdx] = useState(0);
   const [running, setRunning] = useState(false);
   const [seconds, setSeconds] = useState(PHASES[0].defaultMinutes * 60);
-  const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState('');
   const [tensions, setTensions] = useState<Tension[]>([]);
+  // Use sync notes — cast to local Note type
+  const notes: Note[] = sync.notes.map(n => ({
+    id: String(n.id), text: n.text, author: n.author,
+    votes: n.votes, phase: n.phase, isHighlighted: n.isHighlighted,
+  }));
   const [log, setLog] = useState<LogEntry[]>([]);
   const [newLog, setNewLog] = useState('');
   const [aiInsight, setAiInsight] = useState('');
@@ -165,26 +178,21 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
     setSeconds(PHASES[idx].defaultMinutes * 60);
     setRunning(false);
     setAiInsight('');
-    // Broadcast to projector via localStorage
-    broadcastProjector({ phase: PHASES[idx], phaseIdx: idx });
+    // Broadcast via Supabase Realtime (falls back to localStorage)
+    sync.broadcastPhaseChange(idx, PHASES[idx]);
+    sync.broadcastToProjector({ phase: PHASES[idx], phaseIdx: idx, tensions });
+    sync.loadNotesForPhase(PHASES[idx].id);
   };
 
   const broadcastProjector = (state: any) => {
-    localStorage.setItem('vantage_dq_projector', JSON.stringify({
-      ...state,
-      timestamp: Date.now(),
-      notes: notes.filter(n => n.phase === phase.id),
-      tensions,
-    }));
-    window.dispatchEvent(new Event('storage'));
+    sync.broadcastToProjector({ ...state, tensions });
   };
 
   const addNote = () => {
     if (!newNote.trim()) return;
-    const n: Note = { id: Date.now(), text: newNote.trim(), author: 'Facilitator', votes: 0, phase: phase.id };
-    setNotes(p => [...p, n]);
+    sync.submitNote(newNote.trim(), phase.id, false);
     setNewNote('');
-    broadcastProjector({ phase, phaseIdx, notes: [...notes, n] });
+    broadcastProjector({ phase, phaseIdx });
   };
 
   const logEntry = (type: LogEntry['type'] = 'note') => {
@@ -404,7 +412,7 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
                       style={{ background: `${phase.color}18`, border: `1px solid ${phase.color}30` }}>
                       <p className="text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>{note.text}</p>
                       <div className="flex items-center gap-2 mt-2">
-                        <button onClick={() => setNotes(p => p.map(n => n.id === note.id ? { ...n, votes: n.votes + 1 } : n))}
+                        <button onClick={() => sync.voteNote(note.id)}
                           className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded transition-colors hover:bg-white/10"
                           style={{ color: note.votes > 0 ? DS.accent : 'rgba(255,255,255,0.3)' }}>
                           <ThumbsUp size={9} /> {note.votes > 0 && note.votes}

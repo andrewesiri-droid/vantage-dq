@@ -5,6 +5,8 @@
  */
 import { useState, useEffect } from 'react';
 import { DS } from '@/constants';
+import { supabase, isSupabaseReady } from '@/lib/supabase-client';
+import { supabase, isSupabaseReady } from '@/lib/supabase-client';
 import { Monitor, Users, Timer, Lightbulb, AlertTriangle } from 'lucide-react';
 
 interface ProjectorState {
@@ -56,9 +58,46 @@ export function ProjectorPage() {
     // Also poll every 2 seconds for same-tab updates
     const poll = setInterval(handleStorage, 2000);
 
+    // Supabase Realtime — cross-device sync for Projector
+    let realtimeChannel: any = null;
+    if (isSupabaseReady && supabase) {
+      realtimeChannel = supabase
+        .channel('projector-sync')
+        .on('broadcast', { event: 'phase_change' }, ({ payload }: any) => {
+          setState((prev: any) => ({ ...prev, ...payload }));
+        })
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'workshop_contributions',
+        }, (payload: any) => {
+          const row = payload.new;
+          setState((prev: any) => ({
+            ...prev,
+            notes: [...(prev?.notes || []), {
+              id: row.id, text: row.text,
+              author: row.display_name || 'Anonymous',
+              votes: row.votes || 0, phase: row.phase_id,
+              isHighlighted: row.is_highlighted || false,
+            }],
+          }));
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE', schema: 'public', table: 'workshop_contributions',
+        }, (payload: any) => {
+          const row = payload.new;
+          setState((prev: any) => ({
+            ...prev,
+            notes: (prev?.notes || []).map((n: any) =>
+              n.id === row.id ? { ...n, votes: row.votes, isHighlighted: row.is_highlighted } : n
+            ),
+          }));
+        })
+        .subscribe();
+    }
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       clearInterval(poll);
+      if (realtimeChannel && supabase) supabase.removeChannel(realtimeChannel);
     };
   }, []);
 
