@@ -117,7 +117,7 @@ export function useWorkshopSync({ sessionId, role, displayName, userId }: UseWor
     // Presence tracking
     channel.on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState();
-      const members = Object.values(state).flat() as WorkshopPresence[];
+      const members = (Object.values(state).flat() as unknown[]) as WorkshopPresence[];
       setPresence(members);
       setParticipantCount(members.length);
     });
@@ -275,13 +275,14 @@ export function useWorkshopSync({ sessionId, role, displayName, userId }: UseWor
 
     if (isSupabaseReady && supabase && !noteId.startsWith('opt_')) {
       // Increment in DB (uses RPC to avoid race conditions)
-      await supabase.rpc('increment_contribution_votes', { contribution_id: noteId })
-        .catch(() => {
-          // Fallback: direct update
-          supabase.from('workshop_contributions')
-            .update({ votes: notes.find(n => n.id === noteId)?.votes || 1 })
-            .eq('id', noteId);
-        });
+      try {
+        await supabase.rpc('increment_contribution_votes', { contribution_id: noteId });
+      } catch {
+        // Fallback: direct update
+        await supabase.from('workshop_contributions')
+          .update({ votes: (notes.find(n => n.id === noteId)?.votes || 0) + 1 })
+          .eq('id', noteId);
+      }
     }
   }, [notes]);
 

@@ -6,7 +6,6 @@
 import { useState, useEffect } from 'react';
 import { DS } from '@/constants';
 import { supabase, isSupabaseReady } from '@/lib/supabase-client';
-import { supabase, isSupabaseReady } from '@/lib/supabase-client';
 import { Monitor, Users, Timer, Lightbulb, AlertTriangle } from 'lucide-react';
 
 interface ProjectorState {
