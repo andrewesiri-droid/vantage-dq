@@ -199,7 +199,7 @@ export function SessionInvitePanel({ sessionId, sessionName, sessionSlug, onClos
 
     const failed = emailResults.filter(r => r.status === 'rejected').length;
     if (failed > 0) {
-      setError(\`\${tokens.length - failed} email(s) sent. \${failed} failed — check Manage tab for links.\`);
+      setError(`${tokens.length - failed} email(s) sent. ${failed} failed — check Manage tab for links.`);
     } else {
       setError(null);
     }
