@@ -82,7 +82,9 @@ export function SessionInvitePanel({ sessionId, sessionName, sessionSlug, onClos
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const baseUrl = window.location.origin;
+  const baseUrl = window.location.hostname === 'localhost' 
+    ? window.location.origin 
+    : 'https://vantage-dq.vercel.app';
 
   useEffect(() => {
     loadInviteCode();
