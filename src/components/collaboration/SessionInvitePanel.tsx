@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Users, Link2, Mail, Copy, Check, X, Plus, RefreshCw,
   Shield, Eye, Pencil, Crown, QrCode, Clock, Trash2,
-  AlertTriangle, ChevronDown, ChevronUp
+  AlertTriangle, ChevronDown, ChevronUp, CheckCircle
 } from 'lucide-react';
 
 type Role = 'facilitator' | 'participant' | 'observer';
