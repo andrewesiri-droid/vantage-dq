@@ -11,7 +11,7 @@ import {
 
 export function HomePage() {
   const navigate = useNavigate();
-  const [isLoading] = useState(false);
+  const isLoading = false;
   const { demoMode } = useDemoContext();
 
   const features = [
