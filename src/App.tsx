@@ -6,17 +6,20 @@ import { Dashboard } from '@/pages/Dashboard';
 import { OnboardingPage } from '@/pages/OnboardingPage';
 import { SessionPage } from '@/pages/SessionPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { AuthCallbackPage } from '@/pages/AuthCallbackPage';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { DemoBanner } from '@/components/layout/DemoBanner';
 import { ProjectorPage } from '@/pages/ProjectorPage';
 import { JoinPage } from '@/pages/JoinPage';
 
 // Demo context
-interface DemoContextType { demoMode: boolean; setDemoMode: (v: boolean) => void; user: any; }
-const DemoContext = createContext<DemoContextType>({ demoMode: false, setDemoMode: () => {}, user: null });
+interface DemoContextType { demoMode: boolean; setDemoMode: (v: boolean) => void; user: any; authUser: any; signOut: () => void; }
+const DemoContext = createContext<DemoContextType>({ demoMode: false, setDemoMode: () => {}, user: null, authUser: null, signOut: () => {} });
 export const useDemoContext = () => useContext(DemoContext);
 
 function AppInner() {
   const _navigate = useNavigate(); void _navigate;
+  const { user: authUser, signOut } = useSupabaseAuth();
   const [demoMode, setDemoModeState] = useState(isDemoMode());
   const [user, setUser] = useState<any>(null);
   const [checking, setChecking] = useState(true);
@@ -80,7 +83,7 @@ function AppInner() {
   }
 
   return (
-    <DemoContext.Provider value={{ demoMode, setDemoMode, user }}>
+    <DemoContext.Provider value={{ demoMode, setDemoMode, user, authUser, signOut }}>
       <div className="relative">
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -91,6 +94,7 @@ function AppInner() {
           <Route path="/session/:slug/projector" element={<ProjectorPage />} />
           <Route path="/join" element={<JoinPage />} />
           <Route path="/join/:token" element={<JoinPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <DemoBanner />

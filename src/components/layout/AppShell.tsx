@@ -177,7 +177,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
             <Bot size={12} /> AI
           </Button>
           <PresenceBar sessionId={1} onInviteClick={() => setInviteOpen(true)} />
-          <UserAvatar name={sessionName} />
+          <UserAvatar name={authUser?.displayName || sessionName} onSignOut={signOut} />
         </div>
       </header>
 
@@ -262,13 +262,36 @@ function ModuleButton({ module, active, onClick }: { module: { id: string; label
   );
 }
 
-function UserAvatar({ name }: { name: string }) {
+function UserAvatar({ name, onSignOut }: { name: string; onSignOut?: () => void }) {
+  const [open, setOpen] = useState(false);
   const initials = name
     ? name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
     : 'DQ';
   return (
-    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ml-1 shrink-0" style={{ background: DS.accent }}>
-      {initials}
+    <div className="relative ml-1">
+      <button onClick={() => setOpen(!open)}
+        className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white transition-opacity hover:opacity-80"
+        style={{ background: DS.accent }}>
+        {initials}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 w-48 rounded-xl shadow-xl border z-50 overflow-hidden" style={{ background: '#fff', borderColor: DS.borderLight }}>
+            <div className="px-3 py-2.5 border-b" style={{ borderColor: DS.borderLight, background: DS.bg }}>
+              <p className="text-[10px] font-bold truncate" style={{ color: DS.ink }}>{name || 'Vantage DQ'}</p>
+              <p className="text-[9px]" style={{ color: DS.inkDis }}>Session owner</p>
+            </div>
+            {onSignOut && (
+              <button onClick={() => { setOpen(false); onSignOut(); }}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors"
+                style={{ color: DS.danger }}>
+                Sign out
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
