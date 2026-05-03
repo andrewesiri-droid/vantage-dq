@@ -5,6 +5,8 @@ import type { ModuleId } from '@/types';
 import { Sparkles, Menu, X, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Users, Wrench, Swords, Presentation, Brain, FileSpreadsheet, Monitor } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AICoPilot } from './AICoPilot';
+import { SessionInvitePanel } from '@/components/collaboration/SessionInvitePanel';
+import { PresenceBar } from '@/components/collaboration/PresenceBar';
 import { WorkshopPanel } from './WorkshopPanel';
 
 const TOOL_ICONS: Record<string, any> = {
@@ -33,6 +35,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [coPilotOpen, setCoPilotOpen] = useState(true);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const currentModule = MODULES.find(m => m.id === activeModule)!;
   const currentTool = activeTool ? TOOLS.find(t => t.id === activeTool) : null;
@@ -173,6 +176,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setCoPilotOpen(!coPilotOpen)}>
             <Bot size={12} /> AI
           </Button>
+          <PresenceBar sessionId={1} onInviteClick={() => setInviteOpen(true)} />
           <UserAvatar name={sessionName} />
         </div>
       </header>
@@ -206,6 +210,14 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
         <AICoPilot module={activeModule} sessionId={sessionId} data={data} collapsed={!coPilotOpen} onToggle={() => setCoPilotOpen(!coPilotOpen)} />
       </div>
 
+      {inviteOpen && (
+        <SessionInvitePanel
+          sessionId={1}
+          sessionName={sessionName || 'Decision Session'}
+          sessionSlug="demo-apac-entry"
+          onClose={() => setInviteOpen(false)}
+        />
+      )}
       {workshopOpen && <WorkshopPanel onClose={() => setWorkshopOpen(false)} sessionId={sessionId} />}
     </div>
   );
