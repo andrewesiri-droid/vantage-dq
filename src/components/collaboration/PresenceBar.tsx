@@ -70,7 +70,7 @@ export function PresenceBar({ sessionId, onInviteClick }: Props) {
     // Show invite button even without Supabase
     return (
       <button onClick={onInviteClick}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-colors hover:bg-white/10"
+        className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[10px] font-medium transition-colors hover:bg-white/10 min-h-[40px]"
         style={{ color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.15)' }}>
         <Users size={12} /> <span className="hidden sm:inline">Invite</span>
       </button>
@@ -112,7 +112,7 @@ export function PresenceBar({ sessionId, onInviteClick }: Props) {
 
       {/* Invite button */}
       <button onClick={onInviteClick}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-colors hover:bg-white/10"
+        className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[10px] font-medium transition-colors hover:bg-white/10 min-h-[40px]"
         style={{ color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.2)' }}>
         <Users size={12} />
         <span className="hidden sm:inline">{onlineMembers.length === 0 ? 'Invite' : '+ Invite'}</span>

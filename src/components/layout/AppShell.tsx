@@ -44,10 +44,10 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
     <div className="h-screen flex flex-col overflow-hidden" style={{ background: DS.bg }}>
       {/* TOP BAR */}
       <header className="h-12 shrink-0 flex items-center gap-2 px-3 border-b z-30" style={{ background: DS.brand, borderColor: DS.chromeMid }}>
-        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center">
           <Menu size={18} className="text-white/70" />
         </button>
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden md:flex p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden md:flex p-2 rounded-lg hover:bg-white/10 transition-colors min-w-[40px] min-h-[40px] items-center justify-center">
           {sidebarOpen ? <PanelLeftClose size={16} className="text-white/70" /> : <PanelLeft size={16} className="text-white/70" />}
         </button>
 
@@ -56,9 +56,9 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: DS.accent }}>
             <Sparkles size={12} className="text-white" />
           </div>
-          <span className="text-[11px] font-bold text-white hidden sm:inline tracking-wide">VANTAGE DQ</span>
+          <span className="text-[10px] font-bold text-white tracking-wide">VANTAGE DQ</span>
         </div>
-        <div className="w-px h-4 bg-white/20 mx-1 hidden sm:block" />
+        <div className="w-px h-4 bg-white/20 mx-1" />
         <div className="flex-1 min-w-0">
           <span className="text-[11px] text-white/60 truncate block">{sessionName}</span>
         </div>
@@ -84,7 +84,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           {/* Tools dropdown — toggle open/close, each tool toggles on/off */}
           <div className="relative">
             <Button size="sm" variant="ghost"
-              className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10"
+              className="h-9 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10"
               onClick={() => setToolsOpen(!toolsOpen)}>
               <Wrench size={12} /> <span className="hidden xs:inline sm:inline">Tools</span>
               {activeTool && <span className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: '#4ADE80' }} />}
@@ -169,7 +169,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           </div>
 
           <div className="w-px h-4 bg-white/20 hidden sm:block" />
-          <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10" onClick={() => setCoPilotOpen(!coPilotOpen)}>
+          <Button size="sm" variant="ghost" className="h-9 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10" onClick={() => setCoPilotOpen(!coPilotOpen)}>
             <Bot size={12} /> <span className="hidden sm:inline">AI</span>
           </Button>
           <PresenceBar sessionId={1} onInviteClick={() => setInviteOpen(true)} />
@@ -250,9 +250,9 @@ function ModuleButton({ module, active, onClick }: { module: { id: string; label
     <button onClick={onClick} className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all rounded-md mx-1.5 mb-0.5"
       style={{ background: active ? DS.accentSoft : 'transparent', width: 'calc(100% - 12px)' }}>
       <span className="text-[10px] font-bold w-5 text-center shrink-0 tabular-nums" style={{ color: active ? DS.accent : DS.inkDis }}>{module.num}</span>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold truncate" style={{ color: active ? DS.brand : DS.inkSub }}>{module.label}</div>
-        <div className="text-[10px] truncate" style={{ color: active ? DS.accent : DS.inkDis }}>{module.sub}</div>
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <div className="text-xs font-semibold truncate leading-tight" style={{ color: active ? DS.brand : DS.inkSub }}>{module.label}</div>
+        <div className="text-[9px] truncate leading-tight" style={{ color: active ? DS.accent : DS.inkDis }}>{module.sub}</div>
       </div>
     </button>
   );

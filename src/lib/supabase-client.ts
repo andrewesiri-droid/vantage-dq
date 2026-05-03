@@ -8,7 +8,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[Supabase] Missing env vars — collaboration features disabled');
+  console.warn('[Vantage DQ] Supabase env vars missing — add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to Vercel environment variables. Collaboration, auth, and real-time sync are disabled.');
 }
 
 export const supabase = supabaseUrl && supabaseAnonKey
