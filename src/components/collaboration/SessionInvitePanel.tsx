@@ -163,6 +163,9 @@ export function SessionInvitePanel({ sessionId, sessionName, sessionSlug, onClos
     setLoading(true);
     setError(null);
 
+    const tokens: { email: string; token: string }[] = [];
+
+    // 1. Create invite records in Supabase
     if (isSupabaseReady && supabase) {
       const inviteRows = emailList.map(email => ({
         session_id: sessionId,
@@ -172,17 +175,36 @@ export function SessionInvitePanel({ sessionId, sessionName, sessionSlug, onClos
         expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
       }));
 
-      const { error: err } = await supabase
+      const { data, error: err } = await supabase
         .from('session_invitations')
-        .insert(inviteRows);
+        .insert(inviteRows)
+        .select();
 
       if (err) { setError('Could not create invitations. Try again.'); setLoading(false); return; }
+
+      // Track tokens for email sending
+      data?.forEach((row: any) => tokens.push({ email: row.email, token: row.token }));
     }
 
-    // In production: trigger email send via Edge Function
-    // For now: show the links for manual sharing
+    // 2. Send emails via /api/send-invite
+    const emailResults = await Promise.allSettled(
+      tokens.map(({ email, token }) =>
+        fetch('/api/send-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, token, role, sessionName, invitedBy: 'The Vantage DQ team' }),
+        }).then(r => r.json())
+      )
+    );
+
+    const failed = emailResults.filter(r => r.status === 'rejected').length;
+    if (failed > 0) {
+      setError(\`\${tokens.length - failed} email(s) sent. \${failed} failed — check Manage tab for links.\`);
+    } else {
+      setError(null);
+    }
+
     setEmails('');
-    setError(null);
     setLoading(false);
     setActiveTab('manage');
   };
@@ -403,11 +425,10 @@ export function SessionInvitePanel({ sessionId, sessionName, sessionSlug, onClos
                 <Mail size={14} /> {loading ? 'Sending…' : 'Send Invitations'}
               </Button>
 
-              {/* No email service note */}
-              <div className="flex items-start gap-2 p-2.5 rounded-xl" style={{ background: DS.warnSoft }}>
-                <AlertTriangle size={11} style={{ color: DS.warning, flexShrink: 0, marginTop: 1 }} />
+              <div className="flex items-start gap-2 p-2.5 rounded-xl" style={{ background: DS.accentSoft }}>
+                <CheckCircle size={11} style={{ color: DS.success, flexShrink: 0, marginTop: 1 }} />
                 <p className="text-[9px]" style={{ color: DS.inkSub }}>
-                  Email delivery requires an email service (Resend, SendGrid). Until configured, invite links are created and shown in Manage — copy and share them manually.
+                  Branded invite emails sent via Resend. Each person gets a unique link for their role.
                 </p>
               </div>
             </div>
