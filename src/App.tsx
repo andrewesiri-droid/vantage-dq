@@ -8,6 +8,7 @@ import { SessionPage } from '@/pages/SessionPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { DemoBanner } from '@/components/layout/DemoBanner';
 import { ProjectorPage } from '@/pages/ProjectorPage';
+import { JoinPage } from '@/pages/JoinPage';
 
 // Demo context
 interface DemoContextType { demoMode: boolean; setDemoMode: (v: boolean) => void; user: any; }
@@ -88,6 +89,8 @@ function AppInner() {
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/session/:slug" element={<SessionPage />} />
           <Route path="/session/:slug/projector" element={<ProjectorPage />} />
+          <Route path="/join" element={<JoinPage />} />
+          <Route path="/join/:token" element={<JoinPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <DemoBanner />
