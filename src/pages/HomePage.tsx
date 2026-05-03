@@ -65,7 +65,7 @@ export function HomePage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {user ? (
+              {demoMode ? (
                 <Button size="sm" className="text-xs gap-1" style={{ background: DS.accent }} onClick={() => navigate('/dashboard')}>
                   Dashboard <ChevronRight size={14} />
                 </Button>
@@ -93,7 +93,7 @@ export function HomePage() {
                 Structured methodology, real-time collaboration, and trustworthy AI — from problem frame to board-ready output.
               </p>
               <div className="flex flex-wrap gap-3">
-                {user || demoMode ? (
+                {demoMode ? (
                   <Button size="lg" className="gap-2 text-sm" style={{ background: DS.accent }} onClick={() => navigate('/dashboard')}>
                     <Zap size={16} /> Go to Dashboard
                   </Button>
@@ -218,7 +218,7 @@ export function HomePage() {
           <p className="text-sm mb-8" style={{ color: 'rgba(255,255,255,0.6)' }}>
             Join leading energy companies and Fortune 500 executives who trust Vantage DQ for their most critical decisions.
           </p>
-          {user ? (
+          {demoMode ? (
             <Button size="lg" className="gap-2 text-sm" style={{ background: DS.accent }} onClick={() => navigate('/dashboard')}>
               <Zap size={16} /> Go to Dashboard <ChevronRight size={14} />
             </Button>
