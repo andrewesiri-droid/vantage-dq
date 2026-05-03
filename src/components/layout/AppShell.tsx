@@ -36,6 +36,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
   const [coPilotOpen, setCoPilotOpen] = useState(true);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const { authUser, signOut } = useDemoContext();
 
   const currentModule = MODULES.find(m => m.id === activeModule)!;
   const currentTool = activeTool ? TOOLS.find(t => t.id === activeTool) : null;
