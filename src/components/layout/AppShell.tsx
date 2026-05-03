@@ -145,7 +145,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setCoPilotOpen(!coPilotOpen)}>
             <Bot size={12} /> AI
           </Button>
-          <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ml-1" style={{ background: DS.accent }}>JD</div>
+          <UserAvatar name={sessionName} />
         </div>
       </header>
 
@@ -219,5 +219,16 @@ function ModuleButton({ module, active, onClick }: { module: { id: string; label
         <div className="text-[10px] truncate" style={{ color: active ? DS.accent : DS.inkDis }}>{module.sub}</div>
       </div>
     </button>
+  );
+}
+
+function UserAvatar({ name }: { name: string }) {
+  const initials = name
+    ? name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
+    : 'DQ';
+  return (
+    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ml-1 shrink-0" style={{ background: DS.accent }}>
+      {initials}
+    </div>
   );
 }
