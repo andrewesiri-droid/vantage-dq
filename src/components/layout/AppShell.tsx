@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
 import { MODULES, DS, TOOLS, type ToolId } from '@/constants';
 import type { ModuleId } from '@/types';
-import { Sparkles, Menu, X, Bot, ChevronLeft, PanelLeftClose, PanelLeft, RefreshCw, Users, Wrench, Swords, Presentation, Brain, FileSpreadsheet, Monitor } from 'lucide-react';
+import { Sparkles, Menu, X, Bot, PanelLeftClose, PanelLeft, RefreshCw, Users, Wrench, Swords, Presentation, Brain, FileSpreadsheet, Monitor } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AICoPilot } from './AICoPilot';
 import { SessionInvitePanel } from '@/components/collaboration/SessionInvitePanel';
@@ -30,7 +29,6 @@ interface AppShellProps {
 }
 
 export function AppShell({ sessionName, sessionId, activeModule, onModuleChange, activeTool, onToolChange, isSyncing, children, data }: AppShellProps) {
-  const navigate = useNavigate();
   const [workshopOpen, setWorkshopOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -52,9 +50,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden md:flex p-1.5 rounded-lg hover:bg-white/10 transition-colors">
           {sidebarOpen ? <PanelLeftClose size={16} className="text-white/70" /> : <PanelLeft size={16} className="text-white/70" />}
         </button>
-        <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-          <ChevronLeft size={16} className="text-white/70" />
-        </button>
+
 
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: DS.accent }}>
@@ -86,11 +82,11 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
 
         <div className="flex items-center gap-1">
           {/* Tools dropdown — toggle open/close, each tool toggles on/off */}
-          <div className="relative hidden sm:block">
+          <div className="relative">
             <Button size="sm" variant="ghost"
               className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10"
               onClick={() => setToolsOpen(!toolsOpen)}>
-              <Wrench size={12} /> Tools
+              <Wrench size={12} /> <span className="hidden xs:inline sm:inline">Tools</span>
               {activeTool && <span className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: '#4ADE80' }} />}
             </Button>
 
@@ -173,10 +169,8 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           </div>
 
           <div className="w-px h-4 bg-white/20 hidden sm:block" />
-
-
-          <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10 hidden sm:flex" onClick={() => setCoPilotOpen(!coPilotOpen)}>
-            <Bot size={12} /> AI
+          <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1 text-white/80 hover:text-white hover:bg-white/10" onClick={() => setCoPilotOpen(!coPilotOpen)}>
+            <Bot size={12} /> <span className="hidden sm:inline">AI</span>
           </Button>
           <PresenceBar sessionId={1} onInviteClick={() => setInviteOpen(true)} />
           <UserAvatar name={authUser?.displayName || sessionName} onSignOut={signOut} />

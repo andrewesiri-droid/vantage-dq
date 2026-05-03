@@ -72,7 +72,7 @@ export function PresenceBar({ sessionId, onInviteClick }: Props) {
       <button onClick={onInviteClick}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-colors hover:bg-white/10"
         style={{ color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.15)' }}>
-        <Users size={12} /> Invite
+        <Users size={12} /> <span className="hidden sm:inline">Invite</span>
       </button>
     );
   }
@@ -115,7 +115,7 @@ export function PresenceBar({ sessionId, onInviteClick }: Props) {
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-colors hover:bg-white/10"
         style={{ color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.2)' }}>
         <Users size={12} />
-        {onlineMembers.length === 0 ? 'Invite' : '+ Invite'}
+        <span className="hidden sm:inline">{onlineMembers.length === 0 ? 'Invite' : '+ Invite'}</span>
       </button>
 
       {/* Dropdown showing all members */}
