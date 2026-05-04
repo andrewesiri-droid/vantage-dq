@@ -203,3 +203,4 @@ export const TOOLS: { id: ToolId; label: string; description: string; color: str
   { id: 'deep-dive', label: 'AI Deep Dive', description: 'Full AI analysis across all 6 DQ dimensions', color: '#10B981', icon: 'Brain' },
   { id: 'export-advanced', label: 'Advanced Export', description: 'Export to PDF with full decision package formatting', color: '#F59E0B', icon: 'FileSpreadsheet' },
 ];
+// Mon May  4 18:17:51 CDT 2026
