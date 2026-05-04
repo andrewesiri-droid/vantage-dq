@@ -195,11 +195,11 @@ export const WORKSHOP_PHASES = [
 // ============================================
 // TOOLS — Top-bar dropdown
 // ============================================
-export type ToolId = 'game-theory' | 'workshop' | 'deep-dive' | 'export-advanced';
+export type ToolId = 'game-theory' | 'deep-dive' | 'export-advanced';
 
 export const TOOLS: { id: ToolId; label: string; description: string; color: string; icon: string }[] = [
   { id: 'game-theory', label: 'Strategic Gaming', description: 'Game theory — players, incentives, equilibria, reactions', color: '#7C3AED', icon: 'Swords' },
-  { id: 'workshop', label: 'Workshop Mode', description: 'Collaborative team workshop with real-time facilitation', color: '#0891B2', icon: 'Presentation' },
+
   { id: 'deep-dive', label: 'AI Deep Dive', description: 'Full AI analysis across all 6 DQ dimensions', color: '#10B981', icon: 'Brain' },
   { id: 'export-advanced', label: 'Advanced Export', description: 'Export to PDF with full decision package formatting', color: '#F59E0B', icon: 'FileSpreadsheet' },
 ];

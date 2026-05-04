@@ -116,7 +116,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
                         <span className="text-[11px] font-semibold" style={{ color: workshopOpen ? '#0D9488' : DS.ink }}>Workshop Mode</span>
                         {workshopOpen && <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white" style={{ background: '#0D9488' }}>ACTIVE</span>}
                       </div>
-                      <p className="text-[9px] mt-0.5" style={{ color: DS.inkTer }}>{workshopOpen ? 'Click to close workshop' : 'Structured facilitation for teams'}</p>
+                      <p className="text-[9px] mt-0.5" style={{ color: DS.inkTer }}>{workshopOpen ? 'Click to close workshop' : 'Facilitation · Projector · 🎙 Scribe'}</p>
                     </div>
                     {workshopOpen && <X size={13} className="shrink-0 mt-1" style={{ color: '#0D9488' }} />}
                   </button>
