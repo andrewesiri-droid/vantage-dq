@@ -90,7 +90,6 @@ function renderTool(toolId: ToolId, props: { sessionId?: number; data?: any; hoo
     case 'game-theory': return <GameTheoryModule {...props} />;
     case 'deep-dive': return <DeepDiveTool {...props} />;
     case 'export-advanced': return <AdvancedExportTool {...props} />;
-    case 'workshop': return <WorkshopInline {...props} />;
     default: return null;
   }
 }
