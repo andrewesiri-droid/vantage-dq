@@ -66,8 +66,8 @@ export function WorkshopCopilot({ phaseId, phaseLabel, phaseColor, sessionContex
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRecordingRef = useRef(false);
   const prevTranscriptRef = useRef('');
   const startTimeRef = useRef<number>(0);

@@ -160,6 +160,7 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
   const [showParticipants, setShowParticipants] = useState(false);
   const [phaseComplete, setPhaseComplete] = useState<Set<number>>(new Set());
   const [view, setView] = useState<'facilitator' | 'canvas'>('facilitator');
+  const [scribeOpen, setScribeOpen] = useState(false);
   const timerRef = useRef<any>(null);
 
   const phase = PHASES[phaseIdx];

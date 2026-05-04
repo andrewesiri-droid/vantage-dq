@@ -47,6 +47,8 @@ export interface CategorizedItem {
   editedText?: string;
   isDuplicate?: boolean;
   duplicateOf?: string;
+  addToBoard?: boolean;
+  source?: string;
   dqLabel?: string;
 }
 
