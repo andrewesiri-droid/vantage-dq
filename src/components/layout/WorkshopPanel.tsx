@@ -249,11 +249,20 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
             ))}
           </div>
 
-          {/* Projector button */}
-          <button onClick={() => { broadcastProjector({ phase, phaseIdx }); window.open(window.location.pathname.replace('/session/', '/projector/'), '_blank'); }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-colors hover:bg-white/10"
-            style={{ color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.15)' }}>
-            <Monitor size={12} /> Projector
+          {/* Projector + Scribe — icon only to save space */}
+          <button
+            onClick={() => { broadcastProjector({ phase, phaseIdx }); const slug = window.location.pathname.split('/session/')[1]; window.open(`/session/${slug}/projector`, '_blank'); }}
+            className="p-2 rounded-lg transition-colors hover:bg-white/10 shrink-0"
+            style={{ color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.15)' }}
+            title="Open Projector">
+            <Monitor size={14} />
+          </button>
+          <button
+            onClick={() => setScribeOpen(!scribeOpen)}
+            className="p-2 rounded-lg transition-colors hover:bg-white/10 shrink-0"
+            style={{ color: scribeOpen ? phase.color : 'rgba(255,255,255,0.6)', border: `1px solid ${scribeOpen ? phase.color : 'rgba(255,255,255,0.2)'}`, background: scribeOpen ? `${phase.color}20` : 'transparent' }}
+            title="AI Workshop Scribe">
+            <span style={{ fontSize: 14 }}>🎙</span>
           </button>
 
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
