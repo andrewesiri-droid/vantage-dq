@@ -62,7 +62,6 @@ export function WorkshopCopilot({ phaseId, phaseLabel, phaseColor, sessionContex
   const [wordCount, setWordCount] = useState(0);
   const [lastSummary, setLastSummary] = useState('');
   const [activeTab, setActiveTab] = useState<'live' | 'review'>('live');
-  const [hasConsented, setHasConsented] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
