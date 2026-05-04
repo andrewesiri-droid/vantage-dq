@@ -177,12 +177,11 @@ Return JSON:
 }
 
 function getExtension(mimeType) {
-  if (!mimeType) return 'webm';
+  if (!mimeType) return 'mp4'; // Safari default
   if (mimeType.includes('webm')) return 'webm';
-  if (mimeType.includes('mp4')) return 'mp4';
+  if (mimeType.includes('mp4') || mimeType.includes('m4a')) return 'mp4';
   if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3';
   if (mimeType.includes('wav')) return 'wav';
-  if (mimeType.includes('m4a')) return 'm4a';
   if (mimeType.includes('ogg')) return 'ogg';
-  return 'webm';
+  return 'mp4'; // Default to mp4 (Safari-safe)
 }

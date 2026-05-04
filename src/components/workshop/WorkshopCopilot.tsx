@@ -46,7 +46,8 @@ function getSpeakerColor(name: string): string {
 }
 
 export function WorkshopCopilot({ phaseId, phaseLabel, phaseColor, sessionContext, onDraftCreated, onClose }: Props) {
-  const [view, setView] = useState<CopilotView>('consent');
+  const [view, setView] = useState<CopilotView>('live');
+  const [hasConsented, setHasConsented] = useState(true);
   const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>('idle');
   const [transcript, setTranscript] = useState<{ text: string; timestamp: number; phase: string }[]>([]);
   const [items, setItems] = useState<CategorizedItem[]>([]);
@@ -142,7 +143,9 @@ export function WorkshopCopilot({ phaseId, phaseLabel, phaseColor, sessionContex
       });
       streamRef.current = stream;
       const mimeType = getSupportedMimeType();
-      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 64000 });
+      const recorderOptions: MediaRecorderOptions = { audioBitsPerSecond: 64000 };
+      if (mimeType) recorderOptions.mimeType = mimeType;
+      const recorder = new MediaRecorder(stream, recorderOptions);
       mediaRecorderRef.current = recorder;
       isRecordingRef.current = true;
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
@@ -150,7 +153,7 @@ export function WorkshopCopilot({ phaseId, phaseLabel, phaseColor, sessionContex
       intervalRef.current = setInterval(async () => {
         if (!isRecordingRef.current || chunksRef.current.length === 0) return;
         recorder.stop();
-        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType || 'audio/mp4' });
         chunksRef.current = [];
         if (recordingStatus !== 'off-record') await processChunk(blob);
         if (isRecordingRef.current) recorder.start();
@@ -638,9 +641,20 @@ function ItemCard({ item, onAccept, onReject, onEdit, accepted }: {
 
 // ── HELPERS ────────────────────────────────────────────────────────────────────
 function getSupportedMimeType(): string {
-  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-  for (const type of types) { if (MediaRecorder.isTypeSupported(type)) return type; }
-  return 'audio/webm';
+  // Safari supports mp4, Chrome/Firefox support webm
+  const types = [
+    'audio/mp4',                  // Safari
+    'audio/webm;codecs=opus',     // Chrome
+    'audio/webm',                 // Chrome fallback
+    'audio/ogg;codecs=opus',      // Firefox
+    'audio/ogg',                  // Firefox fallback
+  ];
+  for (const type of types) {
+    try {
+      if (MediaRecorder.isTypeSupported(type)) return type;
+    } catch { /**/ }
+  }
+  return ''; // Let browser pick default
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
