@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useWorkshopSync } from '@/hooks/useWorkshopSync';
+import { WorkshopCopilot } from '@/components/workshop/WorkshopCopilot';
 import { useDemoContext } from '@/App';
 import { DS } from '@/constants';
 import { useAI } from '@/hooks/useAI';
@@ -388,6 +389,22 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
                 </button>
               ))}
             </div>
+
+            {/* WORKSHOP SCRIBE */}
+            {scribeOpen && (
+              <div className="mb-3 h-[420px] rounded-2xl overflow-hidden border" style={{ borderColor: DS.borderLight }}>
+                <WorkshopCopilot
+                  phaseId={phase.id}
+                  phaseLabel={phase.label}
+                  phaseColor={phase.color}
+                  sessionContext={{ decisionStatement: data?.session?.decisionStatement, sessionName: data?.session?.name }}
+                  onDraftCreated={(item) => {
+                    sync.submitNote(`[${item.category}] ${item.text}`, phase.id, false);
+                  }}
+                  onClose={() => setScribeOpen(false)}
+                />
+              </div>
+            )}
 
             {/* Ideas canvas */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
