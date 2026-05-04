@@ -31,7 +31,9 @@ export default async function handler(req, res) {
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');
     formData.append('response_format', mode === 'upload' ? 'verbose_json' : 'json');
-    formData.append('timestamp_granularities[]', mode === 'upload' ? 'segment' : 'word');
+    if (mode === 'upload') {
+      formData.append('timestamp_granularities[]', 'segment');
+    }
     formData.append('prompt',
       `Decision Quality workshop. Phase: "${phaseLabel}". Decision: "${sessionContext?.decisionStatement || ''}". ` +
       `Speakers: ${speakerHint || 'multiple participants'}. Preserve technical terms and proper nouns.`
