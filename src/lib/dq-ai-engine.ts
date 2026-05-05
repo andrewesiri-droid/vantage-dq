@@ -247,7 +247,9 @@ export function validateBeforeAI(
 
   // Always allow AI to proceed
   return { canProceed: true, warnings, blockers: [] };
-}port function validateBeforeAI(
+}
+
+export function validateBeforeAI(
   module: string, 
   sessionData: Record<string, any>
 ): { canProceed: boolean; warnings: string[]; blockers: string[] } {
