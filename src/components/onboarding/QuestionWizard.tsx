@@ -122,8 +122,8 @@ export function QuestionWizard({ onBack }: QuestionWizardProps) {
       name: name.trim(),
       decisionStatement: answers.decisionStatement.trim(),
       context: answers.context || undefined,
-      options: answers.options ? answers.options || "" : undefined,
-      stakeholders: answers.stakeholders ? answers.stakeholders || "" : undefined,
+      options: answers.options || '',
+      stakeholders: answers.stakeholders || '',
       constraints: answers.constraints || undefined,
     });
   };
@@ -154,8 +154,8 @@ export function QuestionWizard({ onBack }: QuestionWizardProps) {
                 {[
                   { label: 'Decision Statement', value: answers.decisionStatement },
                   { label: 'Session Name', value: name },
-                  { label: 'Strategic Paths', value: answers.options ? answers.options || "".join(', ') : '—' },
-                  { label: 'Stakeholders', value: answers.stakeholders ? answers.stakeholders || "".join(', ') : '—' },
+                  { label: 'Strategic Paths', value: answers.options || '—' },
+                  { label: 'Stakeholders', value: answers.stakeholders || '—' },
                   { label: 'Constraints', value: answers.constraints || '—' },
                 ].map(item => (
                   <div key={item.label} className="p-2 rounded" style={{ background: DS.canvas }}>
