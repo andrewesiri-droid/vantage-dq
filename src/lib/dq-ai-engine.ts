@@ -235,6 +235,19 @@ export interface AIFlag {
 // ── DQ ELEMENT VALIDATORS ──────────────────────────────────────────────────────
 // These run BEFORE sending to AI — catch structural DQ problems
 export function validateBeforeAI(
+  module: string,
+  sessionData: any,
+): { canProceed: boolean; warnings: string[]; blockers: string[] } {
+  // AI always runs — we just surface warnings if data is sparse
+  const warnings: string[] = [];
+  
+  if (!sessionData?.decisionStatement) {
+    warnings.push('No decision statement yet — add one in Problem Frame for better AI analysis.');
+  }
+
+  // Always allow AI to proceed
+  return { canProceed: true, warnings, blockers: [] };
+}port function validateBeforeAI(
   module: string, 
   sessionData: Record<string, any>
 ): { canProceed: boolean; warnings: string[]; blockers: string[] } {
@@ -252,12 +265,12 @@ export function validateBeforeAI(
   // Module-specific checks
   switch (module) {
     case 'strategy-table':
-      if (strategies.length === 0) blockers.push('No strategies exist — AI needs at least 1 strategy to analyse.');
+      if (strategies.length === 0) warnings.push('No strategies yet — AI will suggest initial alternatives.');
       if (strategies.length === 1) warnings.push('Only 1 strategy — DQ requires at least 3 genuinely distinct alternatives.');
       break;
 
     case 'qualitative-assessment':
-      if (strategies.length < 2) blockers.push('Need at least 2 strategies to compare.');
+      if (strategies.length < 2) warnings.push('Only 1 strategy — AI will suggest additional alternatives to consider.');
       if ((sessionData?.criteria || []).length < 3) warnings.push('Fewer than 3 criteria — assessment may not capture full value picture.');
       break;
 
@@ -273,7 +286,7 @@ export function validateBeforeAI(
     case 'export-report':
       const dqVals = Object.values(dqScores) as number[];
       const dqAvg = dqVals.length ? dqVals.reduce((a, b) => a + b, 0) / dqVals.length : 0;
-      if (dqAvg < 40) blockers.push(`DQ average score is ${Math.round(dqAvg)}/100 — commitment is premature. The report would misrepresent decision quality.`);
+      if (dqAvg < 40) warnings.push(`DQ average score is ${Math.round(dqAvg)}/100 — consider strengthening decision quality before committing.`);
       const weakEls = Object.entries(dqScores).filter(([, v]) => (v as number) < 40);
       if (weakEls.length > 0) warnings.push(`Critical DQ weaknesses: ${weakEls.map(([k]) => k).join(', ')} all below 40. Report must flag these prominently.`);
       break;

@@ -39,7 +39,8 @@ const AUDIT_LOG_KEY = 'vantage_dq_ai_audit';
 
 function getSessionData(): Record<string, any> {
   try {
-    return JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
+    const stored = localStorage.getItem('vantage_dq_demo_sessions');
+    return stored ? JSON.parse(stored) : {};
   } catch { return {}; }
 }
 
@@ -75,22 +76,12 @@ export function useAI(defaultModule?: string) {
     const dqElement = opts.dqElement || 'General';
     const sessionData = opts.sessionData || getSessionData();
 
-    // ── LAYER 1: PRE-FLIGHT VALIDATION ────────────────────────────────────────
+    // ── LAYER 1: PRE-FLIGHT VALIDATION (warnings only — never blocks) ─────────
     if (!opts.skipValidation) {
       const preflight = validateBeforeAI(module, sessionData);
       setPreflightWarnings(preflight.warnings);
-      setPreflightBlockers(preflight.blockers);
-
-      if (!preflight.canProceed) {
-        setBusy(false);
-        callback({
-          error: preflight.blockers[0],
-          blockers: preflight.blockers,
-          warnings: preflight.warnings,
-          _blocked: true,
-        });
-        return;
-      }
+      setPreflightBlockers([]);
+      // Never block — modules pass their own content in the prompt
     }
 
     // ── LAYER 2: CROSS-MODULE CONTRADICTION CHECK ──────────────────────────────
