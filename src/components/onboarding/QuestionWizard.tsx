@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { trpc } from '@/providers/trpc';
 import { initializeEmptySession } from '@/lib/demoData';
 import { DS } from '@/constants';
 import { Button } from '@/components/ui/button';
@@ -85,10 +84,21 @@ export function QuestionWizard({ onBack }: QuestionWizardProps) {
   const [creating, setCreating] = useState(false);
   const [result, setResult] = useState<{ id: number; slug: string } | null>(null);
 
-  const wizardMutation = trpc.aiDeepDive.wizard.useMutation({
-    onSuccess: (data) => { setResult(data); setCreating(false); },
-    onError: () => { setCreating(false); },
-  });
+  cons  const submitWizard = async (answers: Record<string, string>) => {
+    const slug = initializeEmptySession(answers.decision?.slice(0, 50) || 'Decision Session');
+    try {
+      const stored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
+      if (stored.sessions?.[0]) {
+        stored.sessions[0].decisionStatement = answers.decision || '';
+        stored.sessions[0].context = answers.context || '';
+        stored.sessions[0].constraints = answers.constraints || '';
+        stored.sessions[0].successCriteria = answers.success || '';
+        localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify(stored));
+      }
+    } catch { /**/ }
+    setResult({ id: 1, slug });
+    setSubmitting(false);
+  };
 
   const q = QUESTIONS[step];
   const isLast = step === QUESTIONS.length - 1;
@@ -108,7 +118,7 @@ export function QuestionWizard({ onBack }: QuestionWizardProps) {
   const handleCreate = () => {
     if (!name.trim() || !answers.decisionStatement?.trim()) return;
     setCreating(true);
-    wizardMutation.mutate({
+    submitWizard({
       name: name.trim(),
       decisionStatement: answers.decisionStatement.trim(),
       context: answers.context || undefined,

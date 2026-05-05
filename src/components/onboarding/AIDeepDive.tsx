@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { trpc } from '@/providers/trpc';
 import { initializeEmptySession } from '@/lib/demoData';
 import { DS } from '@/constants';
 import { Button } from '@/components/ui/button';
@@ -24,16 +23,59 @@ export function AIDeepDive({ onBack }: AIDeepDiveProps) {
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const analyzeMutation = trpc.aiDeepDive.analyze.useMutation({
-    onSuccess: (data) => {
-      setResult(data);
+  cons  const runAnalysis = async (sessionName: string, docContent: string) => {
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: \`You are a Decision Quality analyst. Extract a structured decision frame from this document.
+
+DOCUMENT:
+\${docContent.slice(0, 8000)}
+
+Extract:
+1. A clear decision statement (the key decision to be made)
+2. Context (situation, background, why this matters)
+3. Key constraints (hard limits)
+4. Success criteria
+5. A good session name (short, descriptive)
+
+Return JSON only:
+{
+  "name": "session name",
+  "decisionStatement": "Which option should we choose given...",
+  "context": "background context",
+  "constraints": "key constraints",
+  "successCriteria": "what good looks like"
+}\`,
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+        }),
+      });
+      const data = await res.json();
+      const text = data.result || data.content?.[0]?.text || '';
+      const match = text.match(/\{[\s\S]*\}/);
+      const parsed = match ? JSON.parse(match[0]) : {};
+      
+      const slug = initializeEmptySession(parsed.name || sessionName);
+      try {
+        const stored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
+        if (stored.sessions?.[0]) {
+          if (parsed.decisionStatement) stored.sessions[0].decisionStatement = parsed.decisionStatement;
+          if (parsed.context) stored.sessions[0].context = parsed.context;
+          if (parsed.constraints) stored.sessions[0].constraints = parsed.constraints;
+          if (parsed.successCriteria) stored.sessions[0].successCriteria = parsed.successCriteria;
+          localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify(stored));
+        }
+      } catch { /**/ }
+      setResult({ slug });
       setStep('results');
-    },
-    onError: (err) => {
-      setError(err.message);
+    } catch (err: any) {
+      setError('Analysis failed — please try again');
       setStep('input');
-    },
-  });
+    }
+  };
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,13 +98,11 @@ export function AIDeepDive({ onBack }: AIDeepDiveProps) {
     if (!name.trim() || !content.trim()) return;
     setError('');
     setStep('analysing');
-    analyzeMutation.mutate({ name: name.trim(), content: content.trim() });
+    runAnalysis(name.trim(), content.trim());
   };
 
   const handleGoToSession = () => {
-    if (result?.slug) {
-      navigate(`/session/${result.slug}`);
-    }
+    if (result?.slug) navigate(`/session/${result.slug}`);
   };
 
   return (

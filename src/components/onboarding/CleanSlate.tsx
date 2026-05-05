@@ -81,4 +81,3 @@ export function CleanSlate({ onBack }: CleanSlateProps) {
     </div>
   );
 }
-
