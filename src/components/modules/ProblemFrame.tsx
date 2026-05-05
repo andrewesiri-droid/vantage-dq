@@ -87,7 +87,7 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
   // DQ checks
   const checks = [
     { label: 'Genuine open question', pass: fd.decisionStatement.length > 20 && fd.decisionStatement.includes('?') },
-    { label: 'Scope explicitly bounded', pass: !!(fd.scopeIn?.trim() && fd.scopeOut?.trim()) },
+    { label: 'Scope explicitly bounded', pass: !!(Array.isArray(fd.scopeIn) ? fd.scopeIn.length > 0 : fd.scopeIn?.trim()) && !!(Array.isArray(fd.scopeOut) ? fd.scopeOut.length > 0 : fd.scopeOut?.trim()) },
     { label: 'Decision owner named', pass: !!fd.owner?.trim() },
     { label: 'Deadline or timeframe set', pass: !!fd.deadline?.trim() },
   ];
