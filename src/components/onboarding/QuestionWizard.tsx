@@ -84,7 +84,7 @@ export function QuestionWizard({ onBack }: QuestionWizardProps) {
   const [creating, setCreating] = useState(false);
   const [result, setResult] = useState<{ id: number; slug: string } | null>(null);
 
-  cons  const submitWizard = async (answers: Record<string, string>) => {
+  const submitWizard = async (answers: Record<string, string>) => {
     const slug = initializeEmptySession(answers.decision?.slice(0, 50) || 'Decision Session');
     try {
       const stored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');

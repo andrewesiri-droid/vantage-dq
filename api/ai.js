@@ -74,10 +74,10 @@ export default async function handler(req, res) {
         console.log(`[AI] Gemini responded (${text.length} chars)`);
       } catch (geminiErr) {
         console.warn('[AI] Gemini failed, falling back to Claude:', geminiErr.message);
-        text = await callClaude(prompt);
+        text = await callClaude(prompt, task_type);
       }
     } else {
-      text = await callClaude(prompt);
+      text = await callClaude(prompt, task_type);
     }
 
     return res.status(200).json({
@@ -92,15 +92,22 @@ export default async function handler(req, res) {
   }
 }
 
-async function callClaude(prompt) {
+async function callClaude(prompt, taskType = '') {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // Use Haiku for most tasks (fast, fits in Vercel timeout)
+  // Use Sonnet only for deep analysis
+  const deepTasks = ['deep-analysis', 'export-report', 'full-scorecard'];
+  const model = deepTasks.includes(taskType) 
+    ? 'claude-sonnet-4-20250514' 
+    : 'claude-haiku-4-5-20251001';
+  
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
+    model,
+    max_tokens: 2000,
     system: DQ_SYSTEM,
     messages: [{ role: 'user', content: prompt }],
   });
   const text = response.content[0]?.text || '';
-  console.log(`[AI] Claude responded (${text.length} chars)`);
+  console.log(`[AI] ${model} responded (${text.length} chars)`);
   return text;
 }
