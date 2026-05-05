@@ -249,61 +249,6 @@ export function validateBeforeAI(
   return { canProceed: true, warnings, blockers: [] };
 }
 
-port function validateBeforeAI(
-  module: string, 
-  sessionData: Record<string, any>
-): { canProceed: boolean; warnings: string[]; blockers: string[] } {
-  const warnings: string[] = [];
-  const blockers: string[] = [];
-  const session = sessionData?.session || {};
-  const strategies = sessionData?.strategies || [];
-  const dqScores = session.dqScores || {};
-
-  // Universal checks
-  if (!session.decisionStatement) {
-    blockers.push('No decision statement — AI cannot generate meaningful analysis without a focal decision.');
-  }
-
-  // Module-specific checks
-  switch (module) {
-    case 'strategy-table':
-      if (strategies.length === 0) warnings.push('No strategies yet — AI will suggest initial alternatives.');
-      if (strategies.length === 1) warnings.push('Only 1 strategy — DQ requires at least 3 genuinely distinct alternatives.');
-      break;
-
-    case 'qualitative-assessment':
-      if (strategies.length < 2) warnings.push('Only 1 strategy — AI will suggest additional alternatives to consider.');
-      if ((sessionData?.criteria || []).length < 3) warnings.push('Fewer than 3 criteria — assessment may not capture full value picture.');
-      break;
-
-    case 'dq-scorecard':
-      const scored = Object.values(dqScores).filter(v => (v as number) > 0).length;
-      if (scored < 3) warnings.push('Only ' + scored + '/6 elements scored — AI auto-populate will be speculative.');
-      break;
-
-    case 'scenario-planning':
-      if ((sessionData?.uncertainties || []).length < 2) warnings.push('Fewer than 2 uncertainties — scenario matrix will be weak.');
-      break;
-
-    case 'export-report':
-      const dqVals = Object.values(dqScores) as number[];
-      const dqAvg = dqVals.length ? dqVals.reduce((a, b) => a + b, 0) / dqVals.length : 0;
-      if (dqAvg < 40) warnings.push(`DQ average score is ${Math.round(dqAvg)}/100 — consider strengthening decision quality before committing.`);
-      const weakEls = Object.entries(dqScores).filter(([, v]) => (v as number) < 40);
-      if (weakEls.length > 0) warnings.push(`Critical DQ weaknesses: ${weakEls.map(([k]) => k).join(', ')} all below 40. Report must flag these prominently.`);
-      break;
-
-    case 'stakeholder-alignment':
-      if (!session.context) warnings.push('No context — stakeholder identification will be generic, not decision-specific.');
-      break;
-
-    case 'voi':
-      if (strategies.length < 2) warnings.push('VOI is most meaningful when comparing multiple strategies — results may be limited.');
-      break;
-  }
-
-  return { canProceed: blockers.length === 0, warnings, blockers };
-}
 
 // ── ENHANCED PROMPT BUILDER ────────────────────────────────────────────────────
 // Wraps every AI prompt with DQ Constitution + grounding + confidence requirements
