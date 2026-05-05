@@ -79,10 +79,8 @@ export function SessionPage() {
   const handleModuleChange = (id: ModuleId) => { setActiveModule(id); setActiveTool(null); };
   const handleToolChange = (id: ToolId | null) => setActiveTool(id);
 
-  if (demoMode || isDemoMode()) {
-    return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
-  }
-  return <BackendSessionPage slug={slug || ''} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
+  // All sessions are localStorage-based (no backend DB)
+  return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
 }
 
 function renderTool(toolId: ToolId, props: { sessionId?: number; data?: any; hooks?: any }) {
@@ -110,7 +108,7 @@ function DemoSessionPage({ slug, activeModule, setActiveModule, activeTool, setA
   const moduleProps = { sessionId: data.session!.id, data, hooks };
 
   return (
-    <AppShell sessionName={data.session?.name || 'Demo Session'} sessionId={data.session!.id}
+    <AppShell sessionName={data.session?.name || 'Decision Session'} sessionId={data.session!.id}
       activeModule={activeModule} onModuleChange={setActiveModule}
       activeTool={activeTool} onToolChange={setActiveTool}
       isSyncing={false} data={data}>

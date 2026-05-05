@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { trpc } from '@/providers/trpc';
+import { initializeEmptySession } from '@/lib/demoData';
 import { DS } from '@/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +40,7 @@ const QUESTIONS = [
     placeholder: 'e.g., Build in-house, Partner with existing player, Acquire a competitor, Phased rollout',
     type: 'multi' as const,
     why: 'The biggest DQ failure is comparing variations of the same strategy. True alternatives must differ on at least 2–3 key decisions.',
-    example: 'Full direct build in Singapore; Asset-light partnership model; Aggressive M&A of regional competitor; Wait-and-monitor (defer entry)',
+    example: 'Build in-house team; Partner with an existing player; Acquire a competitor; Defer and monitor',
   },
   {
     id: 3,
@@ -50,7 +51,7 @@ const QUESTIONS = [
     placeholder: 'e.g., CEO, CFO, Board, Legal, Operations Lead',
     type: 'multi' as const,
     why: 'Decisions fail not because of bad analysis but because key stakeholders were not aligned. Map them before you decide, not after.',
-    example: 'CEO (sponsor), CFO (capital gatekeeper), CSO (strategy owner), CTO (technology risk), Board (approval authority), APAC Regional GM (execution owner)',
+    example: 'CEO (sponsor), CFO (capital gatekeeper), Board (approval authority), Legal (risk), Ops Lead (execution)',
   },
   {
     id: 4,
@@ -61,7 +62,7 @@ const QUESTIONS = [
     placeholder: 'e.g., Hard: budget ceiling, timeline mandate. Soft: preserve flexibility, minimise disruption.',
     type: 'textarea' as const,
     why: 'The most expensive DQ mistake is re-debating constraints mid-process. Separate hard (governed) from soft (preferences) upfront.',
-    example: 'HARD: $25M capital ceiling (Board resolution), 12-month first revenue target, Japan data centre requirement. SOFT: Preserve option to pivot, maintain <20% headcount in region, avoid exclusive partnerships.',
+    example: 'HARD: budget ceiling, timeline mandate, compliance requirements. SOFT: preserve flexibility, minimise disruption, avoid lock-in.',
   },
   {
     id: 5,
@@ -72,7 +73,7 @@ const QUESTIONS = [
     placeholder: 'e.g., Competitive pressure forcing a decision. If we delay, we lose our window.',
     type: 'textarea' as const,
     why: 'Without a trigger, decisions drift. Without understanding the cost of delay, urgency is manufactured. Both create the emotional context for commitment.',
-    example: 'Competitor X announced APAC expansion in January. Board mandated counter-movement by Q3. Estimated market window: 18 months. If we miss it, 3-year revenue gap of $40M.',
+    example: 'A key competitor moved first. Board mandated a response. If we delay, we lose our window and face a significant revenue gap.',
   },
 ];
 
@@ -203,7 +204,7 @@ export function QuestionWizard({ onBack }: QuestionWizardProps) {
         {step === 0 && (
           <div className="mb-6">
             <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DS.inkTer }}>Session Name</label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., APAC Market Entry Decision Q3 2026" className="text-sm" />
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Product Expansion Decision 2026" className="text-sm" />
             <p className="text-[10px] mt-1" style={{ color: DS.inkDis }}>This will be the title of your decision session.</p>
           </div>
         )}
