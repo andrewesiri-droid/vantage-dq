@@ -109,20 +109,20 @@ export function WorkshopCopilot({ phaseId, phaseLabel, phaseColor, sessionContex
       setTranscript(p => [...p, { text: data.transcript, timestamp: Date.now(), phase: phaseId }]);
       prevTranscriptRef.current += ' ' + data.transcript;
       setWordCount(p => p + (data.wordCount || 0));
-      if (data.summary) setLastSummary(data.summary);
+      if (data.summary) setLastSummary(typeof data.summary === 'string' ? data.summary : '');
 
       // Add items
       if (data.items?.length) {
-        const newItems = data.items.map((item: CategorizedItem) => ({ ...item, status: 'pending' as const }));
+        const newItems = data.items.map((item: any) => ({ ...item, text: String(item.text || ''), speakerName: String(item.speakerName || 'Speaker'), status: 'pending' as const }));
         setItems(p => [...p, ...newItems]);
         newItems.forEach((item: CategorizedItem) => {
           if (item.confidence >= 75 && item.addToBoard) onDraftCreated?.(item);
         });
       }
 
-      if (data.tensions?.length) setTensions(p => [...p, ...data.tensions]);
+      if (data.tensions?.length) setTensions(p => [...p, ...data.tensions.map((t: any) => typeof t === 'string' ? t : JSON.stringify(t))]);
       if (data.commitmentDetected) setCommitmentDetected(true);
-      if (data.phaseSignal) setPhaseSignal(data.phaseSignal);
+      if (data.phaseSignal) setPhaseSignal(typeof data.phaseSignal === 'string' ? data.phaseSignal : JSON.stringify(data.phaseSignal));
 
     } catch (err: any) {
       setError('Transcription error — retrying next chunk');
@@ -225,7 +225,7 @@ export function WorkshopCopilot({ phaseId, phaseLabel, phaseColor, sessionContex
       }
       if (data.items?.length) setItems(data.items.map((item: CategorizedItem) => ({ ...item, status: 'pending' as const })));
       if (data.tensions?.length) setTensions(data.tensions);
-      if (data.summary) setLastSummary(data.summary);
+      if (data.summary) setLastSummary(typeof data.summary === 'string' ? data.summary : '');
 
       setTimeout(() => { setUploadProgress(null); setView('review'); }, 800);
     } catch (err: any) {
