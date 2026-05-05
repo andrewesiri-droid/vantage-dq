@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { trpc } from '@/providers/trpc';
 import { DS } from '@/constants';
+import { enableDemoMode } from '@/lib/demoData';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,77 +13,35 @@ import {
 interface PreloadedExampleProps { onBack: () => void; }
 
 const MODULES_INCLUDED = [
-  { icon: Globe, label: 'Problem Frame', desc: 'Full APAC market entry context with Frame Check' },
-  { icon: AlertTriangle, label: 'Issue Generation', desc: '10 issues across all 12 categories with voting' },
-  { icon: GitBranch, label: 'Decision Hierarchy', desc: '9 decisions: 2 given, 5 focus, 3 deferred' },
-  { icon: Table2, label: 'Strategy Table', desc: '3 strategies (Alpha, Beta, Gamma) with distinctiveness check' },
-  { icon: BarChart3, label: 'Qualitative Assessment', desc: '8 criteria scored across 3 strategies' },
-  { icon: Users, label: 'Stakeholder Alignment', desc: '8 stakeholders mapped on influence/interest grid' },
-  { icon: Clock, label: 'Decision Risk Timeline', desc: '6 risks with likelihood, impact, and mitigation' },
+  { icon: Globe,         label: 'Problem Frame',          desc: 'Full APAC market entry context with Frame Check' },
+  { icon: AlertTriangle, label: 'Issue Generation',        desc: '10 issues across all 12 categories with voting' },
+  { icon: GitBranch,     label: 'Decision Hierarchy',      desc: '9 decisions: 2 given, 5 focus, 3 deferred' },
+  { icon: Table2,        label: 'Strategy Table',          desc: '3 strategies with distinctiveness check' },
+  { icon: BarChart3,     label: 'Qualitative Assessment',  desc: '8 criteria scored across 3 strategies' },
+  { icon: Users,         label: 'Stakeholder Alignment',   desc: '8 stakeholders mapped on influence/interest grid' },
+  { icon: Clock,         label: 'Decision Risk Timeline',  desc: '6 risks with likelihood, impact, and mitigation' },
 ];
 
 export function PreloadedExample({ onBack }: PreloadedExampleProps) {
   const navigate = useNavigate();
-  const [creating, setCreating] = useState(false);
-  const [result, setResult] = useState<{ id: number; slug: string } | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const createSession = trpc.session.create.useMutation({
-    onSuccess: async (data) => {
-      // Now we need to populate the session with demo data
-      // We'll use the module-data mutations to add all demo content
-      setResult(data);
-      setCreating(false);
-    },
-    onError: () => {
-      setCreating(false);
-    },
-  });
-
-  const handleCreate = () => {
-    setCreating(true);
-    createSession.mutate({
-      name: 'APAC Market Entry Strategy (Example)',
-      decisionStatement: 'Which market entry strategy maximises our risk-adjusted NPV for APAC expansion within a $25M Year 1 capital constraint?',
-      context: 'US-based B2B SaaS company, $180M ARR, zero APAC presence. Competitors are already in Singapore and Tokyo. Board has set a $25M Year 1 capital ceiling. Target: first paying customer within 12 months.',
-    });
+  const handleLoad = () => {
+    setLoading(true);
+    // Enable demo mode — loads full APAC data into localStorage
+    enableDemoMode();
+    setTimeout(() => {
+      navigate('/session/demo-apac-entry');
+    }, 800);
   };
 
-  const handleGoToSession = () => {
-    if (result?.slug) navigate(`/session/${result.slug}`);
-  };
-
-  if (creating) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: DS.bg }}>
         <div className="text-center">
           <Loader2 size={32} className="animate-spin mx-auto mb-3" style={{ color: '#C9A84C' }} />
           <h3 className="text-lg font-bold" style={{ color: DS.ink }}>Loading example session...</h3>
           <p className="text-xs" style={{ color: DS.inkSub }}>Populating all modules with APAC market entry data.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (result) {
-    return (
-      <div className="min-h-screen" style={{ background: DS.bg }}>
-        <div className="flex items-center px-6 py-4 border-b" style={{ background: DS.brand }}>
-          <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-            <ChevronLeft size={16} className="text-white/70" />
-          </button>
-          <span className="text-sm font-bold text-white ml-3">Pre-loaded Example</span>
-        </div>
-        <div className="max-w-lg mx-auto px-6 py-12 text-center">
-          <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: '#ECFDF5' }}>
-            <CheckCircle size={24} style={{ color: '#059669' }} />
-          </div>
-          <h3 className="text-lg font-bold mb-1" style={{ color: DS.ink }}>Example Session Ready</h3>
-          <p className="text-xs mb-6" style={{ color: DS.inkSub }}>
-            The APAC Market Entry case study is loaded with realistic data across all modules.
-          </p>
-          <Button size="sm" className="text-xs gap-2" style={{ background: '#059669' }} onClick={handleGoToSession}>
-            <CheckCircle size={14} /> Explore Example Session
-          </Button>
         </div>
       </div>
     );
@@ -153,12 +111,7 @@ export function PreloadedExample({ onBack }: PreloadedExampleProps) {
           <Button variant="outline" size="sm" onClick={onBack} className="text-xs gap-1">
             <ChevronLeft size={14} /> Back
           </Button>
-          <Button
-            size="sm"
-            className="text-xs gap-2"
-            style={{ background: '#C9A84C' }}
-            onClick={handleCreate}
-          >
+          <Button size="sm" className="text-xs gap-2" style={{ background: '#C9A84C' }} onClick={handleLoad}>
             <Sparkles size={14} /> Load Example Session
           </Button>
         </div>
