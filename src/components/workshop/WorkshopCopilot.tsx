@@ -151,14 +151,14 @@ export function WorkshopCopilot({ phaseId, phaseLabel, phaseColor, sessionContex
 
       intervalRef.current = setInterval(async () => {
         if (!isRecordingRef.current || chunksRef.current.length === 0) return;
-        recorder.stop();
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType || 'audio/mp4' });
+        // Collect chunks without stopping/restarting (more reliable on Safari)
+        const chunks = [...chunksRef.current];
         chunksRef.current = [];
-        if (recordingStatus !== 'off-record') await processChunk(blob);
-        if (isRecordingRef.current) recorder.start();
+        const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/mp4' });
+        if (blob.size > 1000) await processChunk(blob);
       }, 10000);
 
-      recorder.start();
+      recorder.start(1000); // 1s timeslice — required for Safari to fire ondataavailable
       setRecordingStatus('recording');
       setView('live');
     } catch (err: any) {
