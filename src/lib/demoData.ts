@@ -204,6 +204,7 @@ export function initializeDemoData(): void {
 export function initializeEmptySession(name: string = 'New Decision Session', owner: string = ''): void {
   // Always wipe storage so no demo data bleeds in
   localStorage.removeItem('vantage_dq_demo_sessions');
+  localStorage.removeItem('vantage_dq_demo_mode'); // Clear demo mode flag
   const emptySession = {
     id: 1,
     slug: 'demo-apac-entry',

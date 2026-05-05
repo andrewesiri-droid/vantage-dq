@@ -100,7 +100,7 @@ export function AIDeepDive({ onBack }: AIDeepDiveProps) {
               <Input
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="e.g., APAC Market Entry Q3 2026"
+                placeholder="e.g., Product Launch Strategy 2026"
                 className="text-sm"
               />
             </div>

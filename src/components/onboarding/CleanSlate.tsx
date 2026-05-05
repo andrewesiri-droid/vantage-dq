@@ -78,7 +78,7 @@ export function CleanSlate({ onBack }: CleanSlateProps) {
               <Input
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="e.g., APAC Market Entry Strategy"
+                placeholder="e.g., Product Expansion Strategy 2026"
                 className="text-sm"
               />
             </div>
@@ -90,7 +90,7 @@ export function CleanSlate({ onBack }: CleanSlateProps) {
               <Textarea
                 value={decisionStatement}
                 onChange={e => setDecisionStatement(e.target.value)}
-                placeholder="e.g., Which market entry strategy maximises our risk-adjusted NPV for APAC expansion within a $25M Year 1 capital constraint?"
+                placeholder="e.g., Which option best balances growth and risk given our constraints?"
                 className="text-sm min-h-[80px]"
               />
             </div>
