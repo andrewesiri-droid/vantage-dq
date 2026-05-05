@@ -1,7 +1,10 @@
 /**
  * /api/transcribe.js — Workshop Copilot Transcription
- * Uses node-fetch compatible FormData for Vercel serverless
+ * Uses Node.js fs + native fetch with proper multipart form
  */
+import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 export const config = { api: { bodyParser: { sizeLimit: '25mb' } } };
 
@@ -12,44 +15,36 @@ export default async function handler(req, res) {
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
   if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
-  const { audio, mimeType, mode = 'realtime', phaseId, phaseLabel, sessionContext, previousTranscript } = req.body;
+  const { audio, mimeType, phaseId, phaseLabel, sessionContext, previousTranscript } = req.body;
   if (!audio) return res.status(400).json({ error: 'No audio data' });
 
+  const tmpPath = join(tmpdir(), `audio_${Date.now()}.mp4`);
+
   try {
-    // Build multipart form manually — more reliable in Vercel serverless
+    // Write audio to temp file
     const audioBuffer = Buffer.from(audio, 'base64');
-    const ext = getExtension(mimeType);
-    const filename = `audio.${ext}`;
-    const boundary = `----FormBoundary${Date.now()}`;
+    writeFileSync(tmpPath, audioBuffer);
 
-    // Build the multipart body manually
-    const parts = [
-      `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1`,
-      `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nen`,
-      `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson`,
-      `--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${`Decision Quality workshop. Phase: ${phaseLabel}. Decision: ${sessionContext?.decisionStatement || ''}.`}`,
-    ];
+    // Read file back as a Blob using the File constructor
+    const { Blob } = await import('buffer');
+    const fileBlob = new Blob([audioBuffer], { type: mimeType || 'audio/mp4' });
 
-    const preamble = parts.join('\r\n') + '\r\n';
-    const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mimeType || 'audio/mp4'}\r\n\r\n`;
-    const epilogue = `\r\n--${boundary}--\r\n`;
-
-    const body = Buffer.concat([
-      Buffer.from(preamble),
-      Buffer.from(filePart),
-      audioBuffer,
-      Buffer.from(epilogue),
-    ]);
+    // Use FormData from undici (available in Node 18+ / Vercel)
+    const formData = new FormData();
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'en');
+    formData.append('response_format', 'json');
+    formData.append('prompt', `Decision Quality workshop phase: ${phaseLabel}. Decision: ${sessionContext?.decisionStatement || ''}.`);
+    formData.append('file', fileBlob, `audio.mp4`);
 
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': body.length.toString(),
-      },
-      body,
+      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+      body: formData,
     });
+
+    // Cleanup temp file
+    if (existsSync(tmpPath)) unlinkSync(tmpPath);
 
     if (!whisperRes.ok) {
       const err = await whisperRes.json().catch(() => ({}));
@@ -64,72 +59,70 @@ export default async function handler(req, res) {
       return res.status(200).json({ transcript: '', items: [], silent: true });
     }
 
-    // DQ extraction with Claude (only if API key available)
+    // DQ extraction
     let items = [], tensions = [], summary = '', commitmentDetected = false;
 
-    if (ANTHROPIC_API_KEY && transcript.length > 10) {
-      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 800,
-          messages: [{
-            role: 'user',
-            content: `You are a Decision Quality workshop facilitator. Extract insights from this transcript.
+    if (ANTHROPIC_API_KEY) {
+      try {
+        const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 800,
+            messages: [{
+              role: 'user',
+              content: `Extract Decision Quality insights from this workshop transcript.
 
-Phase: ${phaseLabel} (${phaseId})
-Decision: ${sessionContext?.decisionStatement || 'Unknown'}
+Phase: ${phaseLabel} | Decision: ${sessionContext?.decisionStatement || 'Unknown'}
 Transcript: "${transcript}"
 
-Extract meaningful contributions only. For each:
-- category: ISSUE | ASSUMPTION | ALTERNATIVE | CONSTRAINT | QUESTION | EVIDENCE | OPINION
-- text: clean concise version
-- speakerName: "Speaker" (unknown)
-- targetModule: issue-generation | problem-frame | strategy-table | qualitative-assessment
-- confidence: 0-100
-- addToBoard: true/false
+Return JSON only - no other text:
+{
+  "items": [{"category":"ISSUE|ASSUMPTION|ALTERNATIVE|CONSTRAINT|QUESTION|EVIDENCE","text":"concise statement","speakerName":"Speaker","targetModule":"issue-generation|problem-frame|strategy-table","confidence":80,"addToBoard":true}],
+  "tensions": ["string description only"],
+  "commitmentDetected": false,
+  "summary": "one sentence"
+}`
+            }],
+          }),
+        });
 
-Skip filler, greetings, very short phrases.
-
-Return JSON: {"items":[{"category":"ISSUE","text":"...","speakerName":"Speaker","targetModule":"issue-generation","confidence":85,"addToBoard":true}],"tensions":[],"commitmentDetected":false,"summary":"1 sentence"}`
-          }],
-        }),
-      });
-
-      if (claudeRes.ok) {
-        const claudeData = await claudeRes.json();
-        const text = claudeData.content?.[0]?.text || '';
-        try {
+        if (claudeRes.ok) {
+          const claudeData = await claudeRes.json();
+          const text = claudeData.content?.[0]?.text || '';
           const match = text.match(/\{[\s\S]*\}/);
           if (match) {
             const parsed = JSON.parse(match[0]);
-            items = parsed.items || [];
-            tensions = parsed.tensions || [];
-            summary = parsed.summary || '';
-            commitmentDetected = parsed.commitmentDetected || false;
+            items = (parsed.items || []).map((item, i) => ({
+              ...item,
+              id: `item_${Date.now()}_${i}`,
+              phase: phaseId,
+              timestamp: Date.now(),
+              status: 'pending',
+              source: 'workshop-copilot',
+              text: String(item.text || ''),
+              speakerName: String(item.speakerName || 'Speaker'),
+            }));
+            tensions = (parsed.tensions || []).map(t =>
+              typeof t === 'string' ? t : (t?.description || t?.type || JSON.stringify(t))
+            );
+            commitmentDetected = !!parsed.commitmentDetected;
+            summary = typeof parsed.summary === 'string' ? parsed.summary : '';
           }
-        } catch { /**/ }
+        }
+      } catch (e) {
+        console.error('[transcribe] Claude error:', e.message);
       }
     }
 
-    // Add metadata to items
-    const stamped = items.map((item, i) => ({
-      ...item,
-      id: `item_${Date.now()}_${i}`,
-      phase: phaseId,
-      timestamp: Date.now(),
-      status: 'pending',
-      source: 'workshop-copilot',
-    }));
-
     return res.status(200).json({
       transcript,
-      items: stamped,
+      items,
       tensions,
       commitmentDetected,
       summary,
@@ -138,17 +131,8 @@ Return JSON: {"items":[{"category":"ISSUE","text":"...","speakerName":"Speaker",
     });
 
   } catch (err) {
+    if (existsSync(tmpPath)) unlinkSync(tmpPath);
     console.error('[transcribe] Error:', err);
     return res.status(500).json({ error: err.message });
   }
-}
-
-function getExtension(mimeType) {
-  if (!mimeType) return 'mp4';
-  if (mimeType.includes('webm')) return 'webm';
-  if (mimeType.includes('mp4') || mimeType.includes('m4a')) return 'mp4';
-  if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3';
-  if (mimeType.includes('wav')) return 'wav';
-  if (mimeType.includes('ogg')) return 'ogg';
-  return 'mp4';
 }
