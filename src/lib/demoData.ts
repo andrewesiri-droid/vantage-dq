@@ -240,6 +240,7 @@ export function initializeEmptySession(name: string = 'New Decision Session', ow
     scenarios: [],
     voiAnalyses: [],
   }));
+  return slug;
 }
 
 export function getDemoData(): ModuleData {
