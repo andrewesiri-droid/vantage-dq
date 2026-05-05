@@ -1,11 +1,6 @@
 /**
- * /api/transcribe.js — Workshop Copilot Transcription + DQ Categorization
- * 
- * Handles TWO modes:
- * 1. REALTIME: base64 audio chunk (from MediaRecorder, every 8s)
- * 2. UPLOAD:   full audio file (MP3, WAV, M4A, M4V, MP4, WebM) for post-hoc
- * 
- * Pipeline: Audio → Whisper → Claude DQ Categorization → Structured JSON
+ * /api/transcribe.js — Workshop Copilot Transcription
+ * Uses node-fetch compatible FormData for Vercel serverless
  */
 
 export const config = { api: { bodyParser: { sizeLimit: '25mb' } } };
@@ -16,138 +11,114 @@ export default async function handler(req, res) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
   if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
-  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-  const { audio, mimeType, mode = 'realtime', phaseId, phaseLabel, sessionContext, previousTranscript, speakerHint } = req.body;
+  const { audio, mimeType, mode = 'realtime', phaseId, phaseLabel, sessionContext, previousTranscript } = req.body;
   if (!audio) return res.status(400).json({ error: 'No audio data' });
 
   try {
-    // ── WHISPER TRANSCRIPTION ─────────────────────────────────────────────────
+    // Build multipart form manually — more reliable in Vercel serverless
     const audioBuffer = Buffer.from(audio, 'base64');
     const ext = getExtension(mimeType);
-    const formData = new FormData();
-    const blob = new Blob([audioBuffer], { type: mimeType || 'audio/webm' });
-    formData.append('file', blob, `audio.${ext}`);
-    formData.append('model', 'whisper-1');
-    formData.append('language', 'en');
-    formData.append('response_format', mode === 'upload' ? 'verbose_json' : 'json');
-    if (mode === 'upload') {
-      formData.append('timestamp_granularities[]', 'segment');
-    }
-    formData.append('prompt',
-      `Decision Quality workshop. Phase: "${phaseLabel}". Decision: "${sessionContext?.decisionStatement || ''}". ` +
-      `Speakers: ${speakerHint || 'multiple participants'}. Preserve technical terms and proper nouns.`
-    );
+    const filename = `audio.${ext}`;
+    const boundary = `----FormBoundary${Date.now()}`;
+
+    // Build the multipart body manually
+    const parts = [
+      `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1`,
+      `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nen`,
+      `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson`,
+      `--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${`Decision Quality workshop. Phase: ${phaseLabel}. Decision: ${sessionContext?.decisionStatement || ''}.`}`,
+    ];
+
+    const preamble = parts.join('\r\n') + '\r\n';
+    const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mimeType || 'audio/mp4'}\r\n\r\n`;
+    const epilogue = `\r\n--${boundary}--\r\n`;
+
+    const body = Buffer.concat([
+      Buffer.from(preamble),
+      Buffer.from(filePart),
+      audioBuffer,
+      Buffer.from(epilogue),
+    ]);
 
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-      body: formData,
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length.toString(),
+      },
+      body,
     });
 
     if (!whisperRes.ok) {
       const err = await whisperRes.json().catch(() => ({}));
+      console.error('[transcribe] Whisper error:', JSON.stringify(err));
       return res.status(500).json({ error: 'Transcription failed', detail: err });
     }
 
     const whisperData = await whisperRes.json();
-    const fullTranscript = typeof whisperData === 'string' ? whisperData : (whisperData.text || '');
-    const segments = whisperData.segments || [];
+    const transcript = whisperData.text || '';
 
-    if (!fullTranscript || fullTranscript.trim().length < 3) {
-      return res.status(200).json({ transcript: '', items: [], segments: [], silent: true });
+    if (!transcript || transcript.trim().length < 2) {
+      return res.status(200).json({ transcript: '', items: [], silent: true });
     }
 
-    // ── CLAUDE DQ CATEGORIZATION ─────────────────────────────────────────────
-    const categorizationPrompt = `You are an expert Decision Quality facilitator analyzing a workshop transcript.
+    // DQ extraction with Claude (only if API key available)
+    let items = [], tensions = [], summary = '', commitmentDetected = false;
 
-WORKSHOP CONTEXT:
-- Current Phase: ${phaseLabel} (${phaseId})
-- Decision: ${sessionContext?.decisionStatement || 'Unknown'}
-- Session: ${sessionContext?.sessionName || 'Workshop'}
-- Previous discussion: ${previousTranscript?.slice(-600) || 'Start of session'}
+    if (ANTHROPIC_API_KEY && transcript.length > 10) {
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 800,
+          messages: [{
+            role: 'user',
+            content: `You are a Decision Quality workshop facilitator. Extract insights from this transcript.
 
-TRANSCRIPT TO ANALYZE:
-"""
-${fullTranscript}
-"""
+Phase: ${phaseLabel} (${phaseId})
+Decision: ${sessionContext?.decisionStatement || 'Unknown'}
+Transcript: "${transcript}"
 
-Extract ALL meaningful contributions. For each contribution:
+Extract meaningful contributions only. For each:
+- category: ISSUE | ASSUMPTION | ALTERNATIVE | CONSTRAINT | QUESTION | EVIDENCE | OPINION
+- text: clean concise version
+- speakerName: "Speaker" (unknown)
+- targetModule: issue-generation | problem-frame | strategy-table | qualitative-assessment
+- confidence: 0-100
+- addToBoard: true/false
 
-CATEGORIES (pick ONE):
-- ISSUE: concern, risk, problem, "what could go wrong", obstacle
-- ASSUMPTION: something assumed without proof, "we're assuming", "I think we can expect"
-- ALTERNATIVE: strategic option, different approach, "what if we...", "another option"
-- CONSTRAINT: hard limit, boundary, budget/time/legal/regulatory cap
-- QUESTION: open question needing investigation or decision
-- EVIDENCE: data point, fact, research finding, statistic
-- OPINION: personal preference or judgment without evidence
-- META: about the process itself (skip these unless important)
+Skip filler, greetings, very short phrases.
 
-For each item ALSO identify:
-- targetModule: best module to receive this item:
-  issue-generation | problem-frame | strategy-table | qualitative-assessment | 
-  decision-hierarchy | scenario-planning | voi | risk-timeline | stakeholder-alignment
-- speakerName: use context clues. If unclear use "Speaker"
-- confidence: 0-100 (how certain is classification?)
-- dqLabel: frame | alternatives | information | values | reasoning | commitment | general
-- addToBoard: true if this is substantive and actionable
+Return JSON: {"items":[{"category":"ISSUE","text":"...","speakerName":"Speaker","targetModule":"issue-generation","confidence":85,"addToBoard":true}],"tensions":[],"commitmentDetected":false,"summary":"1 sentence"}`
+          }],
+        }),
+      });
 
-Skip: greetings, filler words, logistics talk, single-word responses.
-Only extract if confidence > 40.
-
-${mode === 'upload' ? 'This is a full workshop recording — extract ALL significant contributions across the entire transcript.' : 'This is a live chunk — be selective, only extract clear contributions.'}
-
-Return JSON:
-{
-  "items": [
-    {
-      "id": "item_1",
-      "category": "ISSUE",
-      "text": "clean concise version of the contribution",
-      "rawQuote": "exact words from transcript",
-      "speakerName": "Speaker",
-      "targetModule": "issue-generation",
-      "targetSection": null,
-      "confidence": 87,
-      "dqLabel": "information",
-      "addToBoard": true,
-      "suggestedAction": "Add to Issue Board"
+      if (claudeRes.ok) {
+        const claudeData = await claudeRes.json();
+        const text = claudeData.content?.[0]?.text || '';
+        try {
+          const match = text.match(/\{[\s\S]*\}/);
+          if (match) {
+            const parsed = JSON.parse(match[0]);
+            items = parsed.items || [];
+            tensions = parsed.tensions || [];
+            summary = parsed.summary || '';
+            commitmentDetected = parsed.commitmentDetected || false;
+          }
+        } catch { /**/ }
+      }
     }
-  ],
-  "tensions": ["description of any opposing viewpoints detected"],
-  "commitmentDetected": false,
-  "phaseSignal": null,
-  "circularDiscussion": null,
-  "summary": "1-2 sentence summary of what was discussed",
-  "detectedPhase": "issue-generation"
-}`;
 
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: mode === 'upload' ? 4000 : 1500,
-        messages: [{ role: 'user', content: categorizationPrompt }],
-      }),
-    });
-
-    const claudeData = await claudeRes.json();
-    const claudeText = claudeData.content?.[0]?.text || '';
-
-    let extracted = { items: [], tensions: [], commitmentDetected: false, phaseSignal: null, summary: '', detectedPhase: null, circularDiscussion: null };
-    try {
-      const match = claudeText.match(/\{[\s\S]*\}/);
-      if (match) extracted = JSON.parse(match[0]);
-    } catch { /**/ }
-
-    // Add timestamp and phase to each item
-    const timestampedItems = (extracted.items || []).map((item, i) => ({
+    // Add metadata to items
+    const stamped = items.map((item, i) => ({
       ...item,
       id: `item_${Date.now()}_${i}`,
       phase: phaseId,
@@ -157,17 +128,13 @@ Return JSON:
     }));
 
     return res.status(200).json({
-      transcript: fullTranscript,
-      segments,
-      items: timestampedItems,
-      tensions: extracted.tensions || [],
-      commitmentDetected: extracted.commitmentDetected || false,
-      phaseSignal: extracted.phaseSignal,
-      circularDiscussion: extracted.circularDiscussion,
-      summary: extracted.summary || '',
-      detectedPhase: extracted.detectedPhase,
+      transcript,
+      items: stamped,
+      tensions,
+      commitmentDetected,
+      summary,
       silent: false,
-      wordCount: fullTranscript.split(' ').length,
+      wordCount: transcript.split(' ').length,
     });
 
   } catch (err) {
@@ -177,11 +144,11 @@ Return JSON:
 }
 
 function getExtension(mimeType) {
-  if (!mimeType) return 'mp4'; // Safari default
+  if (!mimeType) return 'mp4';
   if (mimeType.includes('webm')) return 'webm';
   if (mimeType.includes('mp4') || mimeType.includes('m4a')) return 'mp4';
   if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3';
   if (mimeType.includes('wav')) return 'wav';
   if (mimeType.includes('ogg')) return 'ogg';
-  return 'mp4'; // Default to mp4 (Safari-safe)
+  return 'mp4';
 }
