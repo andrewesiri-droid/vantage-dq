@@ -6,14 +6,19 @@ import { writeFileSync, unlinkSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-export const config = { api: { bodyParser: { sizeLimit: '25mb' } } };
+export const config = { api: { bodyParser: { sizeLimit: '25mb' } }, maxDuration: 30 };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  console.log('[transcribe] called, method:', req.method);
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-  if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
+  console.log('[transcribe] OPENAI_API_KEY present:', !!OPENAI_API_KEY);
+  if (!OPENAI_API_KEY) {
+    console.error('[transcribe] OPENAI_API_KEY missing');
+    return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
+  }
 
   const { audio, mimeType, phaseId, phaseLabel, sessionContext, previousTranscript } = req.body;
   if (!audio) return res.status(400).json({ error: 'No audio data' });
@@ -23,6 +28,14 @@ export default async function handler(req, res) {
   try {
     // Write audio to temp file
     const audioBuffer = Buffer.from(audio, 'base64');
+    console.log('[transcribe] audio size:', audioBuffer.length, 'bytes, mime:', mimeType);
+    
+    // Size check — Vercel body limit is 4.5MB
+    if (audioBuffer.length > 4 * 1024 * 1024) {
+      console.error('[transcribe] audio too large:', audioBuffer.length);
+      return res.status(413).json({ error: 'Audio chunk too large — max 4MB' });
+    }
+    
     writeFileSync(tmpPath, audioBuffer);
 
     // Read file back as a Blob using the File constructor
@@ -46,6 +59,7 @@ export default async function handler(req, res) {
     // Cleanup temp file
     if (existsSync(tmpPath)) unlinkSync(tmpPath);
 
+    console.log('[transcribe] Whisper responded:', whisperRes.status, 'in', Date.now() - (whisperStart||0), 'ms');
     if (!whisperRes.ok) {
       const err = await whisperRes.json().catch(() => ({}));
       console.error('[transcribe] Whisper error:', JSON.stringify(err));
