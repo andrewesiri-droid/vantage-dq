@@ -249,7 +249,7 @@ export function validateBeforeAI(
   return { canProceed: true, warnings, blockers: [] };
 }
 
-export function validateBeforeAI(
+port function validateBeforeAI(
   module: string, 
   sessionData: Record<string, any>
 ): { canProceed: boolean; warnings: string[]; blockers: string[] } {
