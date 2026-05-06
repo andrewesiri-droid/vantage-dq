@@ -82,7 +82,7 @@ export function OnboardingPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-white/50">Signed in as</span>
-          <span className="text-[11px] font-medium text-white/80">{user.name || 'User'}</span>
+          <span className="text-[11px] font-medium text-white/80">User</span>
         </div>
       </div>
 
