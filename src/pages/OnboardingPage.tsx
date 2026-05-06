@@ -82,7 +82,7 @@ export function OnboardingPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-white/50">Signed in as</span>
-          <span className="text-[11px] font-medium text-white/80">User</span>
+          <span className="text-[11px] font-medium text-white/80">{user.name || 'User'}</span>
         </div>
       </div>
 
@@ -106,7 +106,17 @@ export function OnboardingPage() {
           {CARDS.map(card => (
             <button
               key={card.id}
-              onClick={() => setFlow(card.id)}
+              onClick={() => {
+                if (card.id === 'example') {
+                  // Load demo immediately
+                  import('@/lib/demoData').then(({ enableDemoMode }) => {
+                    enableDemoMode();
+                    window.location.href = '/session/demo-apac-entry';
+                  });
+                } else {
+                  setFlow(card.id);
+                }
+              }}
               className="group text-left rounded-xl p-6 transition-all hover:scale-[1.02] hover:shadow-2xl"
               style={{
                 background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
