@@ -55,18 +55,7 @@ const CARDS = [
 export function OnboardingPage() {
   const [flow, setFlow] = useState<Flow>('select');
   const navigate = useNavigate();
-  const { user } = useAuth();
-
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: DS.bg }}>
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm" style={{ color: DS.inkSub }}>Authenticating...</p>
-        </div>
-      </div>
-    );
-  }
+  // Auth optional — app works without login
 
   if (flow === 'ai') return <AIDeepDive onBack={() => setFlow('select')} />;
   if (flow === 'wizard') return <QuestionWizard onBack={() => setFlow('select')} />;
