@@ -138,7 +138,6 @@ function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, s
       activeModule={activeModule} onModuleChange={setActiveModule}
       activeTool={activeTool} onToolChange={setActiveTool}
       isSyncing={sessionData.isLoading} data={sessionData.data}>
-      {sessionId && <AISuggestionsPanel sessionId={sessionId} module={activeModule} />}
       {activeTool ? renderTool(activeTool, moduleProps) : <ModuleComponent {...moduleProps} />}
     </AppShell>
   );
