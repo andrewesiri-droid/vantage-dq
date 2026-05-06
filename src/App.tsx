@@ -2,7 +2,6 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router';
 import { useEffect, useState, createContext, useContext, lazy, Suspense } from 'react';
 import { enableDemoMode, isDemoMode, getDemoUser, initializeDemoData } from '@/lib/demoData';
 import { HomePage } from '@/pages/HomePage';
-const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const SessionPage = lazy(() => import('@/pages/SessionPage').then(m => ({ default: m.SessionPage })));
 import { LoginPage } from '@/pages/LoginPage';
@@ -98,8 +97,7 @@ function AppInner() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/onboarding" element={<OnboardingPage />} />
+                    <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/session/:slug" element={<SessionPage />} />
           <Route path="/session/:slug/projector" element={<ProjectorPage />} />
           <Route path="/join" element={<JoinPage />} />

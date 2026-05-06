@@ -7,7 +7,6 @@ import { demoApi, getDemoData, isDemoMode } from '@/lib/demoData';
 import { MODULES, DS, type ToolId } from '@/constants';
 import type { ModuleId } from '@/types';
 import { AppShell } from '@/components/layout/AppShell';
-import { AISuggestionsPanel } from '@/components/layout/AISuggestionsPanel';
 import { ProblemFrame } from '@/components/modules/ProblemFrame';
 import { IssueGeneration } from '@/components/modules/IssueGeneration';
 import { DecisionHierarchy } from '@/components/modules/DecisionHierarchy';
@@ -112,7 +111,7 @@ function DemoSessionPage({ slug, activeModule, setActiveModule, activeTool, setA
       activeModule={activeModule} onModuleChange={setActiveModule}
       activeTool={activeTool} onToolChange={setActiveTool}
       isSyncing={false} data={data}>
-      <AISuggestionsPanel sessionId={data.session!.id} module={activeModule} />
+      
       {activeTool ? renderTool(activeTool, moduleProps) : <ModuleComponent {...moduleProps} />}
     </AppShell>
   );
