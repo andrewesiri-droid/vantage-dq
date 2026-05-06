@@ -66,7 +66,7 @@ export function HomePage() {
             </div>
             <div className="flex items-center gap-3">
               {demoMode ? (
-                <Button size="sm" className="text-xs gap-1" style={{ background: DS.accent }} onClick={() => navigate('/dashboard')}>
+                <Button size="sm" className="text-xs gap-1" style={{ background: DS.accent }} onClick={() => navigate('/onboarding')}>
                   Dashboard <ChevronRight size={14} />
                 </Button>
               ) : (
@@ -94,7 +94,7 @@ export function HomePage() {
               </p>
               <div className="flex flex-wrap gap-3">
                 {demoMode ? (
-                  <Button size="lg" className="gap-2 text-sm" style={{ background: DS.accent }} onClick={() => navigate('/dashboard')}>
+                  <Button size="lg" className="gap-2 text-sm" style={{ background: DS.accent }} onClick={() => navigate('/onboarding')}>
                     <Zap size={16} /> Go to Dashboard
                   </Button>
                 ) : (
@@ -102,7 +102,7 @@ export function HomePage() {
                     <Button size="lg" className="gap-2 text-sm" style={{ background: DS.accent }} onClick={() => window.location.href = '/api/oauth/authorize'}>
                       <Zap size={16} /> Sign In
                     </Button>
-                    <Button size="lg" variant="outline" className="gap-2 text-sm border-white/20 text-white hover:bg-white/10" onClick={() => { enableDemoMode(); initializeDemoData(); navigate('/dashboard'); }}>
+                    <Button size="lg" variant="outline" className="gap-2 text-sm border-white/20 text-white hover:bg-white/10" onClick={() => { enableDemoMode(); initializeDemoData(); navigate('/onboarding'); }}>
                       <Play size={16} /> Launch Demo
                     </Button>
                   </>
@@ -219,7 +219,7 @@ export function HomePage() {
             Join leading energy companies and Fortune 500 executives who trust Vantage DQ for their most critical decisions.
           </p>
           {demoMode ? (
-            <Button size="lg" className="gap-2 text-sm" style={{ background: DS.accent }} onClick={() => navigate('/dashboard')}>
+            <Button size="lg" className="gap-2 text-sm" style={{ background: DS.accent }} onClick={() => navigate('/onboarding')}>
               <Zap size={16} /> Go to Dashboard <ChevronRight size={14} />
             </Button>
           ) : (

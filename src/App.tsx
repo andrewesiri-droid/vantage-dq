@@ -98,6 +98,7 @@ function AppInner() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
                     <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="/dashboard" element={<Navigate to="/onboarding" replace />} />
           <Route path="/session/:slug" element={<SessionPage />} />
           <Route path="/session/:slug/projector" element={<ProjectorPage />} />
           <Route path="/join" element={<JoinPage />} />
