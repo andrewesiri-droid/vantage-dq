@@ -136,8 +136,10 @@ ${contradictionWarnings}
       const text = data.result || data.content?.[0]?.text || '';
 
       // ── LAYER 4: PARSE + TRUST SCORE OUTPUT ───────────────────────────────
+      // Strip markdown code fences before parsing (Haiku wraps JSON in ```json ... ```)
+      const cleanText = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
       let parsed: any = null;
-      const match = text.match(/\{[\s\S]*\}/);
+      const match = cleanText.match(/\{[\s\S]*\}/);
       if (match) {
         try { parsed = JSON.parse(match[0]); } catch { /**/ }
       }
@@ -160,11 +162,11 @@ ${contradictionWarnings}
       auditEntry.outputTrustScore = trustResult.trustScore;
       saveAuditEntry(auditEntry);
 
-      // Return result
+      // Return result — always include _raw so CoPilot and text-based callbacks work
       if (parsed && !parsed.error) {
-        callback({ ...parsed, _trust: trustResult, _warnings: preflightWarnings });
+        callback({ ...parsed, _raw: cleanText, text: cleanText, _trust: trustResult, _warnings: preflightWarnings });
       } else {
-        callback({ _raw: text, text, _trust: trustResult });
+        callback({ _raw: cleanText, text: cleanText, _trust: trustResult, _warnings: preflightWarnings });
       }
 
     } catch (err: any) {

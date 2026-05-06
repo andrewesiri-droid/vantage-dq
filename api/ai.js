@@ -71,7 +71,9 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    const text = data.content?.[0]?.text || '';
+    const rawText = data.content?.[0]?.text || '';
+    // Strip markdown code fences so JSON callbacks can parse cleanly
+    const text = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
     console.log(`[AI] responded (${text.length} chars)`);
 
     return res.status(200).json({
