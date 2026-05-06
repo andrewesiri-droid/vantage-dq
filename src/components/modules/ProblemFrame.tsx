@@ -100,11 +100,20 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
     const prompt = `Run a comprehensive DQ frame check.\nDecision Statement: "${fd.decisionStatement}"\nContext: ${fd.situation}\nScope In: ${fd.scopeIn}\nScope Out: ${fd.scopeOut}\nOwner: ${fd.owner}\nDeadline: ${fd.deadline}\nConstraints: ${fd.constraints}\nSuccess Criteria: ${fd.successCriteria}\n\nReturn JSON: { overallScore: 0-100, band: "Elite|Strong|Adequate|Weak|High-Risk", summary: string, checks: [{name: string, pass: boolean, note: string}], improvements: [{field: string, current: string, suggestion: string, reason: string}], verdict: string }`;
     call(prompt, (r) => {
       let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
-      if (result && !result.error) {
+      if (r?._raw) {
+        try {
+          const match = (r._raw || '').match(/\{[\s\S]*\}/);
+          if (match) result = JSON.parse(match[0]);
+        } catch (e) {
+          console.error('[FrameCheck] parse error:', e, r?._raw?.slice(0, 300));
+        }
+      }
+      if (result && !result.error && (result.overallScore !== undefined || result.band || result.checks)) {
         setFrameCheck(result);
         setImprovements(result.improvements || []);
         setActiveTab('ai');
+      } else if (!result?.overallScore) {
+        console.warn('[FrameCheck] bad shape:', JSON.stringify(result)?.slice(0, 200));
       }
     });
   };
