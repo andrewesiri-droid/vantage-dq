@@ -182,9 +182,7 @@ export function enableDemoMode(): void {
 }
 
 export function initializeDemoData(): void {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
       sessions: [DEMO_SESSION],
       issues: DEMO_ISSUES,
       decisions: DEMO_DECISIONS,
