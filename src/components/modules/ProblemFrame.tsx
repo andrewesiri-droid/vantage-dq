@@ -97,7 +97,17 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
   );
 
   const runFrameCheck = () => {
-    const prompt = `Run a comprehensive DQ frame check.\nDecision Statement: "${fd.decisionStatement}"\nContext: ${fd.situation}\nScope In: ${fd.scopeIn}\nScope Out: ${fd.scopeOut}\nOwner: ${fd.owner}\nDeadline: ${fd.deadline}\nConstraints: ${fd.constraints}\nSuccess Criteria: ${fd.successCriteria}\n\nReturn JSON: { overallScore: 0-100, band: "Elite|Strong|Adequate|Weak|High-Risk", summary: string, checks: [{name: string, pass: boolean, note: string}], improvements: [{field: string, current: string, suggestion: string, reason: string}], verdict: string }`;
+    const prompt = `DQ frame check. Return ONLY valid JSON, no other text.
+Decision: "${fd.decisionStatement}"
+Context: ${fd.situation?.slice(0,200)}
+Scope In: ${fd.scopeIn?.slice(0,150)}
+Scope Out: ${fd.scopeOut?.slice(0,150)}
+Owner: ${fd.owner}
+Deadline: ${fd.deadline}
+Constraints: ${fd.constraints?.slice(0,150)}
+Success: ${fd.successCriteria?.slice(0,150)}
+
+JSON format: {"overallScore":0-100,"band":"Elite|Strong|Adequate|Weak|High-Risk","summary":"string","checks":[{"name":"string","pass":true,"note":"string"}],"improvements":[{"field":"string","current":"string","suggestion":"string","reason":"string"}],"verdict":"string"}`;
     call(prompt, (r) => {
       let result = r;
       if (r?._raw) {
