@@ -89,7 +89,7 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
     setGenerating(true);
     const s = data?.session || {};
     const existing = issues.slice(0, 8).map(i => i.text).join('; ');
-    const prompt = `You are an elite DQ facilitator.
+    const prompt = `${buildContractPrompt('issue-generation', data)}\n\nYou are an elite DQ facilitator.
 
 WHAT IS AN ISSUE:
 - Definition: A question, concern, or uncertainty that MUST be addressed to make a good decision
@@ -118,7 +118,6 @@ QUALITY RULES:
 - "Brutal truth" category must contain at least one issue that makes the room uncomfortable
 
 Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionStatement || ''}"\nContext: ${(s.context || '').slice(0, 250)}\nConstraints: ${s.constraints || ''}\nExisting issues (do not duplicate): ${existing}\n\nReturn JSON: { issues: [{text, category (from: uncertainty-external, uncertainty-internal, stakeholder-concern, assumption, information-gap, opportunity, constraint, brutal-truth, regulatory-trap, second-order, black-swan, focus-decision), severity (Critical/High/Medium/Low), owner, description}] }`;
-    const _contract = buildContractPrompt('issue-generation', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) });
@@ -142,7 +141,7 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
 
   const aiCategorise = async () => {
     const issueList = issues.map(i => `"${i.text}" [current: ${i.category}]`).join('\n');
-    const prompt = `${_contract}\n\nReview and re-categorise these issues for accuracy.\nIssues:\n${issueList}\n\nReturn JSON: { reclassifications: [{id (original array index 0-based), text, suggestedCategory, reason}] }`;
+    const prompt = `${buildContractPrompt('issue-generation', data)}\n\nReview and re-categorise these issues for accuracy.\nIssues:\n${issueList}\n\nReturn JSON: { reclassifications: [{id (original array index 0-based), text, suggestedCategory, reason}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) });
@@ -163,7 +162,7 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
 
   const aiBlindSpots = async () => {
     const cats = [...new Set(issues.map(i => i.category))];
-    const prompt = `Analyse this issue list for blind spots.\nDecision: ${data?.session?.decisionStatement || ''}\nIssues (${issues.length}): ${issues.map(i => `[${i.category}/${i.severity}] ${i.text}`).join('; ')}\nCategories present: ${cats.join(', ')}\n\nReturn JSON: { coverageScore: 0-100, coverageSummary: string, missingCategories: [{category, title, why, exampleIssue, severity}], patternInsight: string, topBlindSpot: string }`;
+    const prompt = `${buildContractPrompt('issue-generation', data)}\n\nAnalyse this issue list for blind spots.\nDecision: ${data?.session?.decisionStatement || ''}\nIssues (${issues.length}): ${issues.map(i => `[${i.category}/${i.severity}] ${i.text}`).join('; ')}\nCategories present: ${cats.join(', ')}\n\nReturn JSON: { coverageScore: 0-100, coverageSummary: string, missingCategories: [{category, title, why, exampleIssue, severity}], patternInsight: string, topBlindSpot: string }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) });

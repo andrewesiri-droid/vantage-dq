@@ -71,7 +71,7 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
 
   const aiScreen = async () => {
     const uList = uncertainties.map(u => `"${u.label}": impact=${u.impactOnValue}/5, reducible=${u.abilityToReduce}/5, changes_decision=${u.likelihoodChangesDecision}/5, EVPI=$${u.evpiEstimate}`).join('\n');
-    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+    const prompt = `${buildContractPrompt('voi', data)}\n\nYou are an elite DQ facilitator. Apply these definitions strictly:
 
 WHAT HAS VALUE OF INFORMATION:
 - An uncertainty has VOI only if: resolving it would change the preferred alternative
@@ -102,7 +102,6 @@ You are an elite DQ facilitator.
 
 
 VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||''}\nUrgency: ${urgency}\nReversibility: ${reversibility}\nValue at stake: $${totalValue.toLocaleString()}\n\nUncertainties:\n${uList}\n\nFor each uncertainty: is it decision-critical? Can we learn before the deadline? What study type? Return JSON: { screeningResults: [{uncertaintyLabel, isDecisionCritical, estimatedVOICategory: "High|Medium|Low|Zero", recommendedStudyType, canLearnBeforeDeadline: boolean, warningFlag}], topPriority: string, keyInsight: string, decisionReadiness: "Ready to commit|Critical gaps remain|Dangerous to proceed" }`;
-    const _contract = buildContractPrompt('voi', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'voi' }) });
@@ -116,7 +115,7 @@ VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||
 
   const aiSummary = async () => {
     const optSummary = infoOptions.map(o => { const u = uncertainties.find(u => u.id === o.uncertaintyId); return `"${o.label}" for "${u?.label}": cost=$${o.cost}, ${o.duration}wks, ${o.accuracy}% accurate`; }).join('\n');
-    const prompt = `${_contract}\n\nExecutive VOI summary.\nDecision: ${data?.session?.decisionStatement||''}\nValue at stake: $${totalValue.toLocaleString()}\nUrgency: ${urgency}\nReversibility: ${reversibility}\nInfo options:\n${optSummary}\n\nReturn JSON: { headline: string, readinessVerdict: string, recommendedStudies: [{name, rationale, duration}], rejectedStudies: [{name, reason}], commitNow: string, keyRisk: string }`;
+    const prompt = `${buildContractPrompt('voi', data)}\n\nExecutive VOI summary.\nDecision: ${data?.session?.decisionStatement||''}\nValue at stake: $${totalValue.toLocaleString()}\nUrgency: ${urgency}\nReversibility: ${reversibility}\nInfo options:\n${optSummary}\n\nReturn JSON: { headline: string, readinessVerdict: string, recommendedStudies: [{name, rationale, duration}], rejectedStudies: [{name, reason}], commitNow: string, keyRisk: string }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'voi' }) });

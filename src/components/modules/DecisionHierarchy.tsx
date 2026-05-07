@@ -90,7 +90,7 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
   const aiAutoSort = async () => {
     const issueCtx = (data?.issues || []).slice(0, 8).map((i: any) => `"${i.text}" [${i.severity}]`).join('\n');
     const decList = decisions.map(d => `"${d.label}" [currently: ${d.tier}]`).join('\n');
-    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+    const prompt = `${buildContractPrompt('decision-hierarchy', data)}\n\nYou are an elite DQ facilitator. Apply these definitions strictly:
 
 GIVEN DECISIONS:
 - Definition: Already made, locked, non-negotiable — the context for all other decisions
@@ -120,7 +120,6 @@ You are an elite DQ facilitator.
 
 
 Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given: already made, locked, non-negotiable\n- focus: strategic core, must resolve, max 5 (the Focus Five)\n- deferred: depends on focus decisions\n\nDecision context: ${data?.session?.decisionStatement || ''}\nIssues:\n${issueCtx}\n\nDecisions:\n${decList}\n\nReturn JSON: { assignments: [{label: (exact label), tier, rationale}] }`;
-    const _contract = buildContractPrompt('decision-hierarchy', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'decision-hierarchy' }) });
@@ -138,7 +137,7 @@ Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given
 
   const aiSuggestCriteria = async () => {
     const focusDecs = decisions.filter(d => d.tier === 'focus').map(d => d.label).join(', ');
-    const prompt = `${_contract}\n\nSuggest 6 decision criteria for evaluating strategies on: ${focusDecs}.\nDecision: ${data?.session?.decisionStatement || ''}\nIssues: ${(data?.issues || []).slice(0, 5).map((i: any) => i.text).join('; ')}\n\nReturn JSON: { criteria: [{label, type (financial/strategic/operational/risk/commercial), weight (critical/high/medium/low), description}] }`;
+    const prompt = `${buildContractPrompt('decision-hierarchy', data)}\n\nSuggest 6 decision criteria for evaluating strategies on: ${focusDecs}.\nDecision: ${data?.session?.decisionStatement || ''}\nIssues: ${(data?.issues || []).slice(0, 5).map((i: any) => i.text).join('; ')}\n\nReturn JSON: { criteria: [{label, type (financial/strategic/operational/risk/commercial), weight (critical/high/medium/low), description}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'decision-hierarchy' }) });
@@ -155,7 +154,7 @@ Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given
   const aiAnalysis = async () => {
     const summary = `Given: ${decisions.filter(d => d.tier === 'given').length}, Focus: ${focusCount}/5, Deferred: ${decisions.filter(d => d.tier === 'deferred').length}`;
     const focusList = decisions.filter(d => d.tier === 'focus').map(d => d.label).join(', ');
-    const prompt = `Analyse this decision hierarchy for DQ quality.\nDecision: ${data?.session?.decisionStatement || ''}\n${summary}\nFocus decisions: ${focusList}\n\nReturn JSON: { overallScore: 0-100, hierarchyVerdict: string, checks: [{name, pass: boolean, note}], focusFiveAssessment: string, improvements: [{issue, recommendation}] }`;
+    const prompt = `${buildContractPrompt('decision-hierarchy', data)}\n\nAnalyse this decision hierarchy for DQ quality.\nDecision: ${data?.session?.decisionStatement || ''}\n${summary}\nFocus decisions: ${focusList}\n\nReturn JSON: { overallScore: 0-100, hierarchyVerdict: string, checks: [{name, pass: boolean, note}], focusFiveAssessment: string, improvements: [{issue, recommendation}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'decision-hierarchy' }) });

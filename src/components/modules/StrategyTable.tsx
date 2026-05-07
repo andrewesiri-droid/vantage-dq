@@ -91,7 +91,7 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
 
   const aiSuggest = async () => {
     const decMenu = focusDecisions.map((d, i) => `D${i + 1}: "${d.label}" — options: ${d.choices.map((c, j) => j + '=' + c).join(', ')}`).join('\n');
-    const prompt = `You are a Decision Quality (DQ) expert. Suggest 3 genuinely distinct strategies.
+    const prompt = `${buildContractPrompt('strategy-table', data)}\n\nYou are a Decision Quality (DQ) expert. Suggest 3 genuinely distinct strategies.
 
 CRITICAL: Each strategy must be genuinely different in its core logic — not just scale variations.
 Include a null/status quo option if relevant.
@@ -110,7 +110,6 @@ For each strategy, apply DQ definitions:
 - selections: best focus decision choices for this strategy
 
 Return JSON: { strategies: [{name, objective, rationale, assumptions, selections}] }`;
-    const _contract = buildContractPrompt('strategy-table', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
@@ -145,7 +144,7 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
     if (gateErr) { import('@/lib/toast').then(({ toastError }) => toastError(gateErr)); return; }
     const targetStrategy = mechanicalRec.recommendedStrategy || strategies[0]?.name || 'primary strategy';
     const losingStrategies = strategies.filter((s: any) => s.name !== mechanicalRec.recommendedStrategy);
-    const prompt = `${_contract}\n\nYou are a senior devil's advocate in a high-stakes decision workshop.
+    const prompt = `${buildContractPrompt('strategy-table', data)}\n\nYou are a senior devil's advocate in a high-stakes decision workshop.
 
 The group is converging on: "${mechanicalRec.recommendedStrategy}"
 Mechanical score: ${mechanicalRec.scores[mechanicalRec.recommendedStrategy]}/100
@@ -183,7 +182,7 @@ Return JSON: {
   };
 
   const aiPickBest = async () => {
-    const prompt = `Recommend the best strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies: ${strategies.map(s => `${s.name}: ${s.rationale}`).join('; ')}\nCriteria: ${(data?.criteria || []).map((c: any) => c.label).join(', ')}\n\nReturn JSON: { recommendation: string, confidence: High|Medium|Low, reasoning: string, keyTradeoff: string }`;
+    const prompt = `${buildContractPrompt('strategy-table', data)}\n\nRecommend the best strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies: ${strategies.map(s => `${s.name}: ${s.rationale}`).join('; ')}\nCriteria: ${(data?.criteria || []).map((c: any) => c.label).join(', ')}\n\nReturn JSON: { recommendation: string, confidence: High|Medium|Low, reasoning: string, keyTradeoff: string }`;
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
       dqCall(prompt, { module: 'strategy-table', dqElement: 'Alternatives', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust strategy-table]', r.trust.label); });
@@ -195,7 +194,7 @@ Return JSON: {
   };
 
   const aiAnalyse = async () => {
-    const prompt = `Analyse each strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies:\n${strategies.map(s => `${s.name}: ${s.rationale}`).join('\n')}\n\nReturn JSON: { analyses: [{name, strengths:[string], weaknesses:[string], distinctiveRisk:string}], crossCuttingInsight: string }`;
+    const prompt = `${buildContractPrompt('strategy-table', data)}\n\nAnalyse each strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies:\n${strategies.map(s => `${s.name}: ${s.rationale}`).join('\n')}\n\nReturn JSON: { analyses: [{name, strengths:[string], weaknesses:[string], distinctiveRisk:string}], crossCuttingInsight: string }`;
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
       dqCall(prompt, { module: 'strategy-table', dqElement: 'Alternatives', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust strategy-table]', r.trust.label); });
@@ -211,7 +210,7 @@ Return JSON: {
     const s = strategies.find(st => st.id === stratId);
     if (!s) return;
     const decMenu = focusDecisions.map((d, i) => `D${i+1} (id:${d.id}): "${d.label}" — choices: ${d.choices.map((c,j) => j+'='+c).join(', ')}`).join('\n');
-    const prompt = `You are a Decision Quality (DQ) expert completing a strategy card.
+    const prompt = `${buildContractPrompt('strategy-table', data)}\n\nYou are a Decision Quality (DQ) expert completing a strategy card.
 
 CRITICAL RULE: The strategy name defines the theme. ALL outputs must strictly align with that strategy direction.
 
