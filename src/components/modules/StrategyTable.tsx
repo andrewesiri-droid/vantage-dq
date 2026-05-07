@@ -82,38 +82,47 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
     return Math.round((focusDecisions.filter(d => s.selections[d.id] !== undefined).length / focusDecisions.length) * 100);
   };
 
-  const aiSuggest = () => {
+  const aiSuggest = async () => {
     const decMenu = focusDecisions.map((d, i) => `D${i + 1}: "${d.label}" — options: ${d.choices.map((c, j) => j + '=' + c).join(', ')}`).join('\n');
     const prompt = `Suggest 3 genuinely distinct strategies.\nDecision: ${data?.session?.decisionStatement || ''}\nFocus decisions:\n${decMenu}\nExisting: ${strategies.map(s => s.name).join(', ')}\n\nReturn JSON: { strategies: [{name, rationale, objective, assumptions, selections (D1/D2... → choice index)}] }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
-      const newStrats: Strategy[] = (result?.strategies || []).map((s: any, i: number) => {
-        const sel: Record<string, number> = {};
-        if (s.selections) focusDecisions.forEach((d, di) => { if (s.selections[`D${di + 1}`] !== undefined) sel[d.id] = Number(s.selections[`D${di + 1}`]); });
-        return { id: Date.now() + i, name: s.name || `Strategy ${i + 1}`, colorIdx: (strategies.length + i) % 6, objective: s.objective || '', rationale: s.rationale || '', assumptions: s.assumptions || '', uncertainties: '', risks: '', selections: sel };
-      });
-      setStrategies(p => [...p, ...newStrats]);
-      if (newStrats.length > 0 && !activeStratId) setActiveStratId(newStrats[0].id);
-    });
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
+      const data2 = await res.json();
+      const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const result = JSON.parse(match[0]);
+        const newStrats: Strategy[] = (result?.strategies || []).map((s: any, i: number) => {
+          const sel: Record<string, number> = {};
+          if (s.selections) focusDecisions.forEach((d, di) => { if (s.selections[`D${di + 1}`] !== undefined) sel[d.id] = Number(s.selections[`D${di + 1}`]); });
+          return { id: Date.now() + i, name: s.name || `Strategy ${i + 1}`, colorIdx: (strategies.length + i) % 6, objective: s.objective || '', rationale: s.rationale || '', assumptions: s.assumptions || '', uncertainties: '', risks: '', selections: sel };
+        });
+        setStrategies(p => [...p, ...newStrats]);
+        if (newStrats.length > 0 && !activeStratId) setActiveStratId(newStrats[0].id);
+      }
+    } catch(e) { console.error('[aiSuggest]', e); }
   };
 
-  const aiPickBest = () => {
+  const aiPickBest = async () => {
     const prompt = `Recommend the best strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies: ${strategies.map(s => `${s.name}: ${s.rationale}`).join('; ')}\nCriteria: ${(data?.criteria || []).map((c: any) => c.label).join(', ')}\n\nReturn JSON: { recommendation: string, confidence: High|Medium|Low, reasoning: string, keyTradeoff: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
-      if (result && !result.error) setRecommendation(result);
-    });
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
+      const data2 = await res.json();
+      const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) { const result = JSON.parse(match[0]); setRecommendation(result); }
+    } catch(e) { console.error('[aiPickBest]', e); }
   };
 
-  const aiAnalyse = () => {
+  const aiAnalyse = async () => {
     const prompt = `Analyse each strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies:\n${strategies.map(s => `${s.name}: ${s.rationale}`).join('\n')}\n\nReturn JSON: { analyses: [{name, strengths:[string], weaknesses:[string], distinctiveRisk:string}], crossCuttingInsight: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
-      if (result && !result.error) { setAnalysisResult(result); setOverviewTab('analysis'); setActiveStratId(null); }
-    });
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
+      const data2 = await res.json();
+      const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) { const result = JSON.parse(match[0]); setAnalysisResult(result); setOverviewTab('analysis'); setActiveStratId(null); }
+    } catch(e) { console.error('[aiAnalyse]', e); }
   };
 
   const activeStat = activeStratId ? strategies.find(s => s.id === activeStratId) : null;
