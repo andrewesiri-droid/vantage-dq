@@ -70,11 +70,10 @@ Return JSON: {
   worstScenario: string,
   verdict: "Proceed with caution|Reconsider seriously|Strong case against"
 }`;
-    setBusy(true);
     try {
       const result = await dqCall(prompt, { module: 'decision-lineage', dqElement: 'Reasoning', sessionData: data || {} });
       if (result?.data) { setDevilResult(result.data); setShowDevil(true); }
-    } catch(e) { console.error(e); } finally { setBusy(false); }
+    } catch(e) { console.error(e); }
   };
 
   const aiGenerateBrief = async () => {
