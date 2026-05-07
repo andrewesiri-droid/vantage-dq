@@ -1,3 +1,4 @@
+import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 /**
@@ -154,6 +155,7 @@ const PAYOFF_LABELS = ['Very Bad', 'Bad', 'Neutral', 'Good', 'Very Good'];
 // ── COMPONENT ─────────────────────────────────────────────────────────────────
 export function GameTheoryModule({ sessionId, data }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const frameGate = checkFrameGate(data);
   const { call: dqCall, busy: dqBusy } = useDQAI();
 
   // Mode selection
@@ -560,6 +562,12 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
 
   return (
     <div className="space-y-0">
+            {frameGate.score < 50 && (
+        <div className="rounded-xl p-3 flex items-center gap-2" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
+          <span className="text-lg">🔒</span>
+          <span className="text-[10px] font-bold" style={{ color: '#D97706' }}>AI locked — complete Problem Frame first (score {frameGate.score}/50)</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start gap-3 mb-4 flex-wrap">
         <div className="flex-1">

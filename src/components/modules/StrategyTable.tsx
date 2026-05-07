@@ -2,6 +2,7 @@ import { buildContractPrompt, computeMechanicalRecommendation, checkFrameGate } 
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
+import { DQAIButton } from '@/components/ui/dq-ai-button';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { toastAIError, toastSaved } from '@/lib/toast';
@@ -132,8 +133,15 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
   const mechanicalRec = computeMechanicalRecommendation(data);
   const frameGate = checkFrameGate(data);
 
+  const devilsAdvocateGate = () => {
+    if (!strategies.length) return 'Add strategies first';
+    if (!data?.session?.decisionStatement) return 'Add a decision statement in Problem Frame first';
+    return null;
+  };
+
   const aiDevilsAdvocate = async () => {
-    if (!strategies.length) return;
+    const gateErr = devilsAdvocateGate();
+    if (gateErr) { import('@/lib/toast').then(({ toastError }) => toastError(gateErr)); return; }
     const targetStrategy = mechanicalRec.recommendedStrategy || strategies[0]?.name || 'primary strategy';
     const losingStrategies = strategies.filter((s: any) => s.name !== mechanicalRec.recommendedStrategy);
     const prompt = `You are a senior devil's advocate in a high-stakes decision workshop.

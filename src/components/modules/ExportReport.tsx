@@ -784,11 +784,11 @@ Return JSON: { content: string }`;
           ) : (
             <div className="flex justify-between">
               <Button variant="outline" className="gap-1 text-xs" onClick={() => setStep(4)}><ChevronLeft size={12} /> Back</Button>
-              {checkDataGate() && (
+              {(() => { const gateMsg = checkDataGate(); return gateMsg ? (
                 <div className="text-[10px] font-bold px-3 py-1.5 rounded-lg" style={{ background: '#FEF3C7', color: '#D97706' }}>
-                  🔒 {checkDataGate()}
+                  🔒 {gateMsg}
                 </div>
-              )}
+              ) : null; })()}
               <Button className="gap-2 px-6" style={{ background: typeCfg.color }} onClick={generateAllSections} disabled={busy || !!checkDataGate()}>
                 <Sparkles size={14} /> Generate {typeCfg.label}
               </Button>

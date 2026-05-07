@@ -1,3 +1,4 @@
+import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
@@ -32,6 +33,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [analysis, setAnalysis] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const frameGate = checkFrameGate(data);
   const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState<'list' | 'analysis'>('list');
 
@@ -133,6 +135,12 @@ Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisio
 
   return (
     <div className="space-y-4">
+      {frameGate.score < 30 && (
+        <div className="rounded-xl p-3 flex items-center gap-2" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
+          <span className="text-lg">🔒</span>
+          <span className="text-[10px] font-bold" style={{ color: '#D97706' }}>AI locked — complete Problem Frame first (score {frameGate.score}/30)</span>
+        </div>
+      )}
       <ModuleDataBanner moduleId="stakeholder-alignment" data={data} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">

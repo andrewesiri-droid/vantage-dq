@@ -1,3 +1,4 @@
+import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { computeMechanicalRecommendation } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
@@ -35,6 +36,7 @@ const DQ_PRINCIPLES: Record<string, string> = {
 
 export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const frameGate = checkFrameGate(data);
   const mechanicalRec = computeMechanicalRecommendation(data);
   const { call: dqCall, busy: dqBusy } = useDQAI();
   const [activeTab, setActiveTab] = useState('matrix');
@@ -179,6 +181,12 @@ Score these strategies on each criterion for this decision.\nDecision: "${data?.
 
   return (
     <div className="space-y-0">
+            {frameGate.score < 30 && (
+        <div className="rounded-xl p-3 flex items-center gap-2" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
+          <span className="text-lg">🔒</span>
+          <span className="text-[10px] font-bold" style={{ color: '#D97706' }}>AI locked — complete Problem Frame first (score {frameGate.score}/30)</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start gap-3 mb-4 flex-wrap">
         <div className="flex-1">

@@ -1,3 +1,4 @@
+import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { computeMechanicalRecommendation } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
@@ -19,12 +20,14 @@ const TABS = [
 
 export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const frameGate = checkFrameGate(data);
   const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState('scorecard');
   const [scores, setScores] = useState<Record<string, number>>({});
   const mechanicalRec = computeMechanicalRecommendation(data);
-  const commitmentContradiction = mechanicalRec.traceable && mechanicalRec.confidence === 'Low' && (scores.commitment || 0) >= 60;
-  const marginWarning = mechanicalRec.traceable && mechanicalRec.margin < 10 && mechanicalRec.margin > 0;
+  const hasAssessmentScores = (data?.assessmentScores?.length || 0) > 0;
+  const commitmentContradiction = hasAssessmentScores && mechanicalRec.traceable && mechanicalRec.confidence === 'Low' && (scores.commitment || 0) >= 60;
+  const marginWarning = hasAssessmentScores && mechanicalRec.traceable && mechanicalRec.margin < 10 && mechanicalRec.margin > 0;
   const [narrative, setNarrative] = useState<any>(null);
   const [improvements, setImprovements] = useState<any>(null);
 
@@ -157,6 +160,12 @@ Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${
 
   return (
     <div className="space-y-0">
+            {frameGate.score < 30 && (
+        <div className="rounded-xl p-3 flex items-center gap-2" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
+          <span className="text-lg">🔒</span>
+          <span className="text-[10px] font-bold" style={{ color: '#D97706' }}>AI locked — complete Problem Frame first (score {frameGate.score}/30)</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start gap-3 mb-4 flex-wrap">
         <div className="flex-1">

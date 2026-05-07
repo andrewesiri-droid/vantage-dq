@@ -201,11 +201,11 @@ export function generateSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) + '-' + Date.now().toString(36);
 }
 
-export function initializeEmptySession(name: string = 'New Decision Session', owner: string = ''): string {
+export function initializeEmptySession(name: string = 'New Decision Session', owner: string = '', customSlug?: string): string {
   // Always wipe storage so no demo data bleeds in
   localStorage.removeItem('vantage_dq_demo_sessions');
   localStorage.removeItem('vantage_dq_demo_mode'); // Clear demo mode flag
-  const slug = generateSlug(name || 'new-session');
+  const slug = customSlug || generateSlug(name || 'new-session');
   const emptySession = {
     id: 1,
     slug,

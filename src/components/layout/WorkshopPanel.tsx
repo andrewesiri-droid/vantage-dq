@@ -3,7 +3,7 @@ import { useWorkshopSync } from '@/hooks/useWorkshopSync';
 import { WorkshopCopilot } from '@/components/workshop/WorkshopCopilot';
 import { useDemoContext } from '@/App';
 import { DS } from '@/constants';
-import { useAI } from '@/hooks/useAI';
+import { useDQAI } from '@/hooks/useDQAI';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -136,7 +136,7 @@ interface Tension { id: number; description: string; severity: 'high' | 'medium'
 interface LogEntry { id: number; text: string; timestamp: Date; type: 'decision' | 'tension' | 'note'; }
 
 export function WorkshopPanel({ onClose, sessionId, data }: Props) {
-  const { call, busy } = useAI();
+  const { call: dqCall, busy } = useDQAI();
   const { authUser } = useDemoContext();
   const sync = useWorkshopSync({
     sessionId: sessionId || 1,
@@ -207,7 +207,7 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
     const phaseNotes = notes.filter(n => n.phase === phase.id).map(n => n.text).join('; ');
     const logItems = log.slice(-5).map(l => l.text).join('; ');
     const prompt = `You are a senior DQ workshop facilitator. Analyse what's happening in phase "${phase.label}" and give a pointed facilitation insight.\n\nPhase objective: ${phase.objective}\nParticipant notes/ideas captured: ${phaseNotes || 'None yet'}\nFacilitator log: ${logItems || 'None'}\nDecision context: ${data?.session?.decisionStatement || 'Unknown'}\n\nProvide ONE specific, actionable facilitation move for right now. Be direct. Max 2 sentences. This will be read by a facilitator in front of a room.\n\nReturn JSON: { insight: string, move: string, tension?: string }`;
-    call(prompt, (r) => {
+    dqCall(prompt, { module: 'workshop', dqElement: 'Reasoning', sessionData: sessionData || {} }).then((r) => { const result = r?.data; if (result) {
       let result = r;
       if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
       if (result?.insight) {
@@ -410,6 +410,16 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
                   sessionContext={{ decisionStatement: data?.session?.decisionStatement, sessionName: data?.session?.name }}
                   onDraftCreated={(item) => {
                     sync.submitNote(`[${item.category}] ${item.text}`, phase.id, false);
+                    // Push accepted item to session data
+                    if (hooks && sessionId) {
+                      const cat = item.category?.toLowerCase() || 'uncertainty-external';
+                      const issueCat = ['uncertainty-external','uncertainty-internal','stakeholder-concern','assumption','information-gap','opportunity','constraint','brutal-truth','regulatory-trap','second-order','black-swan','focus-decision'].includes(cat) ? cat : 'uncertainty-external';
+                      if (item.targetModule === 'issue-generation' || !item.targetModule) {
+                        hooks.createIssue?.({ sessionId, text: item.text, category: issueCat, severity: item.confidence === 'high' ? 'High' : 'Medium' });
+                      } else if (item.targetModule === 'stakeholder-alignment') {
+                        hooks.createStakeholder?.({ sessionId, name: item.speakerName || 'Unknown', role: item.text });
+                      }
+                    }
                   }}
                   onClose={() => setScribeOpen(false)}
                 />

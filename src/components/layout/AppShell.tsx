@@ -214,7 +214,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           onClose={() => setInviteOpen(false)}
         />
       )}
-      {workshopOpen && <WorkshopPanel onClose={() => setWorkshopOpen(false)} sessionId={sessionId} />}
+      {workshopOpen && <WorkshopPanel onClose={() => setWorkshopOpen(false)} sessionId={sessionId} data={data} />}
     </div>
   );
 }
