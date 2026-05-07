@@ -1,4 +1,4 @@
-import { checkFrameGate } from '@/lib/dq-data-contracts';
+import { checkFrameGate , buildContractPrompt } from '@/lib/dq-data-contracts';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 /**
  * Export & Report Module — Vantage DQ
@@ -477,9 +477,7 @@ export function ExportReport({ sessionId, data }: ModuleProps) {
     for (let i = 0; i < aiSections.length; i++) {
       const sec = aiSections[i];
       setGenerationProgress(Math.round((i / aiSections.length) * 100));
-
-      const _contract = buildContractPrompt('export-report', data);
-      const prompt = `${_contract}\n\nYou are a senior Decision Quality consultant generating a section for a ${typeCfg.label}.
+      const prompt = `You are a senior Decision Quality consultant generating a section for a ${typeCfg.label}.
 
 AUDIENCE: ${audienceCfg.label} — ${audienceCfg.desc}
 TONE: ${toneCfg.label} — ${toneCfg.desc}
@@ -503,7 +501,8 @@ Requirements:
 
 Return JSON: { content: string }`;
 
-      setBusy(true);
+      const _contract = buildContractPrompt('export-report', data);
+    setBusy(true);
       try {
         const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'export-report' }) });
           const d = await res.json();

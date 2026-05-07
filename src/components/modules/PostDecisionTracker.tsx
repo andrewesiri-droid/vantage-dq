@@ -1,4 +1,4 @@
-import { checkFrameGate } from '@/lib/dq-data-contracts';
+import { checkFrameGate , buildContractPrompt } from '@/lib/dq-data-contracts';
 /**
  * PostDecisionTracker — Track outcomes vs predictions
  * After a decision is committed, track what actually happened.
@@ -96,8 +96,7 @@ export function PostDecisionTracker({ sessionId, data, hooks }: ModuleProps) {
 
   const aiReview = async () => {
     const outcomesSummary = outcomes.map(o => `[${o.type}] ${o.label}: predicted=${o.predicted}, actual=${o.actual || 'pending'}, status=${o.status}`).join('\n');
-    const _contract = buildContractPrompt('post-decision', data);
-    const prompt = `${_contract}\n\nPost-decision learning review.
+    const prompt = `Post-decision learning review.
 Decision: ${session.decisionStatement || ''}
 Strategy chosen: ${preferred?.name || ''}
 Commit date: ${commitDate}
