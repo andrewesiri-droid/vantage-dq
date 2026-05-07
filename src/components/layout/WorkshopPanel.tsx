@@ -418,9 +418,9 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
                       const issueCat = validCats.includes(cat) ? cat : 'uncertainty-external';
                       const sev = item.confidence === 'high' ? 'High' : 'Medium';
                       if (item.targetModule === 'stakeholder-alignment') {
-                        sessionHooks.createStakeholder?.({ sessionId, name: item.speakerName || 'Workshop Participant', role: item.text });
+                        sessionHooks.createStakeholder?.({ sessionId: sessionId!, name: item.speakerName || 'Workshop Participant', role: item.text });
                       } else {
-                        sessionHooks.createIssue?.({ sessionId, text: item.text, category: issueCat, severity: sev });
+                        sessionHooks.createIssue?.({ sessionId: sessionId!, text: item.text, category: issueCat, severity: sev });
                       }
                     } catch(e) { console.error('[scribe]', e); }
                   }}
