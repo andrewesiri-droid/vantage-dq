@@ -30,7 +30,7 @@ const STATUS_CONFIG = {
   pending: { label: 'Pending', color: DS.inkDis, soft: DS.bg },
 };
 
-export function PostDecisionTracker({ sessionId, data }: ModuleProps) {
+export function PostDecisionTracker({ sessionId, data, hooks }: ModuleProps) {
   const [outcomes, setOutcomes] = useState<OutcomeEntry[]>([]);
   // Load persisted outcomes
   useEffect(() => {
