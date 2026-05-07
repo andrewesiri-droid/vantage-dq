@@ -151,7 +151,6 @@ function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, s
 
   if (!sessionMeta && !loading) {
     // Supabase session not found — try localStorage fallback
-    const { getDemoData } = require('@/lib/demoData');
     const localData = getDemoData();
     const ModuleComponent = MODULE_COMPONENTS[activeModule];
     const moduleProps = { sessionId: 1, data: localData, hooks: {} };
