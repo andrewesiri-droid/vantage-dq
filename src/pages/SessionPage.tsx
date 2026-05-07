@@ -149,13 +149,19 @@ function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, s
     );
   }
 
-  if (!sessionMeta) {
+  if (!sessionMeta && !loading) {
+    // Supabase session not found — try localStorage fallback
+    const { getDemoData } = require('@/lib/demoData');
+    const localData = getDemoData();
+    const ModuleComponent = MODULE_COMPONENTS[activeModule];
+    const moduleProps = { sessionId: 1, data: localData, hooks: {} };
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: DS.bg }}>
-        <div className="text-center">
-          <p className="text-sm" style={{ color: DS.inkSub }}>Session not found.</p>
-        </div>
-      </div>
+      <AppShell sessionName={slug || 'Session'} sessionId={1}
+        activeModule={activeModule} onModuleChange={setActiveModule}
+        activeTool={activeTool} onToolChange={setActiveTool}
+        isSyncing={false} data={localData}>
+        {activeTool ? renderTool(activeTool, moduleProps) : <ModuleComponent {...moduleProps} />}
+      </AppShell>
     );
   }
 

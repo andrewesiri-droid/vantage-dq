@@ -30,15 +30,17 @@ export function generateInviteToken(): string {
 }
 
 // Create a new session in Supabase, fall back to localStorage
-export async function createSession(name: string, ownerEmail?: string): Promise<string> {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) + '-' + Date.now().toString(36);
-  
-  if (!supabase) {
-    // Fallback to localStorage
+export async function createSession(name: string, ownerEmail?: string, userId?: string): Promise<string> {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  const suffix = Date.now().toString(36);
+
+  // If no supabase or no authenticated user — use localStorage
+  if (!supabase || !userId) {
     const { initializeEmptySession } = await import('@/lib/demoData');
     return initializeEmptySession(name);
   }
 
+  const slug = base + '-' + suffix;
   const { data, error } = await supabase.from('dq_sessions').insert({
     slug,
     name,
@@ -46,6 +48,7 @@ export async function createSession(name: string, ownerEmail?: string): Promise<
     context: '',
     status: 'draft',
     owner_email: ownerEmail || '',
+    created_by: userId,
     dq_scores: {},
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -53,7 +56,6 @@ export async function createSession(name: string, ownerEmail?: string): Promise<
 
   if (error) {
     console.error('[createSession] Supabase error:', error);
-    // Fallback to localStorage
     const { initializeEmptySession } = await import('@/lib/demoData');
     return initializeEmptySession(name);
   }
