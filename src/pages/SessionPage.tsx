@@ -15,6 +15,8 @@ import { QualitativeAssessment } from '@/components/modules/QualitativeAssessmen
 import { DQScorecard } from '@/components/modules/DQScorecard';
 import { StakeholderAlignment } from '@/components/modules/StakeholderAlignment';
 import { ExportReport } from '@/components/modules/ExportReport';
+import { DecisionLineage } from '@/components/modules/DecisionLineage';
+import { PostDecisionTracker } from '@/components/modules/PostDecisionTracker';
 import { InfluenceDiagram } from '@/components/modules/InfluenceDiagram';
 import { ScenarioPlanning } from '@/components/modules/ScenarioPlanning';
 import { ValueOfInformation } from '@/components/modules/ValueOfInformation';
