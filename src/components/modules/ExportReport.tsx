@@ -449,14 +449,7 @@ export function ExportReport({ sessionId, data }: ModuleProps) {
       .filter(s => s?.content?.toLowerCase().includes('recommend') || s?.content?.toLowerCase().includes('strategy'))
       .map(s => s.title + ': ' + (s.content || '').slice(0, 200));
     if (recommendations.length < 2) return;
-    const prompt = 'Review these report sections for internal contradictions. If any section recommends a different strategy than another, flag it.
-
-Sections:
-' + recommendations.join('
-
-') + '
-
-Return JSON: { hasContradiction: boolean, details: string }';
+    const prompt = 'Review these report sections for internal contradictions. If any section recommends a different strategy than another, flag it. Sections: ' + recommendations.join(' | ') + ' Return JSON: { hasContradiction: boolean, details: string }';
     try {
       const result = await dqCall(prompt, { module: 'export-report', dqElement: 'Reasoning', sessionData: data || {} });
       if (result?.data?.hasContradiction) {
