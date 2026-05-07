@@ -45,6 +45,7 @@ const DQ_PRINCIPLES: Record<string, string> = {
 
 export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState('raise');
   const [issues, setIssues] = useState<IssueItem[]>([]);
   const [newText, setNewText] = useState('');

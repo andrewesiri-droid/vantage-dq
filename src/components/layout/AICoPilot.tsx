@@ -106,7 +106,10 @@ export function AICoPilot({ module, sessionId, collapsed, onToggle, data }: Prop
   };
 
   if (collapsed) {
-    return (
+    const contradictions = detectCrossModuleContradictions(data || {});
+  const copilotQuestions = DQ_COPILOT_PROMPTS[activeModule as string] || [];
+
+  return (
       <div className="w-10 shrink-0 border-l flex flex-col items-center py-3 gap-3" style={{ background: DS.canvas, borderColor: DS.borderLight }}>
         <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Open AI Co-Pilot">
           <Bot size={18} style={{ color: '#7C3AED' }} />

@@ -35,6 +35,7 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
   const [screening, setScreening] = useState<any>(null);
   const [summary, setSummary] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'uncertainties'|'screening'|'summary'>('uncertainties');
   const [totalValue, setTotalValue] = useState(0);
@@ -265,6 +266,7 @@ VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||
       {/* Screening tab */}
       {activeTab === 'screening' && (
         <div className="space-y-3">
+          {dqResult?.trust && activeTab === 'screening' && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
           {!screening ? (
             <div className="text-center py-10 rounded-xl" style={{ background: DS.bg, border: `1px dashed ${DS.border}` }}>
               <Sparkles size={24} className="mx-auto mb-2" style={{ color: DS.information.fill }} />

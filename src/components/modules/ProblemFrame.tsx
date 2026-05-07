@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { toastAIError, toastSaved } from '@/lib/toast';
+import { useDQAI } from '@/hooks/useDQAI';
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -44,6 +46,7 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
   const [saving, setSaving] = useState(false);
   const [frameCheck, setFrameCheck] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [improvements, setImprovements] = useState<any[]>([]);
 
   useEffect(() => {

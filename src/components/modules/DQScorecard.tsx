@@ -15,6 +15,7 @@ const TABS = [
 
 export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState('scorecard');
   const [scores, setScores] = useState<Record<string, number>>({});
   const [narrative, setNarrative] = useState<any>(null);

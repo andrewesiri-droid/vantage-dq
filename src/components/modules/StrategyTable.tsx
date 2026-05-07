@@ -25,6 +25,7 @@ const DQ_PRINCIPLE = 'Good strategies are genuinely distinct. Each strategy shou
 
 export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [activeStratId, setActiveStratId] = useState<number | null>(null);
   const [overviewTab, setOverviewTab] = useState<string | null>(null);

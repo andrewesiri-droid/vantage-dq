@@ -28,6 +28,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [analysis, setAnalysis] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState<'list' | 'analysis'>('list');
 
   useEffect(() => {
