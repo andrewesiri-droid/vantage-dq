@@ -409,16 +409,12 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
                   sessionContext={{ decisionStatement: data?.session?.decisionStatement, sessionName: data?.session?.name }}
                   onDraftCreated={(item) => {
                     sync.submitNote(`[${item.category}] ${item.text}`, phase.id, false);
-                    // Push accepted item to session data
-                    if (hooks && sessionId) {
-                      const cat = item.category?.toLowerCase() || 'uncertainty-external';
-                      const issueCat = ['uncertainty-external','uncertainty-internal','stakeholder-concern','assumption','information-gap','opportunity','constraint','brutal-truth','regulatory-trap','second-order','black-swan','focus-decision'].includes(cat) ? cat : 'uncertainty-external';
-                      if (item.targetModule === 'issue-generation' || !item.targetModule) {
-                        hooks.createIssue?.({ sessionId, text: item.text, category: issueCat, severity: item.confidence === 'high' ? 'High' : 'Medium' });
-                      } else if (item.targetModule === 'stakeholder-alignment') {
-                        hooks.createStakeholder?.({ sessionId, name: item.speakerName || 'Unknown', role: item.text });
-                      }
-                    }
+                    // Push accepted item to session — store in localStorage for demo mode
+                    try {
+                      const stored = JSON.parse(localStorage.getItem('vantage_dq_scribe_items') || '[]');
+                      stored.push({ ...item, sessionId, acceptedAt: Date.now() });
+                      localStorage.setItem('vantage_dq_scribe_items', JSON.stringify(stored.slice(-100)));
+                    } catch(e) { console.error(e); }
                   }}
                   onClose={() => setScribeOpen(false)}
                 />
