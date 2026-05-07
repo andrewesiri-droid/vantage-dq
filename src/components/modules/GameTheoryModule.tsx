@@ -151,7 +151,6 @@ const PAYOFF_LABELS = ['Very Bad', 'Bad', 'Neutral', 'Good', 'Very Good'];
 
 // ── COMPONENT ─────────────────────────────────────────────────────────────────
 export function GameTheoryModule({ sessionId, data }: ModuleProps) {
-  const { call } = useAI();
   const [busy, setBusy] = useState(false);
 
   // Mode selection

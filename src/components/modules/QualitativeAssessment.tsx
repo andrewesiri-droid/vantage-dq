@@ -32,7 +32,6 @@ const DQ_PRINCIPLES: Record<string, string> = {
 };
 
 export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
-  const { call } = useAI();
   const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState('matrix');
   const [criteria, setCriteria] = useState<CritItem[]>([]);

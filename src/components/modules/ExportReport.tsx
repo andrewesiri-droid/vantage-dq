@@ -408,7 +408,6 @@ function scoreReportHealth(sections: ReportSection[], data: any): { score: numbe
 
 // ── COMPONENT ──────────────────────────────────────────────────────────────────
 export function ExportReport({ sessionId, data }: ModuleProps) {
-  const { call } = useAI();
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(1); // 1-7
   const [config, setConfig] = useState<ReportConfig>({

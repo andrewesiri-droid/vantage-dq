@@ -40,7 +40,6 @@ const DEFAULT: FrameData = {
 };
 
 export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
-  const { call } = useAI();
   const [activeTab, setActiveTab] = useState('context');
   const [fd, setFd] = useState<FrameData>(DEFAULT);
   const [saving, setSaving] = useState(false);

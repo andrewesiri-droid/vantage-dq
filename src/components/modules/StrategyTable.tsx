@@ -25,7 +25,6 @@ const OVERVIEW_TABS = [
 const DQ_PRINCIPLE = 'Good strategies are genuinely distinct. Each strategy should represent a coherent path — not a variation of the same idea. If two strategies make the same choices on most Focus Decisions, they are the same strategy.';
 
 export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
-  const { call } = useAI();
   const [busy, setBusy] = useState(false);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [activeStratId, setActiveStratId] = useState<number | null>(null);

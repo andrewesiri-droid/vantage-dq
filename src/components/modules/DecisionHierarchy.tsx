@@ -27,7 +27,6 @@ const DQ_PRINCIPLES: Record<string, string> = {
 };
 
 export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
-  const { call } = useAI();
   const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState('hierarchy');
   const [decisions, setDecisions] = useState<DecisionItem[]>([]);
