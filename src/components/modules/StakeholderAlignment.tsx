@@ -57,7 +57,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
   const aiGenerate = async () => {
     const existing = stakeholders.map(s => s.name).join(', ');
     const prompt = `You are an elite DQ facilitator.
-${STAKEHOLDER_DEFS}
+' + STAKEHOLDER_DEFS + `
 
 Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisionStatement || ''}\nContext: ${(data?.session?.context || '').slice(0, 200)}\nExisting: ${existing}\n\nReturn JSON: { stakeholders: [{name, role, influence: 0-100, interest: 0-100, alignment (champion/supportive/neutral/cautious/concerned/opposed), concerns, engagementAction}] }`;
     setBusy(true);

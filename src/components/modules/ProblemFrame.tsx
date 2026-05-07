@@ -100,7 +100,7 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
 
   const runFrameCheck = async () => {
     const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
-${PROBLEM_FRAME_DEFS}
+' + PROBLEM_FRAME_DEFS + `
 
 DQ FRAME CHECK — Return ONLY valid JSON, no other text.
 Decision: "${fd.decisionStatement}"

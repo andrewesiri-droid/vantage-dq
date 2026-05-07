@@ -85,7 +85,7 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
     const s = data?.session || {};
     const existing = issues.slice(0, 8).map(i => i.text).join('; ');
     const prompt = `You are an elite DQ facilitator.
-${ISSUE_DEFS}
+' + ISSUE_DEFS + `
 
 Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionStatement || ''}"\nContext: ${(s.context || '').slice(0, 250)}\nConstraints: ${s.constraints || ''}\nExisting issues (do not duplicate): ${existing}\n\nReturn JSON: { issues: [{text, category (from: uncertainty-external, uncertainty-internal, stakeholder-concern, assumption, information-gap, opportunity, constraint, brutal-truth, regulatory-trap, second-order, black-swan, focus-decision), severity (Critical/High/Medium/Low), owner, description}] }`;
     setBusy(true);

@@ -78,7 +78,7 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
     const critList = criteria.map((c, i) => `${i+1}. ${c.label} [${c.weight}] — ${c.description || c.type}`).join('\n');
     const stratList = strategies.map((s, i) => `${i+1}. ${s.name}: ${s.description || ''}`).join('\n');
     const prompt = `You are an elite DQ facilitator.
-${ASSESSMENT_DEFS}
+' + ASSESSMENT_DEFS + `
 
 Score these strategies on each criterion for this decision.\nDecision: "${data?.session?.decisionStatement || ''}"\n\nCriteria:\n${critList}\n\nStrategies:\n${stratList}\n\nReturn JSON: { scores: [{strategyIndex: 1-based, criterionIndex: 1-based, score: 1-5, rationale: string}] }`;
     setBusy(true);
