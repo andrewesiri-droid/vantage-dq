@@ -1,310 +1,405 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
-import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Sparkles, Plus, Trash2, Lightbulb, ChevronRight } from 'lucide-react';
+import { Sparkles, Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
 
 interface Uncertainty { id: number; label: string; type: string; impact: string; description: string; }
-interface Scenario { id: number; name: string; description: string; probability: number; assumptions: string; earlyWarning: string; color: string; pos?: string; }
+interface Scenario { id: number; name: string; description: string; probability: number; assumptions: string; earlyWarning: string; color: string; strategyImplications: string; }
 
-const TABS = [
-  { id: 'uncertainties', num: '1', label: 'Uncertainties' },
-  { id: 'axes', num: '2a', label: 'Select Axes' },
-  { id: 'multiscenario', num: '2b', label: 'Multi-Scenario' },
-  { id: 'scenarios', num: '3', label: 'Scenarios' },
-  { id: 'test', num: '4', label: 'Test Strategies' },
-  { id: 'robustness', num: '5', label: 'Robustness' },
-];
-
-const SCENARIO_COLORS = ['#7C3AED','#2563EB','#0D9488','#D97706','#DC2626','#0891B2'];
+const SCENARIO_COLORS = ['#7C3AED','#2563EB','#0D9488','#D97706','#DC2626','#0891B2','#7F1D1D','#065F46'];
 const UNC_TYPES = ['Market','Regulatory','Technical','Financial','Competitive','Operational','Political','Environmental'];
+const IMPACT_ORDER = ['Critical','High','Medium','Low'];
+
+function impactColor(impact: string) {
+  return impact === 'Critical' ? DS.danger : impact === 'High' ? DS.warning : impact === 'Medium' ? DS.information.fill : DS.inkDis;
+}
 
 export function ScenarioPlanning({ sessionId, data, hooks }: ModuleProps) {
-  const { call, busy } = useAI();
-  const [activeTab, setActiveTab] = useState('uncertainties');
   const [uncertainties, setUncertainties] = useState<Uncertainty[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
-  const [axes, setAxes] = useState<any>(null);
   const [newUncLabel, setNewUncLabel] = useState('');
   const [stressResult, setStressResult] = useState<any>(null);
-  const [robustness, setRobustness] = useState<any>(null);
+  const [axisInsight, setAxisInsight] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [expandedUncId, setExpandedUncId] = useState<number | null>(null);
+  const [expandedScenId, setExpandedScenId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'uncertainties'|'scenarios'|'stress'>('uncertainties');
 
   useEffect(() => {
     if (data?.uncertainties?.length) {
-      setUncertainties(data.uncertainties.map((u:any)=>({ id:u.id, label:u.label, type:u.type||'Market', impact:u.impact||'High', description:u.description||'' })));
+      setUncertainties(data.uncertainties.map((u: any) => ({ id: u.id, label: u.label, type: u.type || 'Market', impact: u.impact || 'High', description: u.description || '' })));
     }
     if (data?.scenarios?.length) {
-      setScenarios(data.scenarios.map((s:any,i:number)=>({ id:s.id, name:s.name, description:s.description||'', probability:s.probability||0.25, assumptions:'', earlyWarning:'', color:s.color||SCENARIO_COLORS[i%SCENARIO_COLORS.length], pos:s.pos||'' })));
+      setScenarios(data.scenarios.map((s: any, i: number) => ({ id: s.id, name: s.name, description: s.description || '', probability: s.probability || 0.25, assumptions: '', earlyWarning: '', color: s.color || SCENARIO_COLORS[i % SCENARIO_COLORS.length], strategyImplications: '' })));
     }
   }, [data?.uncertainties, data?.scenarios]);
 
   const addUnc = () => {
     if (!newUncLabel.trim()) return;
-    const n:Uncertainty = { id:Date.now(), label:newUncLabel.trim(), type:'Market', impact:'High', description:'' };
-    setUncertainties(p=>[...p,n]);
-    hooks?.createUncertainty?.({ sessionId, label:newUncLabel.trim(), type:'Market', impact:'High' });
+    const n: Uncertainty = { id: Date.now(), label: newUncLabel.trim(), type: 'Market', impact: 'High', description: '' };
+    setUncertainties(p => [...p, n]);
+    hooks?.createUncertainty?.({ sessionId, label: newUncLabel.trim(), type: 'Market', impact: 'High' });
     setNewUncLabel('');
   };
-  const removeUnc = (id:number) => { setUncertainties(p=>p.filter(u=>u.id!==id)); hooks?.deleteUncertainty?.({ id }); };
+  const removeUnc = (id: number) => { setUncertainties(p => p.filter(u => u.id !== id)); hooks?.deleteUncertainty?.({ id }); };
+  const updateUnc = (id: number, field: string, val: string) => setUncertainties(p => p.map(u => u.id === id ? { ...u, [field]: val } : u));
+  const updateScen = (id: number, field: string, val: any) => setScenarios(p => p.map(s => s.id === id ? { ...s, [field]: val } : s));
 
-  const aiGenerateUnc = () => {
-    const prompt = `Identify the 6-8 most important external uncertainties for this decision.\nDecision: ${data?.session?.decisionStatement||''}\nContext: ${(data?.session?.context||'').slice(0,200)}\nIssues: ${(data?.issues||[]).filter((i:any)=>i.category==='uncertainty-external').map((i:any)=>i.text).slice(0,5).join('; ')}\n\nReturn JSON: { uncertainties: [{label, type (Market/Regulatory/Technical/Financial/Competitive/Operational), impact (Critical/High/Medium), description}] }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
-      const newUncs = (result?.uncertainties||[]).map((u:any,i:number)=>({ id:Date.now()+i, label:u.label||'', type:u.type||'Market', impact:u.impact||'High', description:u.description||'' }));
-      setUncertainties(p=>[...p,...newUncs]);
-    });
-  };
-
-  const aiGenerateScenarios = () => {
-    const uncList = uncertainties.map(u=>`${u.label} [${u.type}, ${u.impact}]`).join(', ');
-    const prompt = `Build a 2x2 scenario matrix from these uncertainties.\nDecision: ${data?.session?.decisionStatement||''}\nUncertainties: ${uncList}\n\nReturn JSON: { axis1: {label, low, high}, axis2: {label, low, high}, scenarios: [{pos: TL|TR|BL|BR, name, narrative, probability: 0-1, assumptions, earlyWarningIndicators}], insight: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
-      if (result?.axis1) setAxes({ axis1: result.axis1, axis2: result.axis2, insight: result.insight });
-      if (result?.scenarios?.length) {
-        const newScens: Scenario[] = result.scenarios.map((s:any,i:number)=>({ id:Date.now()+i, name:s.name||`Scenario ${i+1}`, description:s.narrative||'', probability:Math.min(1,Math.max(0,Number(s.probability)||0.25)), assumptions:s.assumptions||'', earlyWarning:s.earlyWarningIndicators||'', color:SCENARIO_COLORS[i%SCENARIO_COLORS.length], pos:s.pos||'' }));
-        setScenarios(newScens);
-        setActiveTab('scenarios');
+  const aiGenerateUnc = async () => {
+    const prompt = `Identify 6-8 key external uncertainties for this decision.\nDecision: ${data?.session?.decisionStatement || ''}\nContext: ${(data?.session?.context || '').slice(0, 250)}\nExisting issues: ${(data?.issues || []).slice(0, 5).map((i: any) => i.text).join('; ')}\n\nReturn JSON: { uncertainties: [{label, type: Market|Regulatory|Technical|Financial|Competitive|Operational, impact: Critical|High|Medium, description}] }`;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'scenario' }) });
+      const d = await res.json();
+      const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const result = JSON.parse(match[0]);
+        const newUncs = (result.uncertainties || []).map((u: any, i: number) => ({ id: Date.now() + i, label: u.label || '', type: u.type || 'Market', impact: u.impact || 'High', description: u.description || '' }));
+        setUncertainties(p => [...p, ...newUncs]);
       }
-    });
+    } catch(e) { console.error(e); } finally { setBusy(false); }
   };
 
-  const aiStressTest = () => {
-    const stratList = (data?.strategies||[]).map((s:any)=>s.name).join(', ');
-    const scenList = scenarios.map(s=>`${s.pos||s.name}: ${s.description.slice(0,80)}`).join('; ');
-    const prompt = `Stress test strategies across scenarios.\nStrategies: ${stratList}\nScenarios: ${scenList}\n\nReturn JSON: { profiles: [{name, robustness: robust|conditional|fragile, winsIn: [scenario names], failsIn: [scenario names], failureCondition: string}], mostRobust: string, insight: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
-      if (result && !result.error) { setStressResult(result); setActiveTab('test'); }
-    });
+  const aiGenerateScenarios = async () => {
+    const uncList = uncertainties.map(u => `- ${u.label} [${u.type}, impact: ${u.impact}]${u.description ? ': ' + u.description : ''}`).join('\n');
+    const prompt = `You are a scenario planning expert using the GBN/Shell methodology.
+
+Decision: ${data?.session?.decisionStatement || ''}
+Context: ${(data?.session?.context || '').slice(0, 300)}
+
+Uncertainties identified (${uncertainties.length} total):
+${uncList}
+
+INSTRUCTIONS:
+1. From all uncertainties, select the 2 MOST decision-critical as scenario axes (highest impact + most uncertain)
+2. Generate 4 distinct named scenarios that span the realistic possibility space
+3. If there are more than 2 high-impact uncertainties, incorporate them as secondary drivers within each scenario narrative
+4. Each scenario must be internally consistent and plausible
+5. Scenarios should challenge the preferred strategy, not just validate it
+6. Assign probabilities that sum to 1.0
+
+Return JSON: {
+  axisInsight: "Why these 2 axes were chosen and what other uncertainties they subsume",
+  keyAxis1: "label of most critical uncertainty",
+  keyAxis2: "label of second most critical uncertainty",  
+  scenarios: [{
+    name: "evocative 2-3 word name",
+    description: "2-3 sentence narrative of this world",
+    probability: 0.0-1.0,
+    assumptions: "key conditions that make this scenario real",
+    earlyWarning: "what signals would tell us this scenario is emerging",
+    strategyImplications: "which strategies win/lose in this scenario and why"
+  }]
+}`;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'scenario' }) });
+      const d = await res.json();
+      const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const result = JSON.parse(match[0]);
+        if (result.axisInsight) setAxisInsight(result.axisInsight);
+        if (result.scenarios?.length) {
+          const newScens: Scenario[] = result.scenarios.map((s: any, i: number) => ({
+            id: Date.now() + i, name: s.name || `Scenario ${i + 1}`,
+            description: s.description || '', probability: Math.min(1, Math.max(0, Number(s.probability) || 0.25)),
+            assumptions: s.assumptions || '', earlyWarning: s.earlyWarning || '',
+            color: SCENARIO_COLORS[i % SCENARIO_COLORS.length],
+            strategyImplications: s.strategyImplications || '',
+          }));
+          setScenarios(newScens);
+          setActiveTab('scenarios');
+        }
+      }
+    } catch(e) { console.error(e); } finally { setBusy(false); }
   };
 
-  const aiRobustness = () => {
-    const prompt = `Analyse strategy robustness across all scenarios.\nStrategies: ${(data?.strategies||[]).map((s:any)=>s.name+': '+(s.rationale||'')).join('; ')}\nScenarios: ${scenarios.map(s=>s.name+': '+s.description.slice(0,60)).join('; ')}\n\nReturn JSON: { robustnessMatrix: [{strategy, scores: [{scenario, score: 1-5, note}]}], winner: string, insight: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
-      if (result && !result.error) { setRobustness(result); setActiveTab('robustness'); }
-    });
+  const aiStressTest = async () => {
+    const stratList = (data?.strategies || []).map((s: any) => `${s.name}: ${s.rationale || ''}`).join('\n');
+    const scenList = scenarios.map(s => `${s.name}: ${s.description}`).join('\n');
+    const prompt = `Stress test each strategy across all scenarios.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies:\n${stratList}\nScenarios:\n${scenList}\n\nReturn JSON: { profiles: [{name, robustness: robust|conditional|fragile, winsIn: [scenario names], failsIn: [scenario names], failureCondition: string, recommendation: string}], mostRobust: string, insight: string, regretMatrix: string }`;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'scenario' }) });
+      const d = await res.json();
+      const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) { setStressResult(JSON.parse(match[0])); setActiveTab('stress'); }
+    } catch(e) { console.error(e); } finally { setBusy(false); }
   };
 
-  const totalProb = scenarios.reduce((a,s)=>a+s.probability,0);
-  const POS_LABELS: Record<string,{top:string;left:string}> = { TL:{top:'10%',left:'5%'}, TR:{top:'10%',left:'55%'}, BL:{top:'55%',left:'5%'}, BR:{top:'55%',left:'55%'} };
+  const totalProb = scenarios.reduce((a, s) => a + s.probability, 0);
+  const sortedUnc = [...uncertainties].sort((a, b) => IMPACT_ORDER.indexOf(a.impact) - IMPACT_ORDER.indexOf(b.impact));
 
   return (
-    <div className="space-y-0">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-start gap-3 mb-4 flex-wrap">
-        <div className="flex-1">
-          <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 05</div>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 10</div>
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Scenario Planning</h2>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={addUnc} disabled={!newUncLabel.trim()}>
-            <Plus size={11} /> Add Uncertainty
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiGenerateUnc} disabled={busy}>
+            <Sparkles size={11} /> {busy ? 'Generating…' : 'AI Generate Uncertainties'}
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.reasoning.fill }} onClick={aiGenerateScenarios} disabled={busy||!uncertainties.length}>
-            <Sparkles size={11} /> AI Generate
+          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.reasoning.fill }} onClick={aiGenerateScenarios} disabled={busy || uncertainties.length < 2}>
+            <Sparkles size={11} /> {busy ? 'Building…' : 'AI Build Scenarios'}
           </Button>
         </div>
       </div>
 
+      {/* Summary stats */}
+      {(uncertainties.length > 0 || scenarios.length > 0) && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl p-3 text-center" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
+            <div className="text-lg font-black" style={{ color: DS.ink }}>{uncertainties.length}</div>
+            <div className="text-[9px] font-bold uppercase" style={{ color: DS.inkDis }}>Uncertainties</div>
+          </div>
+          <div className="rounded-xl p-3 text-center" style={{ background: DS.reasoning.soft, border: `1px solid ${DS.reasoning.line}` }}>
+            <div className="text-lg font-black" style={{ color: DS.reasoning.fill }}>{scenarios.length}</div>
+            <div className="text-[9px] font-bold uppercase" style={{ color: DS.reasoning.fill }}>Scenarios</div>
+          </div>
+          <div className="rounded-xl p-3 text-center" style={{ background: Math.abs(totalProb - 1) < 0.05 ? DS.successSoft : DS.warnSoft, border: `1px solid ${Math.abs(totalProb - 1) < 0.05 ? DS.success : DS.warning}40` }}>
+            <div className="text-lg font-black" style={{ color: Math.abs(totalProb - 1) < 0.05 ? DS.success : DS.warning }}>{Math.round(totalProb * 100)}%</div>
+            <div className="text-[9px] font-bold uppercase" style={{ color: DS.inkDis }}>Probability</div>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="flex border-b mb-5 overflow-x-auto" style={{ borderColor: DS.borderLight }}>
-        {TABS.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className="flex items-center gap-1 px-3 py-2.5 text-xs font-medium transition-colors shrink-0"
-            style={{ color: activeTab===tab.id ? DS.reasoning.fill : DS.inkTer, borderBottom: activeTab===tab.id ? `2px solid ${DS.reasoning.fill}` : '2px solid transparent', marginBottom: -1 }}>
-            <span className="text-[8px] opacity-60">{tab.num}.</span> {tab.label}
+      <div className="flex border-b" style={{ borderColor: DS.borderLight }}>
+        {[
+          { id: 'uncertainties', label: `Uncertainties (${uncertainties.length})` },
+          { id: 'scenarios', label: `Scenarios (${scenarios.length})` },
+          { id: 'stress', label: 'Strategy Stress Test' },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
+            className="px-4 py-2.5 text-xs font-medium transition-colors"
+            style={{ color: activeTab === tab.id ? DS.reasoning.fill : DS.inkTer, borderBottom: activeTab === tab.id ? `2px solid ${DS.reasoning.fill}` : '2px solid transparent', marginBottom: -1 }}>
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* === UNCERTAINTIES === */}
+      {/* UNCERTAINTIES TAB */}
       {activeTab === 'uncertainties' && (
-        <div className="space-y-4">
-          <div>
-            <p className="text-xs mb-3" style={{ color: DS.inkSub }}>Identify the key <strong>external uncertainties</strong> that could affect this decision. These must be things outside management control — not decisions, risks, or constraints. AI will suggest which two are most decision-relevant for building your 2×2 scenario matrix.</p>
-          </div>
+        <div className="space-y-3">
+          <p className="text-xs" style={{ color: DS.inkSub }}>
+            Identify all key external uncertainties — things outside your control that could significantly affect the decision outcome. Add as many as relevant. AI will select the most decision-critical ones as scenario axes.
+          </p>
 
-          {/* Add row */}
-          <div className="flex gap-2 p-3 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
-            <Input value={newUncLabel} onChange={e=>setNewUncLabel(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addUnc()}
-              placeholder="Uncertainty label…" className="flex-1 text-xs h-8 bg-white" />
-            <Button size="sm" className="h-8 px-3 gap-1 text-xs shrink-0" style={{ background: DS.reasoning.fill }} onClick={addUnc} disabled={!newUncLabel.trim()}>
+          <div className="flex gap-2">
+            <Input value={newUncLabel} onChange={e => setNewUncLabel(e.target.value)} onKeyDown={e => e.key === 'Enter' && addUnc()} placeholder="Add uncertainty…" className="flex-1 text-xs h-8" />
+            <Button size="sm" className="h-8 gap-1 text-xs shrink-0" style={{ background: DS.reasoning.fill }} onClick={addUnc} disabled={!newUncLabel.trim()}>
               <Plus size={12} /> Add
             </Button>
           </div>
 
-          {uncertainties.length === 0 ? (
-            <div className="rounded-xl border-2 border-dashed flex flex-col items-center justify-center py-14" style={{ borderColor: DS.borderLight }}>
-              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-3" style={{ background: DS.bg }}>
-                <Lightbulb size={20} style={{ color: DS.inkDis }} />
-              </div>
-              <p className="text-sm font-medium mb-1" style={{ color: DS.inkSub }}>No uncertainties yet</p>
-              <p className="text-xs mb-4" style={{ color: DS.inkDis }}>Click <strong>AI Generate</strong> to identify key uncertainties from your decision context, or add them manually.</p>
+          {uncertainties.length === 0 && (
+            <div className="text-center py-10 rounded-xl" style={{ background: DS.bg, border: `1px dashed ${DS.border}` }}>
+              <TrendingUp size={24} className="mx-auto mb-2" style={{ color: DS.inkDis }} />
+              <p className="text-xs mb-3" style={{ color: DS.inkDis }}>No uncertainties yet — add manually or use AI</p>
               <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={aiGenerateUnc} disabled={busy}>
-                <Sparkles size={11} /> AI Generate
+                <Sparkles size={11} /> AI Generate Uncertainties
               </Button>
-              <button className="mt-2 text-xs" style={{ color: DS.inkDis }} onClick={addUnc}>+ Add Manually</button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {uncertainties.map(u => (
-                <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl group" style={{ background: DS.canvas, border: `1px solid ${DS.borderLight}` }}>
-                  <div className="flex-1">
-                    <div className="text-xs font-medium" style={{ color: DS.ink }}>{u.label}</div>
-                    {u.description && <p className="text-[10px] mt-0.5" style={{ color: DS.inkDis }}>{u.description}</p>}
-                  </div>
-                  <Badge style={{ background: DS.bg, color: DS.inkSub, border: `1px solid ${DS.border}`, fontSize:8 }}>{u.type}</Badge>
-                  <Badge style={{ background: u.impact==='Critical'?DS.dangerSoft:u.impact==='High'?DS.warnSoft:DS.bg, color: u.impact==='Critical'?DS.danger:u.impact==='High'?DS.warning:DS.inkDis, border:'none', fontSize:8 }}>{u.impact}</Badge>
-                  <button onClick={()=>removeUnc(u.id)} className="opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={11} style={{ color: DS.inkDis }} /></button>
-                </div>
-              ))}
             </div>
           )}
 
-          {uncertainties.length > 0 && (
-            <Button className="gap-1.5" style={{ background: DS.reasoning.fill }} onClick={aiGenerateScenarios} disabled={busy}>
-              <Sparkles size={14} /> Generate 2×2 Scenarios from These Uncertainties
+          {sortedUnc.map(u => {
+            const isExpanded = expandedUncId === u.id;
+            const ic = impactColor(u.impact);
+            return (
+              <div key={u.id} className="rounded-xl border overflow-hidden" style={{ borderColor: isExpanded ? ic + '60' : DS.borderLight }}>
+                <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" style={{ background: DS.canvas }} onClick={() => setExpandedUncId(isExpanded ? null : u.id)}>
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: ic }} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium" style={{ color: DS.ink }}>{u.label}</span>
+                    {u.description && !isExpanded && <p className="text-[10px] truncate" style={{ color: DS.inkDis }}>{u.description}</p>}
+                  </div>
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ background: ic + '15', color: ic }}>{u.impact}</span>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full shrink-0" style={{ background: DS.bg, color: DS.inkDis }}>{u.type}</span>
+                  <button onClick={e => { e.stopPropagation(); removeUnc(u.id); }}><Trash2 size={11} style={{ color: DS.inkDis }} /></button>
+                  {isExpanded ? <ChevronUp size={13} style={{ color: DS.inkDis }} /> : <ChevronDown size={13} style={{ color: DS.inkDis }} />}
+                </div>
+                {isExpanded && (
+                  <div className="px-4 pb-3 pt-2 space-y-3 border-t" style={{ borderColor: DS.borderLight }}>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>TYPE</div>
+                        <div className="flex flex-wrap gap-1">
+                          {UNC_TYPES.map(t => (
+                            <button key={t} onClick={() => updateUnc(u.id, 'type', t)} className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: u.type === t ? DS.reasoning.fill : DS.bg, color: u.type === t ? '#fff' : DS.inkDis }}>
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>IMPACT</div>
+                        <div className="flex gap-1">
+                          {['Critical','High','Medium','Low'].map(v => (
+                            <button key={v} onClick={() => updateUnc(u.id, 'impact', v)} className="flex-1 py-1 text-[9px] font-bold rounded-lg" style={{ background: u.impact === v ? impactColor(v) : DS.bg, color: u.impact === v ? '#fff' : DS.inkDis }}>
+                              {v}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>DESCRIPTION</div>
+                      <textarea value={u.description} onChange={e => updateUnc(u.id, 'description', e.target.value)} rows={2} placeholder="Why is this uncertain and what's the range of outcomes?" className="w-full text-xs p-2 rounded-lg border resize-none bg-white" style={{ borderColor: DS.borderLight }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {uncertainties.length >= 2 && (
+            <Button className="gap-1.5 w-full" style={{ background: DS.reasoning.fill }} onClick={aiGenerateScenarios} disabled={busy}>
+              <Sparkles size={14} /> {busy ? 'Building scenarios…' : `AI Build Scenarios from ${uncertainties.length} Uncertainties`}
             </Button>
           )}
         </div>
       )}
 
-      {/* === SCENARIOS === */}
+      {/* SCENARIOS TAB */}
       {activeTab === 'scenarios' && (
-        <div className="space-y-4">
-          {/* Axes */}
-          {axes && (
-            <div className="p-3 rounded-xl" style={{ background: DS.reasoning.soft, border: `1px solid ${DS.reasoning.line}` }}>
-              <div className="grid grid-cols-2 gap-4">
-                <div><div className="text-[9px] font-bold uppercase mb-0.5" style={{ color: DS.reasoning.fill }}>AXIS 1: {axes.axis1.label}</div><div className="text-[10px]" style={{ color: DS.inkSub }}>Low: {axes.axis1.low} · High: {axes.axis1.high}</div></div>
-                <div><div className="text-[9px] font-bold uppercase mb-0.5" style={{ color: DS.reasoning.fill }}>AXIS 2: {axes.axis2.label}</div><div className="text-[10px]" style={{ color: DS.inkSub }}>Low: {axes.axis2.low} · High: {axes.axis2.high}</div></div>
-              </div>
-              {axes.insight && <p className="text-[10px] mt-2 italic" style={{ color: DS.inkSub }}>{axes.insight}</p>}
+        <div className="space-y-3">
+          {axisInsight && (
+            <div className="rounded-xl p-3" style={{ background: DS.reasoning.soft, border: `1px solid ${DS.reasoning.line}` }}>
+              <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.reasoning.fill }}>AXIS SELECTION RATIONALE</div>
+              <p className="text-xs" style={{ color: DS.inkSub }}>{axisInsight}</p>
             </div>
           )}
 
-          {/* 2x2 visual */}
-          {scenarios.length >= 2 && (
-            <div className="relative rounded-xl border overflow-hidden" style={{ borderColor: DS.borderLight, height: 240, background: '#F7F8FA' }}>
-              <div className="absolute top-1/2 left-0 right-0 h-px" style={{ background: DS.borderLight }} />
-              <div className="absolute top-0 bottom-0 left-1/2 w-px" style={{ background: DS.borderLight }} />
-              {scenarios.map(s => {
-                const pos = POS_LABELS[s.pos||'TL'] || POS_LABELS.TL;
-                return (
-                  <div key={s.id} className="absolute w-[44%] h-[44%] p-2 flex flex-col" style={{ top: pos.top, left: pos.left }}>
-                    <div className="flex items-center gap-1.5 mb-1"><div className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} /><span className="text-[10px] font-bold" style={{ color: DS.ink }}>{s.name}</span></div>
-                    <p className="text-[9px] leading-relaxed flex-1 overflow-hidden" style={{ color: DS.inkSub }}>{s.description.slice(0,80)}</p>
-                    <div className="text-[9px] font-bold" style={{ color: s.color }}>{Math.round(s.probability*100)}%</div>
-                  </div>
-                );
-              })}
-              {axes && <><div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 text-[8px] font-bold" style={{ color: DS.inkDis }}>{axes.axis1.label} →</div>
-              <div className="absolute left-1 top-1/3 text-[8px] font-bold" style={{ color: DS.inkDis, writingMode:'vertical-rl' as const, transform:'rotate(180deg)' }}>↑ {axes.axis2?.label}</div></>}
+          {scenarios.length === 0 && (
+            <div className="text-center py-10 rounded-xl" style={{ background: DS.bg, border: `1px dashed ${DS.border}` }}>
+              <p className="text-xs mb-3" style={{ color: DS.inkDis }}>No scenarios yet — add uncertainties first then build scenarios</p>
+              <Button size="sm" className="gap-1.5 text-xs" style={{ background: DS.reasoning.fill }} onClick={aiGenerateScenarios} disabled={busy || uncertainties.length < 2}>
+                <Sparkles size={11} /> AI Build Scenarios
+              </Button>
             </div>
           )}
 
-          {/* Scenario cards */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            {scenarios.map(s => (
-              <div key={s.id} className="rounded-xl overflow-hidden border" style={{ borderColor: DS.borderLight }}>
+          {/* Probability check */}
+          {scenarios.length > 0 && Math.abs(totalProb - 1) > 0.05 && (
+            <div className="text-xs px-3 py-2 rounded-lg flex items-center gap-2" style={{ background: DS.warnSoft, color: DS.warning }}>
+              <AlertTriangle size={12} /> Probabilities sum to {Math.round(totalProb * 100)}% — should total 100%
+            </div>
+          )}
+          {scenarios.length > 0 && Math.abs(totalProb - 1) <= 0.05 && (
+            <div className="text-xs px-3 py-2 rounded-lg flex items-center gap-2" style={{ background: DS.successSoft, color: DS.success }}>
+              <CheckCircle size={12} /> Probabilities sum to 100% ✓
+            </div>
+          )}
+
+          {scenarios.map(s => {
+            const isExpanded = expandedScenId === s.id;
+            return (
+              <div key={s.id} className="rounded-xl border overflow-hidden" style={{ borderColor: isExpanded ? s.color + '60' : DS.borderLight }}>
                 <div className="h-1" style={{ background: s.color }} />
-                <div className="p-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ background: s.color }} />
-                    <span className="text-xs font-bold" style={{ color: DS.ink }}>{s.name}</span>
-                    <span className="text-[10px] font-bold ml-auto" style={{ color: s.color }}>{Math.round(s.probability*100)}%</span>
+                <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" style={{ background: DS.canvas }} onClick={() => setExpandedScenId(isExpanded ? null : s.id)}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black text-white shrink-0" style={{ background: s.color }}>
+                    {Math.round(s.probability * 100)}%
                   </div>
-                  <Textarea value={s.description} onChange={e=>setScenarios(p=>p.map(sc=>sc.id===s.id?{...sc,description:e.target.value}:sc))} rows={2} className="text-[10px] resize-none" placeholder="Describe this scenario…" />
-                  {s.earlyWarning && <p className="text-[9px]" style={{ color: DS.inkDis }}>📡 {s.earlyWarning}</p>}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold" style={{ color: DS.ink }}>{s.name}</div>
+                    {!isExpanded && <p className="text-[10px] truncate" style={{ color: DS.inkDis }}>{s.description}</p>}
+                  </div>
+                  {isExpanded ? <ChevronUp size={13} style={{ color: DS.inkDis }} /> : <ChevronDown size={13} style={{ color: DS.inkDis }} />}
                 </div>
+
+                {isExpanded && (
+                  <div className="px-4 pb-4 pt-2 space-y-3 border-t" style={{ borderColor: DS.borderLight }}>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>PROBABILITY</div>
+                      <div className="flex items-center gap-3">
+                        <input type="range" min="0" max="1" step="0.05" value={s.probability} onChange={e => updateScen(s.id, 'probability', Number(e.target.value))} className="flex-1" style={{ accentColor: s.color }} />
+                        <span className="text-sm font-black w-10 text-right" style={{ color: s.color }}>{Math.round(s.probability * 100)}%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>NARRATIVE</div>
+                      <textarea value={s.description} onChange={e => updateScen(s.id, 'description', e.target.value)} rows={3} placeholder="Describe this scenario…" className="w-full text-xs p-2 rounded-lg border resize-none bg-white" style={{ borderColor: DS.borderLight }} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>KEY ASSUMPTIONS</div>
+                        <textarea value={s.assumptions} onChange={e => updateScen(s.id, 'assumptions', e.target.value)} rows={2} placeholder="What must be true for this scenario?" className="w-full text-xs p-2 rounded-lg border resize-none bg-white" style={{ borderColor: DS.borderLight }} />
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>EARLY WARNING SIGNALS</div>
+                        <textarea value={s.earlyWarning} onChange={e => updateScen(s.id, 'earlyWarning', e.target.value)} rows={2} placeholder="What signals indicate this is emerging?" className="w-full text-xs p-2 rounded-lg border resize-none bg-white" style={{ borderColor: DS.borderLight }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>STRATEGY IMPLICATIONS</div>
+                      <textarea value={s.strategyImplications} onChange={e => updateScen(s.id, 'strategyImplications', e.target.value)} rows={2} placeholder="Which strategies win/lose in this scenario?" className="w-full text-xs p-2 rounded-lg border resize-none bg-white" style={{ borderColor: DS.borderLight }} />
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-          {Math.abs(totalProb-1)>0.05 && scenarios.length>0 && (
-            <div className="text-[10px] px-3 py-2 rounded-lg" style={{ background: DS.warnSoft, color: DS.warning }}>⚠ Probabilities sum to {Math.round(totalProb*100)}% — should total 100%</div>
+            );
+          })}
+
+          {scenarios.length > 0 && (
+            <Button className="gap-1.5 w-full" style={{ background: DS.reasoning.fill }} onClick={aiStressTest} disabled={busy || !data?.strategies?.length}>
+              <Sparkles size={14} /> {busy ? 'Testing…' : 'Stress Test Strategies Against These Scenarios'}
+            </Button>
           )}
-          <Button className="gap-1.5 text-xs" style={{ background: DS.reasoning.fill }} onClick={aiStressTest} disabled={busy||!scenarios.length}>
-            <Sparkles size={12} /> Test Strategies Against These Scenarios
-          </Button>
         </div>
       )}
 
-      {/* === TEST STRATEGIES === */}
-      {activeTab === 'test' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs" style={{ color: DS.inkSub }}>Which strategy performs best across all scenarios?</p>
-            <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.reasoning.fill }} onClick={aiStressTest} disabled={busy}>
-              <Sparkles size={11} /> {busy?'Testing…':'Run Stress Test'}
-            </Button>
-          </div>
+      {/* STRESS TEST TAB */}
+      {activeTab === 'stress' && (
+        <div className="space-y-3">
           {!stressResult ? (
-            <div className="text-center py-12 rounded-xl" style={{ background: DS.bg }}>
-              <p className="text-xs" style={{ color: DS.inkDis }}>Run the stress test to see which strategy is most robust</p>
+            <div className="text-center py-10 rounded-xl" style={{ background: DS.bg, border: `1px dashed ${DS.border}` }}>
+              <p className="text-xs mb-3" style={{ color: DS.inkDis }}>Test how each strategy performs across all scenarios</p>
+              <Button size="sm" className="gap-1.5 text-xs" style={{ background: DS.reasoning.fill }} onClick={aiStressTest} disabled={busy || !scenarios.length || !data?.strategies?.length}>
+                <Sparkles size={11} /> Run Stress Test
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
-              {stressResult.mostRobust && <div className="p-3 rounded-xl" style={{ background: DS.accentSoft, border:`1px solid ${DS.accent}30` }}>
-                <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.accent }}>MOST ROBUST</div>
-                <p className="text-xs font-semibold" style={{ color: DS.ink }}>{stressResult.mostRobust}</p>
-                {stressResult.insight && <p className="text-[10px] mt-1" style={{ color: DS.inkSub }}>{stressResult.insight}</p>}
-              </div>}
-              {(stressResult.profiles||[]).map((p:any,i:number)=>(
-                <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: DS.canvas, border:`1px solid ${DS.borderLight}` }}>
-                  <Badge style={{ background: p.robustness==='robust'?DS.successSoft:p.robustness==='conditional'?DS.warnSoft:DS.dangerSoft, color: p.robustness==='robust'?DS.success:p.robustness==='conditional'?DS.warning:DS.danger, border:'none', fontSize:8 }}>{p.robustness}</Badge>
-                  <span className="text-xs font-medium flex-1" style={{ color: DS.ink }}>{p.name}</span>
-                  {p.failureCondition && <span className="text-[9px]" style={{ color: DS.inkDis }}>{p.failureCondition.slice(0,50)}</span>}
+              {stressResult.mostRobust && (
+                <div className="rounded-xl p-4" style={{ background: DS.accentSoft, border: `1px solid ${DS.accent}30` }}>
+                  <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.accent }}>MOST ROBUST STRATEGY</div>
+                  <div className="text-sm font-bold mb-1" style={{ color: DS.ink }}>{stressResult.mostRobust}</div>
+                  {stressResult.insight && <p className="text-xs" style={{ color: DS.inkSub }}>{stressResult.insight}</p>}
+                  {stressResult.regretMatrix && <p className="text-xs mt-1 italic" style={{ color: DS.inkDis }}>{stressResult.regretMatrix}</p>}
                 </div>
-              ))}
+              )}
+
+              {(stressResult.profiles || []).map((p: any, i: number) => {
+                const robColor = p.robustness === 'robust' ? DS.success : p.robustness === 'conditional' ? DS.warning : DS.danger;
+                const robSoft = p.robustness === 'robust' ? DS.successSoft : p.robustness === 'conditional' ? DS.warnSoft : DS.dangerSoft;
+                return (
+                  <div key={i} className="rounded-xl p-4 border" style={{ borderColor: robColor + '40', background: robSoft }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-bold flex-1" style={{ color: DS.ink }}>{p.name}</span>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ background: robColor + '20', color: robColor }}>{p.robustness}</span>
+                    </div>
+                    {p.winsIn?.length > 0 && <p className="text-[10px] mb-1" style={{ color: DS.success }}>✓ Wins in: {p.winsIn.join(', ')}</p>}
+                    {p.failsIn?.length > 0 && <p className="text-[10px] mb-1" style={{ color: DS.danger }}>✗ Fails in: {p.failsIn.join(', ')}</p>}
+                    {p.recommendation && <p className="text-[10px]" style={{ color: DS.inkSub }}>{p.recommendation}</p>}
+                  </div>
+                );
+              })}
+
+              <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={aiStressTest} disabled={busy}>
+                <Sparkles size={10} /> Re-run
+              </Button>
             </div>
           )}
         </div>
       )}
-
-      {/* === AXES, MULTI-SCENARIO, ROBUSTNESS stubs === */}
-      {(activeTab === 'axes' || activeTab === 'multiscenario' || activeTab === 'robustness') && (
-        <div className="text-center py-14 rounded-xl" style={{ background: DS.bg }}>
-          <p className="text-sm font-medium mb-1" style={{ color: DS.ink }}>
-            {activeTab === 'axes' ? 'Select Scenario Axes' : activeTab === 'multiscenario' ? 'Multi-Scenario Generation' : 'Robustness Analysis'}
-          </p>
-          <p className="text-xs mb-4" style={{ color: DS.inkTer }}>
-            {activeTab === 'axes' ? 'AI selects the 2 most decision-relevant uncertainties as scenario axes.' : activeTab === 'multiscenario' ? 'Generate multiple scenario sets with different axis combinations.' : 'Detailed robustness scoring across all strategy-scenario combinations.'}
-          </p>
-          <Button style={{ background: DS.reasoning.fill }} onClick={activeTab==='robustness'?aiRobustness:aiGenerateScenarios} disabled={busy} className="gap-2">
-            <Sparkles size={14} /> {busy?'Generating…':'Generate'}
-          </Button>
-          {activeTab === 'robustness' && robustness && (
-            <div className="mt-4 space-y-2 text-left">
-              <p className="text-xs font-bold" style={{ color: DS.reasoning.fill }}>Most Robust: {robustness.winner}</p>
-              <p className="text-xs" style={{ color: DS.inkSub }}>{robustness.insight}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Bottom bar */}
-      <div className="flex items-center justify-between pt-4 mt-4 border-t" style={{ borderColor: DS.borderLight }}>
-        <div className="flex items-center gap-3 text-[10px]" style={{ color: DS.inkDis }}>
-          <span>{uncertainties.length} uncertainties</span><span>·</span><span>{scenarios.length} scenarios</span>
-          {scenarios.length>0&&<span>·</span>}
-          {scenarios.length>0&&<span style={{ color: Math.abs(totalProb-1)<0.05?DS.success:DS.warning }}>{Math.round(totalProb*100)}% probability</span>}
-        </div>
-        <Button size="sm" className="h-7 text-xs gap-1" style={{ background: DS.reasoning.fill }}
-          onClick={()=>setActiveTab(TABS[Math.min(TABS.findIndex(t=>t.id===activeTab)+1,TABS.length-1)].id)}>
-          Next <ChevronRight size={11} />
-        </Button>
-      </div>
     </div>
   );
 }
