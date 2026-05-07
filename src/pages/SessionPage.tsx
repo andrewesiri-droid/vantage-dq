@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { trpc } from '@/providers/trpc';
 import { useSessionData } from '@/hooks/useSessionData';
