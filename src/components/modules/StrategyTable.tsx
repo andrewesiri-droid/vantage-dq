@@ -249,7 +249,7 @@ Return JSON only: {
         const c = col(s.colorIdx);
         return (
           <div className="border rounded-b-xl" style={{ borderColor: DS.borderLight, borderTop: 'none' }}>
-            <div className="grid grid-cols-2 gap-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-0">
               {/* LEFT: Strategy info */}
               <div className="border-r p-5 space-y-4" style={{ borderColor: DS.borderLight }}>
                 <div className="pb-3 border-b" style={{ borderColor: DS.borderLight }}>
@@ -279,7 +279,7 @@ Return JSON only: {
                     placeholder="Core logic and reasoning for this strategy" rows={3}
                     className="text-xs resize-none" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: DS.inkDis }}>KEY ASSUMPTIONS</div>
                     <Textarea value={s.assumptions} onChange={e => updateStrategy(s.id, 'assumptions', e.target.value)}

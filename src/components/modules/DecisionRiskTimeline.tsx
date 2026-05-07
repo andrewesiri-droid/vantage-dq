@@ -105,7 +105,7 @@ export function DecisionRiskTimeline({ sessionId, data, hooks }: ModuleProps) {
 
       {/* Summary stats */}
       {risks.length > 0 && (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="rounded-xl p-3 text-center" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
             <div className="text-lg font-black" style={{ color: DS.ink }}>{risks.length}</div>
             <div className="text-[9px] font-bold uppercase" style={{ color: DS.inkDis }}>Total Risks</div>
@@ -185,7 +185,7 @@ export function DecisionRiskTimeline({ sessionId, data, hooks }: ModuleProps) {
 
                 {isExpanded && (
                   <div className="px-4 pb-4 pt-2 space-y-3 border-t" style={{ borderColor: DS.borderLight, background: ic.soft }}>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>LIKELIHOOD</div>
                         <div className="flex gap-1">
@@ -213,7 +213,7 @@ export function DecisionRiskTimeline({ sessionId, data, hooks }: ModuleProps) {
                         <input value={r.timeframe} onChange={e => update(r.id, 'timeframe', e.target.value)} placeholder="e.g. Months 3-6" className="w-full text-xs p-2 rounded-lg border bg-white" style={{ borderColor: DS.borderLight }} />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>OWNER</div>
                         <input value={r.owner} onChange={e => update(r.id, 'owner', e.target.value)} placeholder="Role responsible" className="w-full text-xs p-2 rounded-lg border bg-white" style={{ borderColor: DS.borderLight }} />

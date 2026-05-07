@@ -398,7 +398,7 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
               )}
 
               {/* Checks */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {(analysis.checks || []).map((c: any, i: number) => (
                   <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: c.pass ? DS.successSoft : DS.dangerSoft }}>
                     {c.pass ? <CheckCircle size={13} style={{ color: DS.success, flexShrink: 0, marginTop: 1 }} /> : <AlertTriangle size={13} style={{ color: DS.danger, flexShrink: 0, marginTop: 1 }} />}

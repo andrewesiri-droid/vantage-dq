@@ -497,7 +497,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {(Object.entries(ANALYSIS_MODES) as [AnalysisMode, typeof ANALYSIS_MODES.quick][]).map(([modeKey, mcfg]) => (
             <button key={modeKey} onClick={() => { setMode(modeKey); setActiveTab(mcfg.tabs[0]); }}
               className="text-left p-5 rounded-2xl border-2 transition-all hover:shadow-lg hover:scale-[1.01] group"
@@ -519,7 +519,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
         {/* Game type reference */}
         <div className="rounded-xl p-4 border" style={{ borderColor: DS.borderLight, background: DS.bg }}>
           <div className="text-[9px] font-bold uppercase tracking-wider mb-3" style={{ color: DS.inkDis }}>GAME ARCHETYPES — which describes your situation?</div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {(Object.entries(GAME_TYPES) as [GameType, typeof GAME_TYPES.competitive][]).map(([type, tcfg]) => {
               const Icon = tcfg.icon;
               return (
@@ -536,7 +536,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
         {/* Game class reference */}
         <div className="rounded-xl p-4 border" style={{ borderColor: DS.borderLight, background: DS.bg }}>
           <div className="text-[9px] font-bold uppercase tracking-wider mb-3" style={{ color: DS.inkDis }}>GAME STRUCTURES — available in Standard and Full mode</div>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {(Object.entries(GAME_CLASSES) as [GameClass, typeof GAME_CLASSES.simultaneous][]).map(([cls, clscfg]) => {
               const Icon = clscfg.icon;
               return (
@@ -599,7 +599,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
       {/* ══ QUICK MODE ══════════════════════════════════════════════════════════ */}
       {mode === 'quick' && activeTab === 'Brief' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-[9px] font-bold uppercase tracking-wider mb-1 block" style={{ color: DS.inkDis }}>DESCRIBE YOUR SITUATION</label>
               <Textarea value={decisionContext} onChange={e => setDecisionContext(e.target.value)}
@@ -621,7 +621,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
           {quickResult && (
             <div className="space-y-4">
               {/* Game classification */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-4 rounded-xl" style={{ background: GAME_TYPES[quickResult.gameType as GameType]?.soft || DS.accentSoft, border: `1px solid ${GAME_TYPES[quickResult.gameType as GameType]?.color || DS.accent}25` }}>
                   <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: GAME_TYPES[quickResult.gameType as GameType]?.color || DS.accent }}>GAME TYPE</div>
                   <div className="text-sm font-bold mb-1" style={{ color: DS.ink }}>{GAME_TYPES[quickResult.gameType as GameType]?.label || quickResult.gameType}</div>
@@ -661,7 +661,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
 
               {/* Key players */}
               {quickResult.keyPlayers?.length > 0 && (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {quickResult.keyPlayers.map((p: any, i: number) => (
                     <div key={i} className="p-2.5 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
                       <div className="text-[10px] font-bold mb-0.5" style={{ color: DS.ink }}>{p.name}</div>
@@ -673,7 +673,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
               )}
 
               {/* Biggest risk + warnings */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {quickResult.biggestRisk && (
                   <div className="p-3 rounded-xl" style={{ background: DS.dangerSoft }}>
                     <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.danger }}>BIGGEST STRATEGIC RISK</div>
@@ -740,7 +740,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
             <p className="text-[10px] italic" style={{ color: DS.inkDis }}>{gc.theory}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-3">
               <div>
                 <label className="text-[9px] font-bold uppercase tracking-wider mb-1 block" style={{ color: DS.inkDis }}>STRATEGIC DECISION</label>
@@ -938,7 +938,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
 
               {/* Matrix analysis results */}
               {matrixAnalysis && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[['DOMINANT STRATEGY', matrixAnalysis.dominantStrategy||'None — use mixed strategy'],['NASH EQUILIBRIUM',matrixAnalysis.nashEquilibrium],['PARETO OPTIMAL',matrixAnalysis.paretoOptimal],['RECOMMENDED MOVE',matrixAnalysis.recommendedStrategy]].map(([label,val])=>(
                     <div key={label as string} className="p-3 rounded-xl" style={{ background: DS.bg }}>
                       <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: DS.inkDis }}>{label}</div>
@@ -1035,7 +1035,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
                   </div>
                   <div className="flex-1 pb-3">
                     <div className="text-[9px] font-bold uppercase mb-1" style={{ color: modeCfg.color }}>{step.phase} · {step.timing}</div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div className="p-2.5 rounded-xl" style={{ background: DS.canvas, border: `1px solid ${DS.alternatives.fill}25` }}>
                         <div className="text-[8px] font-bold uppercase mb-0.5" style={{ color: DS.alternatives.fill }}>OUR MOVE</div>
                         <p className="text-xs" style={{ color: DS.ink }}>{step.ourMove}</p>
@@ -1128,7 +1128,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
                 </div>
                 <p className="text-xs" style={{ color: DS.inkSub }}>{repeatedGameAnalysis.cooperationConditions}</p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
                   <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>RECOMMENDED STRATEGY</div>
                   <p className="text-xs font-bold capitalize" style={{ color: '#7C3AED' }}>{repeatedGameAnalysis.recommendedStrategy?.replace(/-/g,' ')}</p>
@@ -1168,7 +1168,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[['AUCTION FORMAT', auctionAnalysis.auctionFormat, DS.accent],['WINNER\'S CURSE RISK', auctionAnalysis.winnersCurseRisk, auctionAnalysis.winnersCurseRisk==='High'?DS.danger:DS.warning],['INFO ADVANTAGE', auctionAnalysis.privateInfoAdvantage, DS.success]].map(([label, val, color])=>(
                   <div key={label as string} className="p-3 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
                     <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>{label}</div>
@@ -1209,7 +1209,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[['OUR BATNA', bargainingAnalysis.ourBATNA, DS.success],['THEIR BATNA', bargainingAnalysis.theirBATNA, DS.inkSub],['ZONE OF AGREEMENT (ZOPA)', bargainingAnalysis.zopa, DS.accent],['NASH BARGAINING SOLUTION', bargainingAnalysis.nashSolution, '#7C3AED']].map(([label,val,color])=>(
                   <div key={label as string} className="p-3 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
                     <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>{label}</div>
@@ -1226,7 +1226,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
                 </div>
                 <p className="text-[10px]" style={{ color: DS.inkSub }}>{bargainingAnalysis.powerRationale}</p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
                   <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>FIRST OFFER</div>
                   <p className="text-xs" style={{ color: DS.ink }}>{bargainingAnalysis.firstOffer}</p>

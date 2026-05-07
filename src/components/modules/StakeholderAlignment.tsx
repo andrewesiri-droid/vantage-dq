@@ -113,7 +113,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
 
       {/* Summary bar */}
       {stakeholders.length > 0 && (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="rounded-xl p-3 text-center" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
             <div className="text-lg font-black" style={{ color: DS.ink }}>{stakeholders.length}</div>
             <div className="text-[9px] font-bold uppercase" style={{ color: DS.inkDis }}>Total</div>
@@ -235,7 +235,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Influence */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
@@ -256,7 +256,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>KEY CONCERNS</div>
                         <textarea value={s.concerns} onChange={e => update(s.id, 'concerns', e.target.value)} rows={3}

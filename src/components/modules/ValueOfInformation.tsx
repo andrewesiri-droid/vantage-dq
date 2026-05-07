@@ -109,7 +109,7 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
       </div>
 
       {/* Decision context strip */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-xl p-3" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
           <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>URGENCY</div>
           <select value={urgency} onChange={e => setUrgency(e.target.value)} className="w-full text-xs bg-transparent outline-none" style={{ color: DS.ink }}>
@@ -177,7 +177,7 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
 
                 {isExpanded && (
                   <div className="px-4 pb-4 pt-2 space-y-4 border-t" style={{ borderColor: DS.borderLight }}>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {[
                         { key: 'impactOnValue', label: 'Impact on Value' },
                         { key: 'abilityToReduce', label: 'Ability to Reduce' },

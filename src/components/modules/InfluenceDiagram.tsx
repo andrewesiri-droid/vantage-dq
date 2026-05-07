@@ -370,7 +370,7 @@ export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
                 <div className="text-4xl font-black" style={{ color: validation.validationScore>=70?DS.success:DS.warning }}>{validation.validationScore}</div>
                 <div><div className="text-xs font-bold" style={{ color: DS.ink }}>Diagram Quality</div><p className="text-xs" style={{ color: DS.inkSub }}>{validation.verdict}</p></div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {(validation.checks||[]).map((c:any,i:number)=>(
                   <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: c.pass?DS.successSoft:DS.warnSoft }}>
                     {c.pass?<CheckCircle size={12} style={{ color:DS.success,flexShrink:0,marginTop:1 }}/>:<AlertTriangle size={12} style={{ color:DS.warning,flexShrink:0,marginTop:1 }}/>}

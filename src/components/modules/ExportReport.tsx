@@ -564,7 +564,7 @@ Return JSON: { content: string }`;
       {step === 1 && (
         <div className="space-y-4">
           <p className="text-xs" style={{ color: DS.inkSub }}>Choose the report type that fits your audience and purpose.</p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {(Object.entries(REPORT_TYPES) as [ReportType, typeof REPORT_TYPES['executive-brief']][]).map(([type, tcfg]) => {
               const Icon = tcfg.icon;
               const isSelected = config.type === type;
@@ -600,7 +600,7 @@ Return JSON: { content: string }`;
           {/* Project info */}
           <div className="p-4 rounded-xl border" style={{ borderColor: DS.borderLight, background: DS.bg }}>
             <div className="text-[9px] font-bold uppercase tracking-wider mb-3" style={{ color: DS.inkDis }}>REPORT METADATA</div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div><label className="text-[9px] font-bold uppercase block mb-1" style={{ color: DS.inkDis }}>PROJECT NAME</label><Input value={config.projectName} onChange={e => setConfig(c=>({...c,projectName:e.target.value}))} placeholder={sessionData?.session?.name || 'Decision name'} className="text-xs" /></div>
               <div><label className="text-[9px] font-bold uppercase block mb-1" style={{ color: DS.inkDis }}>AUTHOR</label><Input value={config.author} onChange={e => setConfig(c=>({...c,author:e.target.value}))} placeholder="Your name" className="text-xs" /></div>
               <div><label className="text-[9px] font-bold uppercase block mb-1" style={{ color: DS.inkDis }}>CONFIDENTIALITY</label>
@@ -619,7 +619,7 @@ Return JSON: { content: string }`;
       {step === 2 && (
         <div className="space-y-4">
           <p className="text-xs" style={{ color: DS.inkSub }}>Select which modules to include in your report. More modules = richer content.</p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {MODULE_OPTIONS.map(mod => {
               const Icon = mod.icon;
               const isSelected = config.modules.includes(mod.id);
@@ -729,7 +729,7 @@ Return JSON: { content: string }`;
           {/* What AI will pull */}
           <div className="p-4 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
             <div className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: DS.inkDis }}>DATA AI WILL USE</div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[
                 ['Decision', sessionData?.session?.decisionStatement?.slice(0,60)+'…'],
                 ['Strategies', `${sessionData?.strategies?.length||0} alternatives`],
@@ -877,7 +877,7 @@ Return JSON: { content: string }`;
           )}
 
           {/* Export format cards */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {([
               { fmt: 'html' as ExportFmt,     label: 'HTML Report',          sub: 'Print-ready, shareable',     icon: FileText,    desc: 'Professional HTML with cover page, headers, and styled sections. Print as PDF from your browser.',       color: DS.accent },
               { fmt: 'markdown' as ExportFmt, label: 'Markdown (.md)',        sub: 'Editable text format',       icon: FileDown,    desc: 'Clean markdown for Notion, GitHub, Confluence, or any documentation system.',                          color: DS.information.fill },

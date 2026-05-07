@@ -156,7 +156,7 @@ Return JSON: {
 
       {/* Summary stats */}
       {(uncertainties.length > 0 || scenarios.length > 0) && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="rounded-xl p-3 text-center" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
             <div className="text-lg font-black" style={{ color: DS.ink }}>{uncertainties.length}</div>
             <div className="text-[9px] font-bold uppercase" style={{ color: DS.inkDis }}>Uncertainties</div>
@@ -229,7 +229,7 @@ Return JSON: {
                 </div>
                 {isExpanded && (
                   <div className="px-4 pb-3 pt-2 space-y-3 border-t" style={{ borderColor: DS.borderLight }}>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>TYPE</div>
                         <div className="flex flex-wrap gap-1">
@@ -329,7 +329,7 @@ Return JSON: {
                       <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>NARRATIVE</div>
                       <textarea value={s.description} onChange={e => updateScen(s.id, 'description', e.target.value)} rows={3} placeholder="Describe this scenario…" className="w-full text-xs p-2 rounded-lg border resize-none bg-white" style={{ borderColor: DS.borderLight }} />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>KEY ASSUMPTIONS</div>
                         <textarea value={s.assumptions} onChange={e => updateScen(s.id, 'assumptions', e.target.value)} rows={2} placeholder="What must be true for this scenario?" className="w-full text-xs p-2 rounded-lg border resize-none bg-white" style={{ borderColor: DS.borderLight }} />

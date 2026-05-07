@@ -169,7 +169,7 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
           </div>
 
           {/* 3 × 2 card grid */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {DQ_ELEMENTS.map(el => {
               const sc = scores[el.key] || 0;
               const color = scoreColor(sc);

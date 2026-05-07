@@ -6,7 +6,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase-client';
 import { getDemoData, updateDemoData } from '@/lib/demoData';
-import { toastSuccess } from '@/lib/toast';
+import { toastSuccess, toastError } from '@/lib/toast';
+import { enqueue, flushQueue, queueSize } from '@/lib/offline-queue';
 
 function useSupa() {
   return supabase;
@@ -93,6 +94,48 @@ export function useSessionData(sessionId: number | undefined) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Flush offline queue when connection restores
+  useEffect(() => {
+    if (!db) return;
+    const handleOnline = async () => {
+      const count = queueSize();
+      if (count > 0) {
+        const flushed = await flushQueue(db);
+        if (flushed > 0) { toastSuccess(`Synced ${flushed} offline change${flushed > 1 ? 's' : ''}`); fetchAll(); }
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [db, fetchAll]);
+
+  // Flush offline queue when connection restores
+  useEffect(() => {
+    if (!db) return;
+    const handleOnline = async () => {
+      const count = queueSize();
+      if (count > 0) {
+        const flushed = await flushQueue(db);
+        if (flushed > 0) { toastSuccess(`Synced ${flushed} offline change${flushed > 1 ? 's' : ''}`); fetchAll(); }
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [db, fetchAll]);
+
+  // Flush offline queue when connection restores
+  useEffect(() => {
+    if (!db) return;
+    const handleOnline = async () => {
+      const count = queueSize();
+      if (count > 0) {
+        const flushed = await flushQueue(db);
+        if (flushed > 0) { toastSuccess(`Synced ${flushed} offline change${flushed > 1 ? 's' : ''}`); fetchAll(); }
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [db, fetchAll]);
+
   // Real-time sync — listen for DB changes and refetch
   useEffect(() => {
     if (!sessionId || !db) return;
@@ -110,7 +153,19 @@ export function useSessionData(sessionId: number | undefined) {
   // ── CRUD helpers ────────────────────────────────────────────────────────────
   const createIssue = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.issues = d.issues || []; d.issues.unshift({ id: Date.now(), session_id: input.sessionId, text: input.text, category: input.category || 'uncertainty-external', severity: input.severity || 'Medium', status: 'open', votes: 0, sort_order: 0 }); }); refetch(); return; }
-    await db.from('issues').insert({ session_id: input.sessionId, text: input.text, category: input.category, severity: input.severity, status: 'open', votes: 0, sort_order: 0 });
+    if (navigator.onLine) {
+      if (navigator.onLine) {
+      if (navigator.onLine) {
+      await db.from('issues').insert({ session_id: input.sessionId, text: input.text, category: input.category, severity: input.severity, status: 'open', votes: 0, sort_order: 0 });
+    } else {
+      enqueue({ table: 'issues', op: 'insert', data: { session_id: input.sessionId, text: input.text, category: input.category, severity: input.severity, status: 'open', votes: 0, sort_order: 0 } });
+    }
+    } else {
+      enqueue({ table: 'issues', op: 'insert', data: { session_id: input.sessionId, text: input.text, category: input.category, severity: input.severity, status: 'open', votes: 0, sort_order: 0 } });
+    }
+    } else {
+      enqueue({ table: 'issues', op: 'insert', data: { session_id: input.sessionId, text: input.text, category: input.category, severity: input.severity, status: 'open', votes: 0, sort_order: 0 } });
+    }
     refetch();
   }, [db, refetch]);
 
@@ -129,7 +184,19 @@ export function useSessionData(sessionId: number | undefined) {
 
   const createDecision = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.decisions = d.decisions || []; d.decisions.push({ id: Date.now(), session_id: input.sessionId, label: input.label, choices: input.choices || [], tier: input.tier || 'focus', sort_order: d.decisions.length }); }); refetch(); return; }
-    await db.from('decisions').insert({ session_id: input.sessionId, label: input.label, choices: input.choices || [], tier: input.tier || 'focus', sort_order: 0 });
+    if (navigator.onLine) {
+      if (navigator.onLine) {
+      if (navigator.onLine) {
+      await db.from('decisions').insert({ session_id: input.sessionId, label: input.label, choices: input.choices || [], tier: input.tier || 'focus', sort_order: 0 });
+    } else {
+      enqueue({ table: 'decisions', op: 'insert', data: { session_id: input.sessionId, label: input.label, choices: input.choices || [], tier: input.tier || 'focus', sort_order: 0 } });
+    }
+    } else {
+      enqueue({ table: 'decisions', op: 'insert', data: { session_id: input.sessionId, label: input.label, choices: input.choices || [], tier: input.tier || 'focus', sort_order: 0 } });
+    }
+    } else {
+      enqueue({ table: 'decisions', op: 'insert', data: { session_id: input.sessionId, label: input.label, choices: input.choices || [], tier: input.tier || 'focus', sort_order: 0 } });
+    }
     refetch();
   }, [db, refetch]);
 
@@ -141,7 +208,19 @@ export function useSessionData(sessionId: number | undefined) {
 
   const createStrategy = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.strategies = d.strategies || []; d.strategies.push({ id: Date.now(), session_id: input.sessionId, name: input.name, description: input.description || '', color_idx: (d.strategies.length) % 6, selections: {} }); }); refetch(); return; }
-    await db.from('strategies').insert({ session_id: input.sessionId, name: input.name, description: input.description || '', color_idx: 0, selections: {} });
+    if (navigator.onLine) {
+      if (navigator.onLine) {
+      if (navigator.onLine) {
+      await db.from('strategies').insert({ session_id: input.sessionId, name: input.name, description: input.description || '', color_idx: 0, selections: {} });
+    } else {
+      enqueue({ table: 'strategies', op: 'insert', data: { session_id: input.sessionId, name: input.name, description: input.description || '', color_idx: 0, selections: {} } });
+    }
+    } else {
+      enqueue({ table: 'strategies', op: 'insert', data: { session_id: input.sessionId, name: input.name, description: input.description || '', color_idx: 0, selections: {} } });
+    }
+    } else {
+      enqueue({ table: 'strategies', op: 'insert', data: { session_id: input.sessionId, name: input.name, description: input.description || '', color_idx: 0, selections: {} } });
+    }
     refetch();
   }, [db, refetch]);
 
@@ -195,7 +274,19 @@ export function useSessionData(sessionId: number | undefined) {
 
   const createRisk = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.riskItems = d.riskItems || []; d.riskItems.push({ id: Date.now(), session_id: input.sessionId, label: input.label, likelihood: input.likelihood || 'Medium', impact: input.impact || 'High', timeframe: '', owner: '', mitigation: '' }); }); refetch(); return; }
-    await db.from('risk_items').insert({ session_id: input.sessionId, label: input.label, likelihood: input.likelihood || 'Medium', impact: input.impact || 'High', timeframe: '', owner: '', mitigation: '' });
+    if (navigator.onLine) {
+      if (navigator.onLine) {
+      if (navigator.onLine) {
+      await db.from('risk_items').insert({ session_id: input.sessionId, label: input.label, likelihood: input.likelihood || 'Medium', impact: input.impact || 'High', timeframe: '', owner: '', mitigation: '' });
+    } else {
+      enqueue({ table: 'risk_items', op: 'insert', data: { session_id: input.sessionId, label: input.label, likelihood: input.likelihood || 'Medium', impact: input.impact || 'High', timeframe: '', owner: '', mitigation: '' } });
+    }
+    } else {
+      enqueue({ table: 'risk_items', op: 'insert', data: { session_id: input.sessionId, label: input.label, likelihood: input.likelihood || 'Medium', impact: input.impact || 'High', timeframe: '', owner: '', mitigation: '' } });
+    }
+    } else {
+      enqueue({ table: 'risk_items', op: 'insert', data: { session_id: input.sessionId, label: input.label, likelihood: input.likelihood || 'Medium', impact: input.impact || 'High', timeframe: '', owner: '', mitigation: '' } });
+    }
     refetch();
   }, [db, refetch]);
 
