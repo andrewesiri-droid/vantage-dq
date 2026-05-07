@@ -3,6 +3,7 @@ import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { ModuleDataBanner } from '@/components/ui/module-data-banner';
 import { toastAIError, toastSaved } from '@/lib/toast';
+import { validateModuleData, buildContractPrompt } from '@/lib/dq-data-contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sparkles, Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
