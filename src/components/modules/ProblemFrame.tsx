@@ -113,7 +113,7 @@ JSON format: {"overallScore":0-100,"band":"Elite|Strong|Adequate|Weak|High-Risk"
 STRICT RULES FOR IMPROVEMENTS:
 - Only include improvements where applying them would INCREASE the overallScore
 - If a field is already well-defined, do NOT suggest changing it
-- Maximum 3 improvements, minimum 0 — only suggest what genuinely helps
+- Only suggest improvements that will genuinely raise the score — no arbitrary limit
 - Never suggest cosmetic changes — only structural DQ improvements
 - Each suggestion must directly fix a failed check or close a scored gap`;
     try {
