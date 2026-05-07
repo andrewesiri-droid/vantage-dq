@@ -410,7 +410,7 @@ function scoreReportHealth(sections: ReportSection[], data: any): { score: numbe
 // ── COMPONENT ──────────────────────────────────────────────────────────────────
 export function ExportReport({ sessionId, data }: ModuleProps) {
   const [busy, setBusy] = useState(false);
-  const { call: dqCall, busy: dqBusy } = useDQAI();
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [step, setStep] = useState(1); // 1-7
   const [config, setConfig] = useState<ReportConfig>({
     type: 'executive-brief', audience: 'executive', tone: 'executive-concise',

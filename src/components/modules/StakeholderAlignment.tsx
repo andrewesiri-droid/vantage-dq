@@ -141,6 +141,7 @@ Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisio
           <span className="text-[10px] font-bold" style={{ color: '#D97706' }}>AI locked — complete Problem Frame first (score {frameGate.score}/30)</span>
         </div>
       )}
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
       <ModuleDataBanner moduleId="stakeholder-alignment" data={data} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">

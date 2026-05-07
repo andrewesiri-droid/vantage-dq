@@ -156,7 +156,7 @@ const PAYOFF_LABELS = ['Very Bad', 'Bad', 'Neutral', 'Good', 'Very Good'];
 export function GameTheoryModule({ sessionId, data }: ModuleProps) {
   const [busy, setBusy] = useState(false);
   const frameGate = checkFrameGate(data);
-  const { call: dqCall, busy: dqBusy } = useDQAI();
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
 
   // Mode selection
   const [mode, setMode] = useState<AnalysisMode | null>(null);

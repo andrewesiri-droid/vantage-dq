@@ -34,7 +34,7 @@ const TABS = [
 export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
   const frameGate = checkFrameGate(data);
-  const { call: dqCall, busy: dqBusy } = useDQAI();
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState('diagram');
   const [nodes, setNodes] = useState<INode[]>([]);
   const [edges, setEdges] = useState<IEdge[]>([]);
