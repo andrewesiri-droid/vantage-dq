@@ -444,6 +444,27 @@ export function ExportReport({ sessionId, data }: ModuleProps) {
     return null;
   };
 
+  const runConsistencyCheck = async (generatedSections: any[]) => {
+    const recommendations = generatedSections
+      .filter(s => s?.content?.toLowerCase().includes('recommend') || s?.content?.toLowerCase().includes('strategy'))
+      .map(s => s.title + ': ' + (s.content || '').slice(0, 200));
+    if (recommendations.length < 2) return;
+    const prompt = 'Review these report sections for internal contradictions. If any section recommends a different strategy than another, flag it.
+
+Sections:
+' + recommendations.join('
+
+') + '
+
+Return JSON: { hasContradiction: boolean, details: string }';
+    try {
+      const result = await dqCall(prompt, { module: 'export-report', dqElement: 'Reasoning', sessionData: data || {} });
+      if (result?.data?.hasContradiction) {
+        import('@/lib/toast').then(({ toastError }) => toastError('⚠ Report consistency issue: ' + result.data.details));
+      }
+    } catch(e) { console.error('[consistency]', e); }
+  };
+
   const generateAllSections = async () => {
     const gateError = checkDataGate();
     if (gateError) { import('@/lib/toast').then(({ toastError }) => toastError(gateError)); return; }
@@ -503,6 +524,7 @@ Return JSON: { content: string }`;
     }
 
     setGenerating(false);
+    runConsistencyCheck(sections).catch(() => {});
     setGenerationProgress(100);
 
     // Compute health

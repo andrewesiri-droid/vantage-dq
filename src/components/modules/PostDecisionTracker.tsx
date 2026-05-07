@@ -115,6 +115,16 @@ Return JSON: {
 
   return (
     <div className="space-y-4">
+      {reviewReminder && (
+        <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: reviewReminder.color + '15', border: '1px solid ' + reviewReminder.color + '30' }}>
+          <span className="text-lg">📅</span>
+          <div>
+            <div className="text-[9px] font-bold uppercase mb-0.5" style={{ color: reviewReminder.color }}>REVIEW REMINDER — {reviewReminder.days} DAYS SINCE COMMITMENT</div>
+            <p className="text-xs" style={{ color: DS.ink }}>{reviewReminder.msg}</p>
+          </div>
+        </div>
+      )}
+
       {frameGate.score < 30 && (
         <div className="rounded-xl p-3 flex items-center gap-2 mb-2" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
           <span className="text-lg">🔒</span>

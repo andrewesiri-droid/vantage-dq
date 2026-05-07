@@ -24,6 +24,7 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
   const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState('scorecard');
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [commitChallenge, setCommitChallenge] = useState<any>(null);
   const mechanicalRec = computeMechanicalRecommendation(data);
   const hasAssessmentScores = (data?.assessmentScores?.length || 0) > 0;
   const commitmentContradiction = hasAssessmentScores && mechanicalRec.traceable && mechanicalRec.confidence === 'Low' && (scores.commitment || 0) >= 60;
@@ -52,6 +53,32 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
   const scoredCount = Object.values(scores).filter(v => v > 0).length;
   const scoreColor = (s: number) => s >= 70 ? DS.success : s >= 45 ? DS.warning : s > 0 ? DS.danger : DS.inkDis;
   const scoreLabel = (s: number) => s >= 80 ? 'Elite' : s >= 60 ? 'Strong' : s >= 40 ? 'Adequate' : s > 0 ? 'Weak' : 'Unscored';
+
+  const aiChallengeCommitment = async () => {
+    const prompt = `You are a devil's advocate challenging a premature commitment decision.
+
+Decision: ${data?.session?.decisionStatement || ''}
+Commitment DQ score: ${scores.commitment || 0}/100
+Mechanical recommendation confidence: ${mechanicalRec.confidence}
+Strategy margin: ${mechanicalRec.margin} points
+Critical unresolved issues: ${(data?.issues || []).filter((i: any) => i.severity === 'Critical' && i.status === 'open').map((i: any) => i.text).join('; ') || 'None'}
+Lowest DQ element: ${Object.entries(scores).sort((a,b) => a[1]-b[1])[0]?.[0] || 'Unknown'} at ${Math.min(...Object.values(scores).filter(Boolean))}
+
+Make the strongest case for WHY THIS DECISION IS NOT READY TO COMMIT.
+Be specific. Reference the actual data.
+
+Return JSON: {
+  headline: string,
+  reasons: [string],
+  lowestElement: string,
+  criticalQuestion: string,
+  verdict: "Not ready|Proceed with conditions|Ready with caveats"
+}`;
+    try {
+      const result = await dqCall(prompt, { module: 'dq-scorecard', dqElement: 'Commitment', sessionData: data || {} });
+      if (result?.data) setCommitChallenge(result.data);
+    } catch(e) { console.error(e); }
+  };
 
   const aiAutoPopulate = async () => {
     const ctx = {
@@ -180,10 +207,41 @@ Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${
             <Sparkles size={11} /> {busy ? 'Populating…' : 'AI Auto-Populate'}
           </Button>
           <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiNarrative} disabled={busy}>Generate DQ Report</Button>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: '#7F1D1D', color: '#fff' }} onClick={aiChallengeCommitment} disabled={busy}>
+            👿 Challenge Commitment
+          </Button>
         </div>
       </div>
 
       {/* Mechanical rec contradiction warning */}
+      {commitChallenge && (
+        <div className="rounded-xl overflow-hidden border-2" style={{ borderColor: '#7F1D1D' }}>
+          <div className="flex items-center justify-between px-4 py-3" style={{ background: '#7F1D1D' }}>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">👿</span>
+              <span className="text-sm font-bold text-white">Commitment Challenge</span>
+              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: commitChallenge.verdict === 'Not ready' ? '#EF4444' : '#F59E0B' }}>{commitChallenge.verdict}</span>
+            </div>
+            <button onClick={() => setCommitChallenge(null)} className="text-white opacity-60 hover:opacity-100 text-xs">✕</button>
+          </div>
+          <div className="p-4 space-y-3" style={{ background: '#FEF2F2' }}>
+            <p className="text-sm font-bold italic" style={{ color: '#7F1D1D' }}>"{commitChallenge.headline}"</p>
+            {(commitChallenge.reasons || []).map((r: string, i: number) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-xs shrink-0" style={{ color: '#EF4444' }}>✗</span>
+                <p className="text-xs" style={{ color: DS.ink }}>{r}</p>
+              </div>
+            ))}
+            {commitChallenge.criticalQuestion && (
+              <div className="rounded-xl p-3" style={{ background: '#FEE2E2', border: '1px solid #FECACA' }}>
+                <div className="text-[9px] font-bold uppercase mb-1" style={{ color: '#EF4444' }}>CRITICAL QUESTION BEFORE COMMITTING</div>
+                <p className="text-xs font-semibold" style={{ color: DS.ink }}>{commitChallenge.criticalQuestion}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {commitmentContradiction && (
         <div className="rounded-xl p-3" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
           <div className="text-[10px] font-bold mb-1" style={{ color: '#EF4444' }}>⚠ CONTRADICTION DETECTED</div>

@@ -124,6 +124,7 @@ function DemoSessionPage({ slug, activeModule, setActiveModule, activeTool, setA
 }
 
 function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, setActiveTool }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void; activeTool: ToolId | null; setActiveTool: (t: ToolId | null) => void }) {
+  const { currentOrg } = useOrganisation();
   const [sessionMeta, setSessionMeta] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -144,6 +145,19 @@ function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, s
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-sm" style={{ color: DS.inkSub }}>Loading session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Org isolation check — verify session belongs to current org
+  const orgMismatch = sessionMeta && currentOrg && sessionMeta.organisationId && sessionMeta.organisationId !== currentOrg.id;
+  if (orgMismatch) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: DS.bg }}>
+        <div className="text-center space-y-2">
+          <p className="text-sm font-bold" style={{ color: DS.danger }}>Access denied</p>
+          <p className="text-xs" style={{ color: DS.inkSub }}>This session belongs to a different workspace.</p>
         </div>
       </div>
     );

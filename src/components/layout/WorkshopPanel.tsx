@@ -402,6 +402,11 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
             </div>
 
             {/* WORKSHOP SCRIBE */}
+            {scribeOpen && !sessionId && (
+              <div className="mb-2 px-3 py-2 rounded-lg text-[10px] font-bold" style={{ background: '#FEF3C7', color: '#D97706' }}>
+                ⚠ Sign in to save scribe items to your session
+              </div>
+            )}
             {scribeOpen && (
               <div className="mb-3 h-[420px] rounded-2xl overflow-hidden border" style={{ borderColor: DS.borderLight }}>
                 <WorkshopCopilot
