@@ -199,7 +199,7 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
           </nav>
         )}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-5xl mx-auto px-4 py-5 md:px-8">
+          <div className="max-w-5xl mx-auto px-2 py-4 sm:px-4 md:px-8">
             {children}
           </div>
         </main>

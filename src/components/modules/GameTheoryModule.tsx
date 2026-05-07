@@ -572,7 +572,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
         </div>
         {/* Game type + class selectors */}
         {mode !== 'quick' && (
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 flex-wrap">
             <Select value={gameType} onValueChange={v => setGameType(v as GameType)}>
               <SelectTrigger className="h-7 text-[10px] w-36"><SelectValue /></SelectTrigger>
               <SelectContent>{Object.entries(GAME_TYPES).map(([k,v])=><SelectItem key={k} value={k} className="text-xs">{v.label}</SelectItem>)}</SelectContent>
@@ -804,7 +804,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>Map each player's objectives, incentives, capabilities, and constraints. The best strategists understand opponents better than they understand themselves.</p>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 flex-wrap">
               <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={addPlayer}><Plus size={11} /> Add Player</Button>
               <Button size="sm" className="gap-1 text-xs h-7" style={{ background: modeCfg.color }} onClick={aiGeneratePlayers} disabled={busy}>
                 <Sparkles size={11} /> AI Generate
@@ -1256,7 +1256,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
           {mode !== 'quick' && <><span>·</span><span>{GAME_TYPES[gameType].label}</span><span>·</span><span>{GAME_CLASSES[gameClass].label}</span></>}
           {players.length > 0 && <><span>·</span><span>{players.length} players</span></>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 flex-wrap">
           {mode !== 'full' && (
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setMode(mode === 'quick' ? 'standard' : 'full')}>
               Upgrade to {mode === 'quick' ? 'Standard' : 'Full'} <ChevronRight size={11} />

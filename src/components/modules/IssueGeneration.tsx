@@ -185,18 +185,18 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
           {highCount > 0 && <Badge style={{ background: DS.warnSoft, color: DS.warning, border: 'none' }}>{highCount} HIGH</Badge>}
           {focusCount > 0 && <Badge style={{ background: DS.accentSoft, color: DS.accent, border: 'none' }}>{focusCount} FOCUS DECISIONS</Badge>}
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiCategorise} disabled={busy || !issues.length}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiCategorise} disabled={busy || !issues.length}>
             <Sparkles size={11} /> AI Categorise
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.warning }} onClick={aiGenerate} disabled={busy || generating}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.warning }} onClick={aiGenerate} disabled={busy || generating}>
             <Sparkles size={11} /> {generating ? 'Generating…' : 'AI Generate'}
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b mb-4" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b mb-4 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium relative transition-colors"
@@ -316,7 +316,7 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>Review and adjust the category for each issue. Click AI Categorise to let AI suggest recategorisations.</p>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiCategorise} disabled={busy}>
+            <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiCategorise} disabled={busy}>
               <Sparkles size={11} /> AI Categorise
             </Button>
           </div>
@@ -397,7 +397,7 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>AI analysis of which issue categories are missing or underrepresented in your list.</p>
-            <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.warning }} onClick={aiBlindSpots} disabled={busy}>
+            <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.warning }} onClick={aiBlindSpots} disabled={busy}>
               <Sparkles size={11} /> {busy ? 'Analysing…' : 'Find Blind Spots'}
             </Button>
           </div>

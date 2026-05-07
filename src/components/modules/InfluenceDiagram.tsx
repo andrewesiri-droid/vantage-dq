@@ -154,29 +154,29 @@ export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
           <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 09</div>
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Influence Diagram</h2>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={addNode} disabled={!newLabel.trim()}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={addNode} disabled={!newLabel.trim()}>
             <Plus size={11} /> Add Node
           </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={autoLayout}>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={autoLayout}>
             <LayoutGrid size={11} /> Auto Layout
           </Button>
-          <Button size="sm" variant={linkMode?'default':'outline'} className="gap-1.5 text-xs h-7"
+          <Button size="sm" variant={linkMode?'default':'outline'} className="gap-1 text-xs h-7 shrink-0"
             style={linkMode?{background:DS.accent}:{}}
             onClick={() => { setLinkMode(!linkMode); setLinkSrc(null); }}>
             <Link size={11} /> {linkMode ? (linkSrc ? 'Click target…' : 'Click source…') : 'Draw Links'}
           </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiValidate} disabled={busy||!nodes.length}>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiValidate} disabled={busy||!nodes.length}>
             <CheckCircle size={11} /> Validate
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.information.fill }} onClick={aiGenerate} disabled={busy}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.information.fill }} onClick={aiGenerate} disabled={busy}>
             <Sparkles size={11} /> AI Generate
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b mb-0" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b mb-0 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className="px-4 py-2.5 text-xs font-medium transition-colors"
@@ -356,7 +356,7 @@ export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>AI checks the causal logic and completeness of your influence diagram.</p>
-            <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.information.fill }} onClick={aiValidate} disabled={busy}>
+            <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.information.fill }} onClick={aiValidate} disabled={busy}>
               <Sparkles size={11} /> {busy?'Validating…':'Run Validation'}
             </Button>
           </div>

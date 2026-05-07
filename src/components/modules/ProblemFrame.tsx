@@ -172,18 +172,18 @@ STRICT RULES FOR IMPROVEMENTS:
         )}
         <div className="flex-1" />
         {improvements.length > 0 && (
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" style={{ borderColor: DS.warning, color: DS.warning }}
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" style={{ borderColor: DS.warning, color: DS.warning }}
             onClick={() => { improvements.slice(0, 3).forEach(applyImprovement); setImprovements([]); setTimeout(() => runFrameCheck(), 300); }}>
             <Wand2 size={11} /> Apply Improvements ({improvements.length})
           </Button>
         )}
-        <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.frame.fill }} onClick={runFrameCheck} disabled={busy}>
+        <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.frame.fill }} onClick={runFrameCheck} disabled={busy}>
           <Sparkles size={11} /> {busy ? 'Checking…' : 'AI Frame Check'}
         </Button>
       </div>
 
       {/* Tab navigation */}
-      <div className="flex border-b mb-5" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b mb-5 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {TABS.map((tab, i) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium relative transition-colors"

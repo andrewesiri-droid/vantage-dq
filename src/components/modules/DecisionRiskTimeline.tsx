@@ -93,11 +93,11 @@ export function DecisionRiskTimeline({ sessionId, data, hooks }: ModuleProps) {
           <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 12</div>
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Decision Risk Timeline</h2>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiGenerate} disabled={busy}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiGenerate} disabled={busy}>
             <Sparkles size={11} /> {busy ? 'Generating…' : 'AI Generate Risks'}
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.danger }} onClick={aiReadiness} disabled={busy || !risks.length}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.danger }} onClick={aiReadiness} disabled={busy || !risks.length}>
             <Shield size={11} /> {busy ? 'Assessing…' : 'AI Readiness Check'}
           </Button>
         </div>
@@ -126,7 +126,7 @@ export function DecisionRiskTimeline({ sessionId, data, hooks }: ModuleProps) {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {[{id:'risks',label:'Risk Register'},{id:'readiness',label:'Readiness Assessment'}].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
             className="px-4 py-2.5 text-xs font-medium transition-colors"

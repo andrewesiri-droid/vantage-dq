@@ -171,7 +171,7 @@ export function useSessionData(sessionId: number | undefined) {
 
   const deleteIssue = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.issues = (d.issues || []).filter((i: any) => i.id !== input.id); }); refetch(); return; }
-    await db.from('issues').delete().eq('id', input.id);
+    if (navigator.onLine) { await db.from('issues').delete().eq('id', input.id); } else { enqueue({ table: 'issues', op: 'delete', data: {}, match: { id: input.id } }); }
     refetch();
   }, [db, refetch]);
 
@@ -202,7 +202,7 @@ export function useSessionData(sessionId: number | undefined) {
 
   const deleteDecision = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.decisions = (d.decisions || []).filter((x: any) => x.id !== input.id); }); refetch(); return; }
-    await db.from('decisions').delete().eq('id', input.id);
+    if (navigator.onLine) { await db.from('decisions').delete().eq('id', input.id); } else { enqueue({ table: 'decisions', op: 'delete', data: {}, match: { id: input.id } }); }
     refetch();
   }, [db, refetch]);
 
@@ -226,7 +226,7 @@ export function useSessionData(sessionId: number | undefined) {
 
   const deleteStrategy = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.strategies = (d.strategies || []).filter((x: any) => x.id !== input.id); }); refetch(); return; }
-    await db.from('strategies').delete().eq('id', input.id);
+    if (navigator.onLine) { await db.from('strategies').delete().eq('id', input.id); } else { enqueue({ table: 'strategies', op: 'delete', data: {}, match: { id: input.id } }); }
     refetch();
   }, [db, refetch]);
 
@@ -238,13 +238,17 @@ export function useSessionData(sessionId: number | undefined) {
 
   const deleteCriterion = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.criteria = (d.criteria || []).filter((x: any) => x.id !== input.id); }); refetch(); return; }
-    await db.from('criteria').delete().eq('id', input.id);
+    if (navigator.onLine) { await db.from('criteria').delete().eq('id', input.id); } else { enqueue({ table: 'criteria', op: 'delete', data: {}, match: { id: input.id } }); }
     refetch();
   }, [db, refetch]);
 
   const setScore = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.assessmentScores = d.assessmentScores || []; const ex = d.assessmentScores.find((s: any) => s.strategy_id === input.strategyId && s.criterion_id === input.criterionId); if (ex) ex.score = input.score; else d.assessmentScores.push({ id: Date.now(), session_id: input.sessionId, strategy_id: input.strategyId, criterion_id: input.criterionId, score: input.score }); }); refetch(); return; }
-    await db.from('assessment_scores').upsert({ session_id: input.sessionId, strategy_id: input.strategyId, criterion_id: input.criterionId, score: input.score }, { onConflict: 'session_id,strategy_id,criterion_id' });
+    if (navigator.onLine) {
+      await db.from('assessment_scores').upsert({ session_id: input.sessionId, strategy_id: input.strategyId, criterion_id: input.criterionId, score: input.score }, { onConflict: 'session_id,strategy_id,criterion_id' });
+    } else {
+      enqueue({ table: 'assessment_scores', op: 'upsert', data: { session_id: input.sessionId, strategy_id: input.strategyId, criterion_id: input.criterionId, score: input.score } });
+    }
     refetch();
   }, [db, refetch]);
 
@@ -256,7 +260,7 @@ export function useSessionData(sessionId: number | undefined) {
 
   const deleteUncertainty = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.uncertainties = (d.uncertainties || []).filter((x: any) => x.id !== input.id); }); refetch(); return; }
-    await db.from('uncertainties').delete().eq('id', input.id);
+    if (navigator.onLine) { await db.from('uncertainties').delete().eq('id', input.id); } else { enqueue({ table: 'uncertainties', op: 'delete', data: {}, match: { id: input.id } }); }
     refetch();
   }, [db, refetch]);
 
@@ -268,7 +272,7 @@ export function useSessionData(sessionId: number | undefined) {
 
   const deleteStakeholder = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.stakeholderEntries = (d.stakeholderEntries || []).filter((x: any) => x.id !== input.id); }); refetch(); return; }
-    await db.from('stakeholder_entries').delete().eq('id', input.id);
+    if (navigator.onLine) { await db.from('stakeholder_entries').delete().eq('id', input.id); } else { enqueue({ table: 'stakeholder_entries', op: 'delete', data: {}, match: { id: input.id } }); }
     refetch();
   }, [db, refetch]);
 
@@ -292,7 +296,7 @@ export function useSessionData(sessionId: number | undefined) {
 
   const deleteRisk = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.riskItems = (d.riskItems || []).filter((x: any) => x.id !== input.id); }); refetch(); return; }
-    await db.from('risk_items').delete().eq('id', input.id);
+    if (navigator.onLine) { await db.from('risk_items').delete().eq('id', input.id); } else { enqueue({ table: 'risk_items', op: 'delete', data: {}, match: { id: input.id } }); }
     refetch();
   }, [db, refetch]);
 
@@ -304,7 +308,7 @@ export function useSessionData(sessionId: number | undefined) {
 
   const deleteScenario = useCallback(async (input: any) => {
     if (!db) { updateDemoData((d: any) => { d.scenarios = (d.scenarios || []).filter((x: any) => x.id !== input.id); }); refetch(); return; }
-    await db.from('scenarios').delete().eq('id', input.id);
+    if (navigator.onLine) { await db.from('scenarios').delete().eq('id', input.id); } else { enqueue({ table: 'scenarios', op: 'delete', data: {}, match: { id: input.id } }); }
     refetch();
   }, [db, refetch]);
 
@@ -325,7 +329,11 @@ export function useSessionData(sessionId: number | undefined) {
     mapped.updated_at = new Date().toISOString();
 
     if (!db) { updateDemoData((d: any) => { if (d.sessions?.[0]) Object.assign(d.sessions[0], input.data); }); refetch(); return; }
-    await db.from('dq_sessions').update(mapped).eq('id', input.id);
+    if (navigator.onLine) {
+      await db.from('dq_sessions').update(mapped).eq('id', input.id);
+    } else {
+      enqueue({ table: 'dq_sessions', op: 'update', data: mapped, match: { id: input.id } });
+    }
     refetch();
   }, [db, refetch]);
 

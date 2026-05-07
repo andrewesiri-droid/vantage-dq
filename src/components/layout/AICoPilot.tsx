@@ -122,7 +122,7 @@ export function AICoPilot({ module, sessionId, collapsed, onToggle, data }: Prop
   }
 
   return (
-    <div className="w-72 shrink-0 border-l flex flex-col overflow-hidden" style={{ background: DS.canvas, borderColor: DS.borderLight }}>
+    <div className="hidden lg:flex w-72 shrink-0 border-l flex flex-col overflow-hidden" style={{ background: DS.canvas, borderColor: DS.borderLight }}>
       <div className="h-11 shrink-0 flex items-center justify-between px-3 border-b" style={{ background: DS.bg, borderColor: DS.borderLight }}>
         <div className="flex items-center gap-1.5">
           <Bot size={14} style={{ color: '#7C3AED' }} />

@@ -98,11 +98,11 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
           <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 11</div>
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Value of Information</h2>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiScreen} disabled={busy || !uncertainties.length}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiScreen} disabled={busy || !uncertainties.length}>
             <Sparkles size={11} /> {busy ? 'Screening…' : 'AI Screen'}
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.information.fill }} onClick={aiSummary} disabled={busy || !infoOptions.length}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.information.fill }} onClick={aiSummary} disabled={busy || !infoOptions.length}>
             <Sparkles size={11} /> {busy ? 'Generating…' : 'AI Summary'}
           </Button>
         </div>
@@ -133,7 +133,7 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {[{id:'uncertainties',label:'Uncertainties'},{id:'screening',label:'AI Screening'},{id:'summary',label:'Summary'}].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
             className="px-4 py-2.5 text-xs font-medium transition-colors"
@@ -146,7 +146,7 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
       {/* Uncertainties tab */}
       {activeTab === 'uncertainties' && (
         <div className="space-y-3">
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 flex-wrap">
             <Input value={newLabel} onChange={e => setNewLabel(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} placeholder="Add uncertainty…" className="flex-1 text-xs h-8" />
             <Button size="sm" className="h-8 gap-1 text-xs" style={{ background: DS.information.fill }} onClick={add} disabled={!newLabel.trim()}><Plus size={12} /> Add</Button>
           </div>

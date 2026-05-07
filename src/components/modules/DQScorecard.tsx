@@ -117,16 +117,16 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
         <div className="flex items-center gap-2">
           {scoredCount < 6 && <Badge style={{ background: DS.warnSoft, color: DS.warning, border: 'none', fontWeight: 700 }}>{6 - scoredCount} ELEMENTS UNSCORED</Badge>}
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.reasoning.fill }} onClick={aiAutoPopulate} disabled={busy}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.reasoning.fill }} onClick={aiAutoPopulate} disabled={busy}>
             <Sparkles size={11} /> {busy ? 'Populating…' : 'AI Auto-Populate'}
           </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiNarrative} disabled={busy}>Generate DQ Report</Button>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiNarrative} disabled={busy}>Generate DQ Report</Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b mb-5" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b mb-5 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className="px-4 py-2.5 text-xs font-medium transition-colors"
@@ -254,7 +254,7 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>Radar view + improvement plan for elements below 60.</p>
-            <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.reasoning.fill }} onClick={aiImprovements} disabled={busy}>
+            <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.reasoning.fill }} onClick={aiImprovements} disabled={busy}>
               <Sparkles size={11} /> {busy ? 'Generating…' : 'Generate Plan'}
             </Button>
           </div>
@@ -320,7 +320,7 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>Executive DQ narrative for stakeholders and board.</p>
-            <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.reasoning.fill }} onClick={aiNarrative} disabled={busy}>
+            <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.reasoning.fill }} onClick={aiNarrative} disabled={busy}>
               <Sparkles size={11} /> {busy ? 'Generating…' : narrative ? 'Regenerate' : 'Generate Report'}
             </Button>
           </div>

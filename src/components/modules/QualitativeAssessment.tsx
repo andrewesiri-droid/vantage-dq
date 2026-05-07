@@ -156,23 +156,23 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
             <div className="h-full rounded-full transition-all" style={{ width: `${totalCells ? Math.round((totalScored/totalCells)*100) : 0}%`, background: DS.alternatives.fill }} />
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7">Score Guide</Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7">Weights</Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiInitAssessment} disabled={busy}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0">Score Guide</Button>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0">Weights</Button>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiInitAssessment} disabled={busy}>
             <Sparkles size={11} /> AI Initial Assessment
           </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiAnalyse} disabled={busy}>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiAnalyse} disabled={busy}>
             + AI Analysis
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.alternatives.fill }} onClick={generateBrief} disabled={busy}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.alternatives.fill }} onClick={generateBrief} disabled={busy}>
             Decision Brief
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b mb-0" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b mb-0 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className="px-4 py-2.5 text-xs font-medium transition-colors"
@@ -422,7 +422,7 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
                   ))}
                 </div>
               )}
-              <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={generateBrief} disabled={busy}>
+              <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={generateBrief} disabled={busy}>
                 <Sparkles size={11} /> Regenerate
               </Button>
             </div>
@@ -436,7 +436,7 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
         <div className="space-y-4 py-3">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>AI checks for groupthink, validates trade-offs, and identifies non-discriminating criteria.</p>
-            <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.alternatives.fill }} onClick={aiAnalyse} disabled={busy}>
+            <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.alternatives.fill }} onClick={aiAnalyse} disabled={busy}>
               <Sparkles size={11} /> {busy ? 'Analysing…' : 'Run Analysis'}
             </Button>
           </div>

@@ -176,11 +176,11 @@ Return JSON only: {
           <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 04</div>
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Strategy Table</h2>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiPickBest} disabled={busy || strategies.length < 2}>+ AI Pick Best</Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.alternatives.fill }} onClick={aiSuggest} disabled={busy}><Sparkles size={11} /> AI Suggest</Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiAnalyse} disabled={busy || !strategies.length}>AI Analyse</Button>
-          {activeStratId && <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.alternatives.fill }} onClick={() => aiFillStrategy(activeStratId)}><Sparkles size={11} /> AI Fill Strategy</Button>}
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiPickBest} disabled={busy || strategies.length < 2}>+ AI Pick Best</Button>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.alternatives.fill }} onClick={aiSuggest} disabled={busy}><Sparkles size={11} /> AI Suggest</Button>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiAnalyse} disabled={busy || !strategies.length}>AI Analyse</Button>
+          {activeStratId && <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.alternatives.fill }} onClick={() => aiFillStrategy(activeStratId)}><Sparkles size={11} /> AI Fill Strategy</Button>}
         </div>
       </div>
 
@@ -342,7 +342,7 @@ Return JSON only: {
 
             {/* Bottom nav */}
             <div className="flex items-center justify-between px-5 py-3 border-t" style={{ borderColor: DS.borderLight, background: DS.bg }}>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5 flex-wrap">
                 {strategies.map(st => {
                   const cc = col(st.colorIdx);
                   return (
@@ -432,7 +432,7 @@ Return JSON only: {
         <div className="border rounded-b-xl p-5 space-y-4" style={{ borderColor: DS.borderLight, borderTop: 'none' }}>
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>AI analysis of strengths, weaknesses and distinctive risks.</p>
-            <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.alternatives.fill }} onClick={aiAnalyse} disabled={busy}>
+            <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.alternatives.fill }} onClick={aiAnalyse} disabled={busy}>
               <Sparkles size={11} /> {busy ? 'Analysing…' : 'Run Analysis'}
             </Button>
           </div>

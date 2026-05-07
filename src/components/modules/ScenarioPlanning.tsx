@@ -144,11 +144,11 @@ Return JSON: {
           <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 10</div>
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Scenario Planning</h2>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiGenerateUnc} disabled={busy}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiGenerateUnc} disabled={busy}>
             <Sparkles size={11} /> {busy ? 'Generating…' : 'AI Generate Uncertainties'}
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.reasoning.fill }} onClick={aiGenerateScenarios} disabled={busy || uncertainties.length < 2}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.reasoning.fill }} onClick={aiGenerateScenarios} disabled={busy || uncertainties.length < 2}>
             <Sparkles size={11} /> {busy ? 'Building…' : 'AI Build Scenarios'}
           </Button>
         </div>
@@ -173,7 +173,7 @@ Return JSON: {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {[
           { id: 'uncertainties', label: `Uncertainties (${uncertainties.length})` },
           { id: 'scenarios', label: `Scenarios (${scenarios.length})` },
@@ -194,7 +194,7 @@ Return JSON: {
             Identify all key external uncertainties — things outside your control that could significantly affect the decision outcome. Add as many as relevant. AI will select the most decision-critical ones as scenario axes.
           </p>
 
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 flex-wrap">
             <Input value={newUncLabel} onChange={e => setNewUncLabel(e.target.value)} onKeyDown={e => e.key === 'Enter' && addUnc()} placeholder="Add uncertainty…" className="flex-1 text-xs h-8" />
             <Button size="sm" className="h-8 gap-1 text-xs shrink-0" style={{ background: DS.reasoning.fill }} onClick={addUnc} disabled={!newUncLabel.trim()}>
               <Plus size={12} /> Add

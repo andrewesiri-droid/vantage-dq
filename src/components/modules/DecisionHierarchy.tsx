@@ -157,18 +157,18 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
           <Badge style={{ background: DS.bg, color: DS.inkSub, border: `1px solid ${DS.border}` }}>{decisions.length} DECISIONS</Badge>
           <Badge style={{ background: DS.bg, color: DS.inkSub, border: `1px solid ${DS.border}` }}>{criteria.length} CRITERIA</Badge>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiAnalysis} disabled={busy}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiAnalysis} disabled={busy}>
             <Sparkles size={11} /> + AI Analysis
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.accent }} onClick={aiAutoSort} disabled={busy}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.accent }} onClick={aiAutoSort} disabled={busy}>
             <Sparkles size={11} /> AI Auto-Sort
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b mb-5" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b mb-5 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors"
@@ -289,7 +289,7 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>Define what matters before scoring strategies. Criteria should reflect genuine stakeholder values.</p>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiSuggestCriteria} disabled={busy}>
+            <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiSuggestCriteria} disabled={busy}>
               <Sparkles size={11} /> AI Suggest
             </Button>
           </div>

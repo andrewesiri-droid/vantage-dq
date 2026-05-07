@@ -101,11 +101,11 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
           <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: DS.inkDis }}>MODULE 07</div>
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Stakeholder Alignment</h2>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiGenerate} disabled={busy}>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiGenerate} disabled={busy}>
             <Sparkles size={11} /> {busy ? 'Generating…' : 'AI Generate'}
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.commitment.fill }} onClick={aiAnalyse} disabled={busy || !stakeholders.length}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.commitment.fill }} onClick={aiAnalyse} disabled={busy || !stakeholders.length}>
             <Sparkles size={11} /> {busy ? 'Analysing…' : 'Analyse Alignment'}
           </Button>
         </div>
@@ -142,7 +142,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b" style={{ borderColor: DS.borderLight }}>
+      <div className="flex border-b overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {[{id:'list',label:'Stakeholders'},{id:'analysis',label:'AI Analysis'}].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
             className="px-4 py-2.5 text-xs font-medium transition-colors"
@@ -256,7 +256,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3">
                       <div>
                         <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.inkDis }}>KEY CONCERNS</div>
                         <textarea value={s.concerns} onChange={e => update(s.id, 'concerns', e.target.value)} rows={3}
