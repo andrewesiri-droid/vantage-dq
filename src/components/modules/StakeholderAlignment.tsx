@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
-import { STAKEHOLDER_DEFS } from '@/lib/dq-definitions';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,8 +55,36 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
 
   const aiGenerate = async () => {
     const existing = stakeholders.map(s => s.name).join(', ');
-    const prompt = `You are an elite DQ facilitator.
-' + STAKEHOLDER_DEFS + `
+    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+
+WHO IS A STAKEHOLDER (for DQ purposes):
+- Those with AUTHORITY over the decision (must approve or can veto)
+- Those who must IMPLEMENT the decision (execution depends on them)
+- Those MATERIALLY AFFECTED by the decision outcome
+- Those who can BLOCK or DERAIL implementation
+- NOT: anyone with an opinion, all customers, all employees
+
+ALIGNMENT LEVELS (be honest, not optimistic):
+- Champion: Actively advocating for this decision and will drive implementation
+- Supportive: In favour but not leading the charge
+- Neutral: No strong view — could go either way
+- Cautious: Has concerns but open to being persuaded
+- Concerned: Has significant objections that must be addressed
+- Opposed: Actively against — will resist or block if not managed
+
+INFLUENCE vs INTEREST:
+- Influence: Power to affect the decision or its implementation (0-100)
+- Interest: How much they care about the outcome (0-100)
+- High influence + low alignment = CRITICAL risk (manage first)
+- Low influence + opposed = monitor (don't ignore)
+
+ENGAGEMENT ACTION QUALITY:
+- Good: "Schedule 1:1 with CFO to walk through financial model before board meeting — owner: CEO, by Week 3"
+- Bad: "Engage stakeholders" / "Have a meeting" / "Communicate the decision"
+- Rule: Every engagement action must have a WHO, WHAT, and WHEN
+
+You are an elite DQ facilitator.
+
 
 Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisionStatement || ''}\nContext: ${(data?.session?.context || '').slice(0, 200)}\nExisting: ${existing}\n\nReturn JSON: { stakeholders: [{name, role, influence: 0-100, interest: 0-100, alignment (champion/supportive/neutral/cautious/concerned/opposed), concerns, engagementAction}] }`;
     setBusy(true);

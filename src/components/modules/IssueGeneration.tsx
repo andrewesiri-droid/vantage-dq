@@ -85,7 +85,32 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
     const s = data?.session || {};
     const existing = issues.slice(0, 8).map(i => i.text).join('; ');
     const prompt = `You are an elite DQ facilitator.
-' + ISSUE_DEFS + `
+
+WHAT IS AN ISSUE:
+- Definition: A question, concern, or uncertainty that MUST be addressed to make a good decision
+- Must: be decision-relevant (changes the preferred alternative if resolved)
+- Must NOT: be a solution ("we should hire locally"), a fact ("the market is growing"), or a task
+- Test: "If we knew the answer to this, would it change our decision?" If no → not an issue
+- Phrasing: Express as a question or open concern, not a statement
+
+ISSUE CATEGORIES:
+- uncertainty-external: unknowns outside management control (market, regulatory, competitive)
+- uncertainty-internal: unknowns within the organisation (capability, capacity, culture)
+- assumption: something treated as true that hasn't been validated
+- information-gap: data we need but don't have
+- stakeholder-concern: alignment or buy-in risk
+- constraint: limit that shapes the decision space
+- opportunity: upside that current framing may miss
+- brutal-truth: uncomfortable reality the team is avoiding
+- regulatory-trap: hidden compliance requirement
+- second-order: consequence of a consequence
+- black-swan: low probability, catastrophic impact
+- focus-decision: sub-decision that must be resolved as part of this decision
+
+QUALITY RULES:
+- Critical issues must be genuinely uncomfortable to state
+- Avoid issues that are already solved or outside the decision scope
+- "Brutal truth" category must contain at least one issue that makes the room uncomfortable
 
 Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionStatement || ''}"\nContext: ${(s.context || '').slice(0, 250)}\nConstraints: ${s.constraints || ''}\nExisting issues (do not duplicate): ${existing}\n\nReturn JSON: { issues: [{text, category (from: uncertainty-external, uncertainty-internal, stakeholder-concern, assumption, information-gap, opportunity, constraint, brutal-truth, regulatory-trap, second-order, black-swan, focus-decision), severity (Critical/High/Medium/Low), owner, description}] }`;
     setBusy(true);

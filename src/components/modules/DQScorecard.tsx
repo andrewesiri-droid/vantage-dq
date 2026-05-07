@@ -51,7 +51,42 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
       focusDecisions: (data?.decisions || []).filter((d: any) => d.tier === 'focus').length,
     };
     const prompt = `You are an elite DQ facilitator.
-' + DQ_SCORECARD_DEFS + `
+
+THE 6 DQ ELEMENTS AND WHAT EACH MEASURES:
+
+FRAME (Appropriate Frame):
+- Measures: Is the right decision being made? Is it framed as an open question with clear scope?
+- Score high (80+) if: Decision statement is a genuine open question, scope is explicit, owner and deadline exist
+- Score low (<40) if: Decision is a goal in disguise, scope is undefined, or the frame excludes viable alternatives
+
+ALTERNATIVES (Creative Alternatives):
+- Measures: Are there genuinely distinct, creative alternatives being considered?
+- Score high (80+) if: 3+ genuinely distinct alternatives, null option considered, no alternative is dominant by construction
+- Score low (<40) if: Only 1-2 alternatives, they're variations of same approach, or the preferred answer is baked in
+
+INFORMATION (Meaningful Information):
+- Measures: Is the right information available to distinguish between alternatives?
+- Score high (80+) if: Key uncertainties are identified, critical data gaps are named, no false precision
+- Score low (<40) if: Key uncertainties are unknown/ignored, data is assumed without validation
+
+VALUES (Clear Values):
+- Measures: Are the right criteria being used, weighted correctly, reflecting real stakeholder values?
+- Score high (80+) if: Criteria reflect genuine trade-offs, weights are defensible, no double-counting
+- Score low (<40) if: Financial proxies substitute for real values, criteria aren't independent
+
+REASONING (Sound Reasoning):
+- Measures: Does the analysis logically connect information and values to conclusions?
+- Score high (80+) if: Recommendations are traceable to data, assumptions are explicit, alternative interpretations acknowledged
+- Score low (<40) if: Conclusions jump from data, assumptions are hidden, analysis confirms prior belief
+
+COMMITMENT (Commitment to Action):
+- Measures: Is the team ready to commit to a decision and execute?
+- Score high (80+) if: All six elements are strong, stakeholders aligned, implementation plan exists
+- Score low (<40) if: Any element is below 40, unresolved blockers, team not aligned
+
+THE CEILING RULE:
+The weakest element sets the ceiling for overall DQ quality.
+A 90/90/90/90/90/20 decision has overall quality of ~20 — you cannot commit.
 
 Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${JSON.stringify(ctx)}\nScoring: 0=Unscored, 20=High-Risk, 40=Weak, 60=Adequate, 80=Strong, 100=Elite\nReturn JSON: { frame, alternatives, information, values, reasoning, commitment }`;
     setBusy(true);

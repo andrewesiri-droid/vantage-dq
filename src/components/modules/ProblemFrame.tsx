@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
-import { PROBLEM_FRAME_DEFS } from '@/lib/dq-definitions';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -100,7 +99,41 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
 
   const runFrameCheck = async () => {
     const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
-' + PROBLEM_FRAME_DEFS + `
+
+DECISION STATEMENT:
+- Definition: The specific choice being made, expressed as an open question
+- Must: be genuinely open (not rhetorical), name the decision-maker's real choice
+- Must NOT: describe a situation, state a goal, or imply a predetermined answer
+- Test: Could someone legitimately answer it differently? If no → rewrite
+- Good: "Which market entry strategy maximises risk-adjusted NPV within our $25M constraint?"
+- Bad: "Should we expand to APAC?" (yes/no, not a real choice)
+- Bad: "How do we grow revenue?" (goal, not decision)
+
+CONTEXT:
+- Definition: Factual background that frames why this decision exists
+- Must: state facts only, explain the trigger, describe the current situation
+- Must NOT: include opinions, recommendations, or proposed solutions
+- Good: "Competitors entered Singapore 14 months ago. Domestic market share plateaued at 18%."
+- Bad: "We should expand because competitors are doing well"
+
+SCOPE IN/OUT:
+- Definition: Explicit boundaries of what this decision does and does not cover
+- Must: name specific elements, be mutually exclusive and collectively exhaustive
+- Must NOT: be vague ("everything relevant") or redundant with decision statement
+- Rule: Out-of-scope items are as important as in-scope items
+
+CONSTRAINTS:
+- Definition: Non-negotiable limits that cannot be violated by any alternative
+- Must: be truly binding (board resolution, legal requirement, physical limit)
+- Must NOT: include preferences, soft targets, or things that could be negotiated
+- Test: If we violated this, would the decision be invalid? If no → it's a preference
+
+SUCCESS CRITERIA:
+- Definition: Specific, measurable outcomes that define a good decision
+- Must: be pre-committed (defined before evaluation), measurable, time-bounded
+- Must NOT: be defined post-hoc to justify a preferred alternative
+- Good: "Year 1: 3+ paying customers, $500K ARR. Year 3: 15% market share"
+- Bad: "Achieve good growth and satisfied stakeholders"
 
 DQ FRAME CHECK — Return ONLY valid JSON, no other text.
 Decision: "${fd.decisionStatement}"

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
-import { VOI_DEFS } from '@/lib/dq-definitions';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,8 +64,35 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
 
   const aiScreen = async () => {
     const uList = uncertainties.map(u => `"${u.label}": impact=${u.impactOnValue}/5, reducible=${u.abilityToReduce}/5, changes_decision=${u.likelihoodChangesDecision}/5, EVPI=$${u.evpiEstimate}`).join('\n');
-    const prompt = `You are an elite DQ facilitator.
-' + VOI_DEFS + `
+    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+
+WHAT HAS VALUE OF INFORMATION:
+- An uncertainty has VOI only if: resolving it would change the preferred alternative
+- Zero VOI: "We'd choose Strategy A whether the market grows 5% or 25% → studying market growth has zero VOI"
+- Positive VOI: "If competitor enters first, we'd choose Strategy C not A → studying competitor timing has positive VOI"
+- Test (the VOI test): "If I knew the answer, would I make a different decision?" If no → VOI = 0
+
+WHAT IS A STUDY (INFORMATION OPTION):
+- Definition: A specific, actionable way to reduce uncertainty before committing
+- Must: be completable before the decision deadline
+- Must: cost less than the expected value it creates (net positive VOI)
+- Must NOT: be "do more analysis" or "wait and see" (too vague)
+- Good: "Regulatory pre-submission meeting with Japan FSA (8 weeks, $150K)"
+- Bad: "Research the market more"
+
+DECISION IMPACT vs NICE TO KNOW:
+- Decision impact: Resolving this uncertainty changes which alternative is preferred
+- Nice to know: Interesting information that doesn't change the decision
+- Rule: Only study decision-impacting uncertainties before committing
+- The trap: Teams study what's interesting, not what's decision-relevant
+
+EVPI (EXPECTED VALUE OF PERFECT INFORMATION):
+- Definition: Maximum you should EVER pay to learn about this uncertainty
+- Calculation: Value of best decision WITH perfect info MINUS value of best decision WITHOUT
+- Rule: Never pay more than EVPI for any study (even a perfect one costs less than EVPI)
+
+You are an elite DQ facilitator.
+
 
 VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||''}\nUrgency: ${urgency}\nReversibility: ${reversibility}\nValue at stake: $${totalValue.toLocaleString()}\n\nUncertainties:\n${uList}\n\nFor each uncertainty: is it decision-critical? Can we learn before the deadline? What study type? Return JSON: { screeningResults: [{uncertaintyLabel, isDecisionCritical, estimatedVOICategory: "High|Medium|Low|Zero", recommendedStudyType, canLearnBeforeDeadline: boolean, warningFlag}], topPriority: string, keyInsight: string, decisionReadiness: "Ready to commit|Critical gaps remain|Dangerous to proceed" }`;
     setBusy(true);

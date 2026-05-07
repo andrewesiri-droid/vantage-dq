@@ -85,8 +85,34 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
   const aiAutoSort = async () => {
     const issueCtx = (data?.issues || []).slice(0, 8).map((i: any) => `"${i.text}" [${i.severity}]`).join('\n');
     const decList = decisions.map(d => `"${d.label}" [currently: ${d.tier}]`).join('\n');
-    const prompt = `You are an elite DQ facilitator.
-' + DECISION_HIERARCHY_DEFS + `
+    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+
+GIVEN DECISIONS:
+- Definition: Already made, locked, non-negotiable — the context for all other decisions
+- Test: Could we realistically reopen this? If no → Given
+- Examples: Board mandates, regulatory requirements, already-spent sunk costs
+
+FOCUS DECISIONS (THE FOCUS FIVE):
+- Definition: The 2-5 strategic decisions that must be resolved NOW to move forward
+- Must: be genuinely open, within decision-maker's authority, sequentially independent
+- Limit: Maximum 5 — if more exist, re-examine which are truly strategic
+- Test: "Would a different choice here significantly change our recommended strategy?" If yes → Focus
+- Common failure: Too many focus decisions → paralysis. Too few → false precision
+
+DEFERRED DECISIONS:
+- Definition: Decisions that depend on Focus decisions being resolved first
+- Must: have a clear trigger ("decide by Month 6 once entry mode is chosen")
+- Must NOT: be deferred simply because they're hard or uncomfortable
+
+FOCUS FIVE QUALITY TEST:
+1. Are they all genuinely open? (not secretly already decided)
+2. Does each one materially affect strategy selection?
+3. Are they within the decision-maker's authority?
+4. Can they be resolved with available information?
+5. Are there really ≤5? (if not, what's actually operational vs strategic?)
+
+You are an elite DQ facilitator.
+
 
 Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given: already made, locked, non-negotiable\n- focus: strategic core, must resolve, max 5 (the Focus Five)\n- deferred: depends on focus decisions\n\nDecision context: ${data?.session?.decisionStatement || ''}\nIssues:\n${issueCtx}\n\nDecisions:\n${decList}\n\nReturn JSON: { assignments: [{label: (exact label), tier, rationale}] }`;
     setBusy(true);

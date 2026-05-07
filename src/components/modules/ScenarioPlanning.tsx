@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
-import { SCENARIO_DEFS } from '@/lib/dq-definitions';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,8 +66,34 @@ export function ScenarioPlanning({ sessionId, data, hooks }: ModuleProps) {
 
   const aiGenerateScenarios = async () => {
     const uncList = uncertainties.map(u => `- ${u.label} [${u.type}, impact: ${u.impact}]${u.description ? ': ' + u.description : ''}`).join('\n');
-    const prompt = `You are a scenario planning expert using the GBN/Shell methodology.
-' + SCENARIO_DEFS + `
+    const prompt = `UNCERTAINTY vs ASSUMPTION (CRITICAL DISTINCTION):
+- Uncertainty: Something we do NOT know and cannot control (external, future, variable)
+  → "What will the regulatory approval timeline be?" 
+- Assumption: Something we TREAT AS TRUE for planning purposes (could be wrong)
+  → "We assume English is acceptable for initial Singapore sales"
+- Rule: Uncertainties drive scenario axes. Assumptions drive sensitivity analysis.
+- Common error: Calling a decision "uncertainty" (e.g. "which strategy we choose")
+
+WHAT MAKES A GOOD SCENARIO AXIS:
+- Must be: HIGH IMPACT (significantly changes decision value) AND HIGH UNCERTAINTY (genuinely unknown)
+- Must NOT be: something we control, something already decided, a low-impact variable
+- Test: "If this resolved differently, would our preferred strategy change?" If yes → strong axis
+
+WHAT IS A SCENARIO:
+- Definition: A coherent, internally consistent description of a plausible future world
+- Must: tell a story (not just a data point), be internally consistent, challenge strategies
+- Must NOT: be optimistic/pessimistic versions of the same world (that's sensitivity analysis)
+- Rule: Each scenario must have at least one strategy that wins and one that loses
+- Quality test: Would a well-informed person say "yes, this could plausibly happen"?
+
+PROBABILITY RULES:
+- All scenarios must sum to 100%
+- No scenario should be <5% (if too unlikely, remove it)
+- Base case should typically be 40-60% probability
+- Avoid three scenarios where one is clearly the "expected" case
+
+You are a scenario planning expert using the GBN/Shell methodology.
+
 
 Decision: ${data?.session?.decisionStatement || ''}
 Context: ${(data?.session?.context || '').slice(0, 300)}

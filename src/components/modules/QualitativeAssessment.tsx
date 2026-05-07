@@ -77,8 +77,35 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
   const aiInitAssessment = async () => {
     const critList = criteria.map((c, i) => `${i+1}. ${c.label} [${c.weight}] — ${c.description || c.type}`).join('\n');
     const stratList = strategies.map((s, i) => `${i+1}. ${s.name}: ${s.description || ''}`).join('\n');
-    const prompt = `You are an elite DQ facilitator.
-' + ASSESSMENT_DEFS + `
+    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+
+WHAT IS A CRITERION:
+- Definition: A dimension of value that matters to decision-makers when choosing between alternatives
+- Must: reflect actual stakeholder values (not proxy metrics), be independent of other criteria
+- Must NOT: double-count (e.g. "NPV" and "profitability" measure the same thing)
+- Test: "Would someone legitimately weight this differently from other criteria?" If yes → valid criterion
+
+SCORE MEANINGS (1-5):
+- 5 (Excellent): This strategy strongly fulfils this criterion — best possible performance
+- 4 (Good): Above average performance on this criterion
+- 3 (Adequate): Meets minimum threshold — acceptable but not strong
+- 2 (Weak): Below par — this criterion is a meaningful weakness for this strategy
+- 1 (Poor): This strategy fails this criterion — significant problem
+
+SCORING RULES:
+- Scores must reflect RELATIVE performance (how does strategy A compare to B and C?)
+- Never score all strategies the same on any criterion (if so, remove the criterion)
+- The spread of scores is more important than the absolute values
+- Critical criteria (weight: critical) should show meaningful differentiation
+
+WEIGHT MEANINGS:
+- Critical: Would veto a strategy if it scores poorly here
+- High: Significantly influences the recommendation
+- Medium: Relevant but not decisive
+- Low: Nice to have — tiebreaker only
+
+You are an elite DQ facilitator.
+
 
 Score these strategies on each criterion for this decision.\nDecision: "${data?.session?.decisionStatement || ''}"\n\nCriteria:\n${critList}\n\nStrategies:\n${stratList}\n\nReturn JSON: { scores: [{strategyIndex: 1-based, criterionIndex: 1-based, score: 1-5, rationale: string}] }`;
     setBusy(true);
