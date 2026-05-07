@@ -94,6 +94,7 @@ You are an elite DQ facilitator.
 
 
 Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisionStatement || ''}\nContext: ${(data?.session?.context || '').slice(0, 200)}\nExisting: ${existing}\n\nReturn JSON: { stakeholders: [{name, role, influence: 0-100, interest: 0-100, alignment (champion/supportive/neutral/cautious/concerned/opposed), concerns, engagementAction}] }`;
+    const _contract = buildContractPrompt('stakeholder-alignment', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'stakeholder' }) });
@@ -116,7 +117,7 @@ Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisio
 
   const aiAnalyse = async () => {
     const shSummary = stakeholders.map(s => `${s.name} (${s.role}): influence=${s.influence}, alignment=${s.alignment}, concerns="${s.concerns}"`).join('\n');
-    const prompt = `Analyse stakeholder alignment.\nDecision: ${data?.session?.decisionStatement||''}\nStakeholders:\n${shSummary}\n\nReturn JSON: { alignmentScore: 0-100, riskLevel: Green|Amber|Red, readinessStatement: string, criticalGaps: [string], engagementPriorities: [{name, action, urgency: critical|high|medium}], insight: string }`;
+    const prompt = `${_contract}\n\nAnalyse stakeholder alignment.\nDecision: ${data?.session?.decisionStatement||''}\nStakeholders:\n${shSummary}\n\nReturn JSON: { alignmentScore: 0-100, riskLevel: Green|Amber|Red, readinessStatement: string, criticalGaps: [string], engagementPriorities: [{name, action, urgency: critical|high|medium}], insight: string }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'stakeholder' }) });

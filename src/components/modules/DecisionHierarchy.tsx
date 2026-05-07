@@ -120,6 +120,7 @@ You are an elite DQ facilitator.
 
 
 Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given: already made, locked, non-negotiable\n- focus: strategic core, must resolve, max 5 (the Focus Five)\n- deferred: depends on focus decisions\n\nDecision context: ${data?.session?.decisionStatement || ''}\nIssues:\n${issueCtx}\n\nDecisions:\n${decList}\n\nReturn JSON: { assignments: [{label: (exact label), tier, rationale}] }`;
+    const _contract = buildContractPrompt('decision-hierarchy', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'decision-hierarchy' }) });
@@ -137,7 +138,7 @@ Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given
 
   const aiSuggestCriteria = async () => {
     const focusDecs = decisions.filter(d => d.tier === 'focus').map(d => d.label).join(', ');
-    const prompt = `Suggest 6 decision criteria for evaluating strategies on: ${focusDecs}.\nDecision: ${data?.session?.decisionStatement || ''}\nIssues: ${(data?.issues || []).slice(0, 5).map((i: any) => i.text).join('; ')}\n\nReturn JSON: { criteria: [{label, type (financial/strategic/operational/risk/commercial), weight (critical/high/medium/low), description}] }`;
+    const prompt = `${_contract}\n\nSuggest 6 decision criteria for evaluating strategies on: ${focusDecs}.\nDecision: ${data?.session?.decisionStatement || ''}\nIssues: ${(data?.issues || []).slice(0, 5).map((i: any) => i.text).join('; ')}\n\nReturn JSON: { criteria: [{label, type (financial/strategic/operational/risk/commercial), weight (critical/high/medium/low), description}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'decision-hierarchy' }) });

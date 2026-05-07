@@ -118,6 +118,7 @@ QUALITY RULES:
 - "Brutal truth" category must contain at least one issue that makes the room uncomfortable
 
 Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionStatement || ''}"\nContext: ${(s.context || '').slice(0, 250)}\nConstraints: ${s.constraints || ''}\nExisting issues (do not duplicate): ${existing}\n\nReturn JSON: { issues: [{text, category (from: uncertainty-external, uncertainty-internal, stakeholder-concern, assumption, information-gap, opportunity, constraint, brutal-truth, regulatory-trap, second-order, black-swan, focus-decision), severity (Critical/High/Medium/Low), owner, description}] }`;
+    const _contract = buildContractPrompt('issue-generation', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) });
@@ -141,7 +142,7 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
 
   const aiCategorise = async () => {
     const issueList = issues.map(i => `"${i.text}" [current: ${i.category}]`).join('\n');
-    const prompt = `Review and re-categorise these issues for accuracy.\nIssues:\n${issueList}\n\nReturn JSON: { reclassifications: [{id (original array index 0-based), text, suggestedCategory, reason}] }`;
+    const prompt = `${_contract}\n\nReview and re-categorise these issues for accuracy.\nIssues:\n${issueList}\n\nReturn JSON: { reclassifications: [{id (original array index 0-based), text, suggestedCategory, reason}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) });

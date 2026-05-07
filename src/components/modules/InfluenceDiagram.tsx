@@ -103,6 +103,7 @@ export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
     const stratNames = (data?.strategies||[]).map((s:any)=>s.name).join(', ');
     const existing = nodes.map(n=>n.label).join(', ');
     const prompt = `Build a DQ influence diagram.\nDecision: ${data?.session?.decisionStatement||''}\nFocus Decisions: ${focusDecs}\nStrategies: ${stratNames}\nExisting nodes (do not duplicate): ${existing}\n\nReturn JSON: { nodes: [{label, type (decision/uncertainty/deterministic/value), col: 1-5, row: 1-4}], edges: [{from (exact label), to (exact label)}], insight: string }`;
+    const _contract = buildContractPrompt('influence-diagram', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'influence-diagram' }) });
@@ -136,7 +137,7 @@ export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
   const aiValidate = async () => {
     const nodeList = nodes.map(n=>`${n.label} [${n.type}]`).join(', ');
     const edgeList = edges.map(e=>{const f=nodes.find(n=>n.id===e.from),t=nodes.find(n=>n.id===e.to);return f&&t?`${f.label}→${t.label}`:null;}).filter(Boolean).join(', ');
-    const prompt = `Validate this influence diagram.\nNodes: ${nodeList}\nEdges: ${edgeList}\nDecision: ${data?.session?.decisionStatement||''}\n\nReturn JSON: { validationScore: 0-100, checks: [{name, pass: boolean, note}], missingLinks: [string], redundantLinks: [string], verdict: string }`;
+    const prompt = `${_contract}\n\nValidate this influence diagram.\nNodes: ${nodeList}\nEdges: ${edgeList}\nDecision: ${data?.session?.decisionStatement||''}\n\nReturn JSON: { validationScore: 0-100, checks: [{name, pass: boolean, note}], missingLinks: [string], redundantLinks: [string], verdict: string }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'influence-diagram' }) });

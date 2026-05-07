@@ -110,6 +110,7 @@ For each strategy, apply DQ definitions:
 - selections: best focus decision choices for this strategy
 
 Return JSON: { strategies: [{name, objective, rationale, assumptions, selections}] }`;
+    const _contract = buildContractPrompt('strategy-table', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
@@ -144,7 +145,7 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
     if (gateErr) { import('@/lib/toast').then(({ toastError }) => toastError(gateErr)); return; }
     const targetStrategy = mechanicalRec.recommendedStrategy || strategies[0]?.name || 'primary strategy';
     const losingStrategies = strategies.filter((s: any) => s.name !== mechanicalRec.recommendedStrategy);
-    const prompt = `You are a senior devil's advocate in a high-stakes decision workshop.
+    const prompt = `${_contract}\n\nYou are a senior devil's advocate in a high-stakes decision workshop.
 
 The group is converging on: "${mechanicalRec.recommendedStrategy}"
 Mechanical score: ${mechanicalRec.scores[mechanicalRec.recommendedStrategy]}/100

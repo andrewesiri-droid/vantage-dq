@@ -127,6 +127,7 @@ The weakest element sets the ceiling for overall DQ quality.
 A 90/90/90/90/90/20 decision has overall quality of ~20 — you cannot commit.
 
 Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${JSON.stringify(ctx)}\nScoring: 0=Unscored, 20=High-Risk, 40=Weak, 60=Adequate, 80=Strong, 100=Elite\nReturn JSON: { frame, alternatives, information, values, reasoning, commitment }`;
+    const _contract = buildContractPrompt('dq-scorecard', data);
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });
@@ -153,7 +154,7 @@ Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${
 
   const aiNarrative = async () => {
     const scoreSummary = DQ_ELEMENTS.map(el => `${el.short}: ${scores[el.key] || 0}`).join(', ');
-    const prompt = `Executive DQ narrative.\nDecision: ${data?.session?.decisionStatement || ''}\nOverall: ${overall}/100 (${band.label})\nScores: ${scoreSummary}\nReturn JSON: { overallVerdict: string, readinessStatement: string, weakestLinkAnalysis: string, priorityActions: [{action, element, urgency: now|soon|later}], decidingNow: string }`;
+    const prompt = `${_contract}\n\nExecutive DQ narrative.\nDecision: ${data?.session?.decisionStatement || ''}\nOverall: ${overall}/100 (${band.label})\nScores: ${scoreSummary}\nReturn JSON: { overallVerdict: string, readinessStatement: string, weakestLinkAnalysis: string, priorityActions: [{action, element, urgency: now|soon|later}], decidingNow: string }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });
