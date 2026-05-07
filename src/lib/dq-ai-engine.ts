@@ -304,6 +304,60 @@ Return JSON with your main output fields PLUS a "meta" object containing the abo
   return basePrompt;
 }
 
+// ── OBJECTIVE TRUST SCORER ────────────────────────────────────────────────────
+// Computes trust from objective data signals, not AI self-report
+export function computeObjectiveTrust(sessionData: any, moduleId: string): {
+  score: number; level: string; color: string; label: string; reason: string; signals: string[];
+} {
+  const signals: string[] = [];
+  let score = 100;
+
+  const strategies = sessionData?.strategies || [];
+  const criteria = sessionData?.criteria || [];
+  const issues = sessionData?.issues || [];
+  const uncertainties = sessionData?.uncertainties || [];
+  const dqScores = sessionData?.session?.dqScores || {};
+  const decisionStatement = sessionData?.session?.decisionStatement || '';
+
+  // Signal 1: Decision statement quality
+  if (!decisionStatement) { score -= 30; signals.push('No decision statement'); }
+  else if (decisionStatement.length < 30) { score -= 15; signals.push('Decision statement too brief'); }
+
+  // Signal 2: Strategy count and quality
+  if (strategies.length === 0) { score -= 25; signals.push('No strategies defined'); }
+  else if (strategies.length === 1) { score -= 15; signals.push('Only 1 strategy — DQ requires 3+'); }
+  else if (strategies.filter((s: any) => s.rationale?.length > 20).length < strategies.length) {
+    score -= 10; signals.push('Some strategies lack rationale');
+  }
+
+  // Signal 3: Criteria
+  if (criteria.length === 0) { score -= 15; signals.push('No criteria defined'); }
+
+  // Signal 4: Uncertainties
+  if (uncertainties.length === 0) { score -= 10; signals.push('No uncertainties identified'); }
+
+  // Signal 5: DQ floor score
+  const dqValues = Object.values(dqScores) as number[];
+  if (dqValues.length > 0) {
+    const floor = Math.min(...dqValues);
+    if (floor < 40) { score -= 20; signals.push('DQ floor score below 40 — commitment premature'); }
+    else if (floor < 60) { score -= 10; signals.push('DQ floor score below 60'); }
+  }
+
+  // Signal 6: Critical unresolved issues
+  const criticalIssues = issues.filter((i: any) => i.severity === 'Critical' && i.status === 'open');
+  if (criticalIssues.length > 3) { score -= 10; signals.push(criticalIssues.length + ' critical issues unresolved'); }
+
+  score = Math.max(0, Math.min(100, score));
+
+  const level = score >= 80 ? 'TRUSTED' : score >= 60 ? 'REVIEW_RECOMMENDED' : score >= 40 ? 'LOW_CONFIDENCE' : 'DO_NOT_USE';
+  const color = score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : '#EF4444';
+  const label = score >= 80 ? 'High Confidence' : score >= 60 ? 'Review Recommended' : score >= 40 ? 'Low Confidence' : 'Insufficient Data';
+  const reason = signals.length > 0 ? signals[0] : 'Well-grounded in session data';
+
+  return { score, level, color, label, reason, signals };
+}
+
 // ── OUTPUT TRUSTWORTHINESS CLASSIFIER ─────────────────────────────────────────
 export function classifyOutputTrust(meta: any): {
   level: 'TRUSTED' | 'REVIEW_RECOMMENDED' | 'LOW_CONFIDENCE' | 'DO_NOT_USE';
