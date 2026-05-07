@@ -102,7 +102,8 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
   );
 
   const runFrameCheck = async () => {
-    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+    const _contract = buildContractPrompt('problem-frame', data);
+    const prompt = `${_contract}\n\nYou are an elite DQ facilitator. Apply these definitions strictly:
 
 DECISION STATEMENT:
 - Definition: The specific choice being made, expressed as an open question

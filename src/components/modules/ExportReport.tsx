@@ -478,7 +478,8 @@ export function ExportReport({ sessionId, data }: ModuleProps) {
       const sec = aiSections[i];
       setGenerationProgress(Math.round((i / aiSections.length) * 100));
 
-      const prompt = `You are a senior Decision Quality consultant generating a section for a ${typeCfg.label}.
+      const _contract = buildContractPrompt('export-report', data);
+      const prompt = `${_contract}\n\nYou are a senior Decision Quality consultant generating a section for a ${typeCfg.label}.
 
 AUDIENCE: ${audienceCfg.label} — ${audienceCfg.desc}
 TONE: ${toneCfg.label} — ${toneCfg.desc}
