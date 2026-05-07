@@ -28,7 +28,8 @@ const TABS = [
 ];
 
 export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
-  const { call, busy } = useAI();
+  const { call } = useAI();
+  const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState('diagram');
   const [nodes, setNodes] = useState<INode[]>([]);
   const [edges, setEdges] = useState<IEdge[]>([]);

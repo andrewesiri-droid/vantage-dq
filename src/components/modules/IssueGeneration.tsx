@@ -45,7 +45,8 @@ const DQ_PRINCIPLES: Record<string, string> = {
 };
 
 export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
-  const { call, busy } = useAI();
+  const { call } = useAI();
+  const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState('raise');
   const [issues, setIssues] = useState<IssueItem[]>([]);
   const [newText, setNewText] = useState('');
@@ -86,9 +87,19 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
     const s = data?.session || {};
     const existing = issues.slice(0, 8).map(i => i.text).join('; ');
     const prompt = `Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionStatement || ''}"\nContext: ${(s.context || '').slice(0, 250)}\nConstraints: ${s.constraints || ''}\nExisting issues (do not duplicate): ${existing}\n\nReturn JSON: { issues: [{text, category (from: uncertainty-external, uncertainty-internal, stakeholder-concern, assumption, information-gap, opportunity, constraint, brutal-truth, regulatory-trap, second-order, black-swan, focus-decision), severity (Critical/High/Medium/Low), owner, description}] }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { setGenerating(false); return; } }
+    setBusy(true);
+
+    fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) })
+
+      .then(r => r.json())
+
+      .then(d => {
+
+        const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        const match = text.match(/\{[\s\S]*\}/);
+
+        if (match) { try { const result = JSON.parse(match[0]);
       const newIssues = (result?.issues || []).map((i: any, idx: number) => ({
         id: Date.now() + idx, text: i.text || '', category: i.category || 'uncertainty-external',
         severity: i.severity || 'High', status: 'open', votes: 0,
@@ -97,31 +108,69 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
       setIssues(p => [...p, ...newIssues]);
       newIssues.forEach((i: any) => hooks?.createIssue?.({ sessionId, text: i.text, category: i.category, severity: i.severity }));
       setGenerating(false);
-    });
+    } catch(e) { console.error('[issue-generation]', e); } }
+
+      })
+
+      .catch(e => console.error('[issue-generation]', e))
+
+      .finally(() => setBusy(false));
   };
 
   const aiCategorise = () => {
     const issueList = issues.map(i => `"${i.text}" [current: ${i.category}]`).join('\n');
     const prompt = `Review and re-categorise these issues for accuracy.\nIssues:\n${issueList}\n\nReturn JSON: { reclassifications: [{id (original array index 0-based), text, suggestedCategory, reason}] }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
+    setBusy(true);
+
+    fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) })
+
+      .then(r => r.json())
+
+      .then(d => {
+
+        const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        const match = text.match(/\{[\s\S]*\}/);
+
+        if (match) { try { const result = JSON.parse(match[0]);
       (result?.reclassifications || []).forEach((rc: any) => {
         if (rc.id >= 0 && rc.id < issues.length) {
           setIssues(p => p.map((issue, idx) => idx === rc.id ? { ...issue, category: rc.suggestedCategory } : issue));
         }
-      });
+      } catch(e) { console.error('[issue-generation]', e); } }
+
+      })
+
+      .catch(e => console.error('[issue-generation]', e))
+
+      .finally(() => setBusy(false));
     });
   };
 
   const aiBlindSpots = () => {
     const cats = [...new Set(issues.map(i => i.category))];
     const prompt = `Analyse this issue list for blind spots.\nDecision: ${data?.session?.decisionStatement || ''}\nIssues (${issues.length}): ${issues.map(i => `[${i.category}/${i.severity}] ${i.text}`).join('; ')}\nCategories present: ${cats.join(', ')}\n\nReturn JSON: { coverageScore: 0-100, coverageSummary: string, missingCategories: [{category, title, why, exampleIssue, severity}], patternInsight: string, topBlindSpot: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw || '').match(/\{[\s\S]*\}/)?.[0] || ''); } catch { return; } }
+    setBusy(true);
+
+    fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) })
+
+      .then(r => r.json())
+
+      .then(d => {
+
+        const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        const match = text.match(/\{[\s\S]*\}/);
+
+        if (match) { try { const result = JSON.parse(match[0]);
       if (result && !result.error) { setBlindSpots(result); setActiveTab('blindspots'); }
-    });
+    } catch(e) { console.error('[issue-generation]', e); } }
+
+      })
+
+      .catch(e => console.error('[issue-generation]', e))
+
+      .finally(() => setBusy(false));
   };
 
   // Stats
