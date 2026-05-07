@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { initializeEmptySession } from '@/lib/demoData';
+import { createSession } from '@/lib/supabase-client';
 import { DS } from '@/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,7 +85,7 @@ export function QuestionWizard({ onBack }: QuestionWizardProps) {
   const [result, setResult] = useState<{ id: number; slug: string } | null>(null);
 
   const submitWizard = async (answers: Record<string, string>) => {
-    const slug = initializeEmptySession(answers.decision?.slice(0, 50) || 'Decision Session');
+    const slug = await createSession(answers.decision?.slice(0, 50) || 'Decision Session');
     try {
       const stored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
       if (stored.sessions?.[0]) {

@@ -78,8 +78,12 @@ export function SessionPage() {
   const handleModuleChange = (id: ModuleId) => { setActiveModule(id); setActiveTool(null); };
   const handleToolChange = (id: ToolId | null) => setActiveTool(id);
 
-  // All sessions are localStorage-based (no backend DB)
-  return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
+  // Demo sessions use localStorage, real sessions use Supabase
+  const isDemo = !slug || slug === 'demo-apac-entry' || slug.startsWith('demo-');
+  if (isDemo) {
+    return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
+  }
+  return <BackendSessionPage slug={slug} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
 }
 
 function renderTool(toolId: ToolId, props: { sessionId?: number; data?: any; hooks?: any }) {
@@ -118,10 +122,21 @@ function DemoSessionPage({ slug, activeModule, setActiveModule, activeTool, setA
 }
 
 function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, setActiveTool }: { slug: string; activeModule: ModuleId; setActiveModule: (m: ModuleId) => void; activeTool: ToolId | null; setActiveTool: (t: ToolId | null) => void }) {
-  const { data: sessionMeta } = trpc.session.getBySlug.useQuery({ slug }, { enabled: !!slug });
-  const sessionId = sessionMeta?.id;
-  const sessionData = useSessionData(sessionId);
-  if (!sessionMeta) {
+  const [sessionMeta, setSessionMeta] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!slug) return;
+    import('@/lib/supabase-client').then(({ supabase }) => {
+      if (!supabase) { setLoading(false); return; }
+      supabase.from('dq_sessions').select('id, name, slug').eq('slug', slug).single()
+        .then(({ data }) => { setSessionMeta(data); setLoading(false); });
+    });
+  }, [slug]);
+
+  const sessionData = useSessionData(sessionMeta?.id);
+
+  if (loading || (!sessionMeta && loading)) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: DS.bg }}>
         <div className="text-center">
@@ -131,10 +146,21 @@ function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, s
       </div>
     );
   }
+
+  if (!sessionMeta) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: DS.bg }}>
+        <div className="text-center">
+          <p className="text-sm" style={{ color: DS.inkSub }}>Session not found.</p>
+        </div>
+      </div>
+    );
+  }
+
   const ModuleComponent = MODULE_COMPONENTS[activeModule];
-  const moduleProps = { sessionId, data: sessionData.data, hooks: sessionData };
+  const moduleProps = { sessionId: sessionMeta.id, data: sessionData.data, hooks: sessionData };
   return (
-    <AppShell sessionName={sessionMeta?.name || 'Session'} sessionId={sessionId}
+    <AppShell sessionName={sessionMeta?.name || 'Session'} sessionId={sessionMeta.id}
       activeModule={activeModule} onModuleChange={setActiveModule}
       activeTool={activeTool} onToolChange={setActiveTool}
       isSyncing={sessionData.isLoading} data={sessionData.data}>

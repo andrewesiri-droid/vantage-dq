@@ -28,3 +28,35 @@ export function generateInviteToken(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   return Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
+
+// Create a new session in Supabase, fall back to localStorage
+export async function createSession(name: string, ownerEmail?: string): Promise<string> {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) + '-' + Date.now().toString(36);
+  
+  if (!supabase) {
+    // Fallback to localStorage
+    const { initializeEmptySession } = await import('@/lib/demoData');
+    return initializeEmptySession(name);
+  }
+
+  const { data, error } = await supabase.from('dq_sessions').insert({
+    slug,
+    name,
+    decision_statement: '',
+    context: '',
+    status: 'draft',
+    owner_email: ownerEmail || '',
+    dq_scores: {},
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).select('slug').single();
+
+  if (error) {
+    console.error('[createSession] Supabase error:', error);
+    // Fallback to localStorage
+    const { initializeEmptySession } = await import('@/lib/demoData');
+    return initializeEmptySession(name);
+  }
+
+  return data.slug;
+}

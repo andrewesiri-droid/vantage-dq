@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DS } from '@/constants';
-import { initializeEmptySession } from '@/lib/demoData';
+import { createSession } from '@/lib/supabase-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,9 +17,9 @@ export function CleanSlate({ onBack }: CleanSlateProps) {
   const handleCreate = () => {
     if (!name.trim()) return;
     setCreating(true);
-    // Create a fresh empty session with unique slug
-    const slug = initializeEmptySession(name.trim());
-    setTimeout(() => navigate(`/session/${slug}`), 300);
+    // Create session in Supabase or localStorage fallback
+    const slug = await createSession(name.trim());
+    navigate(`/session/${slug}`);
   };
 
   if (creating) {
