@@ -130,6 +130,46 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
   const mechanicalRec = computeMechanicalRecommendation(data);
   const frameGate = checkFrameGate(data);
 
+  const aiDevilsAdvocate = async () => {
+    if (!mechanicalRec.recommendedStrategy) return;
+    const losingStrategies = strategies.filter((s: any) => s.name !== mechanicalRec.recommendedStrategy);
+    const prompt = `You are a senior devil's advocate in a high-stakes decision workshop.
+
+The group is converging on: "${mechanicalRec.recommendedStrategy}"
+Mechanical score: ${mechanicalRec.scores[mechanicalRec.recommendedStrategy]}/100
+Confidence: ${mechanicalRec.confidence}
+
+Decision: ${data?.session?.decisionStatement || ''}
+All strategies: ${strategies.map((s: any) => s.name + ': ' + (s.rationale || '')).join('\n')}
+Criteria used: ${(data?.criteria || []).map((c: any) => c.label + ' (' + c.weight + ')').join(', ')}
+Key assumptions behind recommended strategy: ${strategies.find((s: any) => s.name === mechanicalRec.recommendedStrategy)?.assumptions || 'none stated'}
+
+Your job: Make the STRONGEST POSSIBLE CASE against the recommended strategy.
+Be brutal, specific, and grounded in the session data.
+
+1. What is the single biggest reason this recommendation could be catastrophically wrong?
+2. Which assumption, if false, collapses the entire recommendation?
+3. Which losing strategy deserves more serious consideration and why?
+4. What is the group NOT talking about that they should be?
+5. Under what specific scenario does the recommended strategy fail worst?
+
+Return JSON: {
+  headline: "one brutal sentence summarising the core challenge",
+  caseAgainst: [string — 3 specific, grounded arguments against the recommendation],
+  killerAssumption: string — the single assumption that, if wrong, invalidates everything,
+  neglectedStrategy: { name: string, case: string } — strongest case for a losing strategy,
+  silentRisk: string — what the group is avoiding talking about,
+  worstScenario: string — specific scenario where recommended strategy fails catastrophically,
+  verdict: "Proceed with caution|Reconsider seriously|Strong case against"
+}`;
+
+    setBusy(true);
+    try {
+      const result = await dqCall(prompt, { module: 'strategy-table', dqElement: 'Alternatives', sessionData: data || {} });
+      if (result?.data) { setDevilResult(result.data); setShowDevil(true); }
+    } catch(e) { console.error(e); } finally { setBusy(false); }
+  };
+
   const aiPickBest = async () => {
     const prompt = `Recommend the best strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies: ${strategies.map(s => `${s.name}: ${s.rationale}`).join('; ')}\nCriteria: ${(data?.criteria || []).map((c: any) => c.label).join(', ')}\n\nReturn JSON: { recommendation: string, confidence: High|Medium|Low, reasoning: string, keyTradeoff: string }`;
     try {
