@@ -24,7 +24,8 @@ const OVERVIEW_TABS = [
 const DQ_PRINCIPLE = 'Good strategies are genuinely distinct. Each strategy should represent a coherent path — not a variation of the same idea. If two strategies make the same choices on most Focus Decisions, they are the same strategy.';
 
 export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
-  const { call, busy } = useAI();
+  const { call } = useAI();
+  const [busy, setBusy] = useState(false);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [activeStratId, setActiveStratId] = useState<number | null>(null);
   const [overviewTab, setOverviewTab] = useState<string | null>(null);
@@ -85,6 +86,7 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
   const aiSuggest = async () => {
     const decMenu = focusDecisions.map((d, i) => `D${i + 1}: "${d.label}" — options: ${d.choices.map((c, j) => j + '=' + c).join(', ')}`).join('\n');
     const prompt = `Suggest 3 genuinely distinct strategies.\nDecision: ${data?.session?.decisionStatement || ''}\nFocus decisions:\n${decMenu}\nExisting: ${strategies.map(s => s.name).join(', ')}\n\nReturn JSON: { strategies: [{name, rationale, objective, assumptions, selections (D1/D2... → choice index)}] }`;
+    setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
       const data2 = await res.json();
@@ -100,7 +102,7 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
         setStrategies(p => [...p, ...newStrats]);
         if (newStrats.length > 0 && !activeStratId) setActiveStratId(newStrats[0].id);
       }
-    } catch(e) { console.error('[aiSuggest]', e); }
+    } catch(e) { console.error('[ai]', e); } finally { setBusy(false); }
   };
 
   const aiPickBest = async () => {
@@ -111,7 +113,7 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
       const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);
       if (match) { const result = JSON.parse(match[0]); setRecommendation(result); }
-    } catch(e) { console.error('[aiPickBest]', e); }
+    } catch(e) { console.error('[ai]', e); } finally { setBusy(false); }
   };
 
   const aiAnalyse = async () => {
@@ -122,7 +124,7 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
       const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);
       if (match) { const result = JSON.parse(match[0]); setAnalysisResult(result); setOverviewTab('analysis'); setActiveStratId(null); }
-    } catch(e) { console.error('[aiAnalyse]', e); }
+    } catch(e) { console.error('[ai]', e); } finally { setBusy(false); }
   };
 
 
@@ -161,7 +163,7 @@ Return JSON only: {
           setStrategies(p => p.map(st => st.id === stratId ? { ...st, selections: { ...st.selections, ...result.selections } } : st));
         }
       }
-    } catch(e) { console.error('[aiFill]', e); }
+    } catch(e) { console.error('[ai]', e); } finally { setBusy(false); }
   };
 
 
