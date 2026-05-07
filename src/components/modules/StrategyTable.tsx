@@ -126,6 +126,9 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
     } catch(e) { console.error('[ai]', e); } finally { setBusy(false); }
   };
 
+  const mechanicalRec = computeMechanicalRecommendation(data);
+  const frameGate = checkFrameGate(data);
+
   const aiPickBest = async () => {
     const prompt = `Recommend the best strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies: ${strategies.map(s => `${s.name}: ${s.rationale}`).join('; ')}\nCriteria: ${(data?.criteria || []).map((c: any) => c.label).join(', ')}\n\nReturn JSON: { recommendation: string, confidence: High|Medium|Low, reasoning: string, keyTradeoff: string }`;
     try {

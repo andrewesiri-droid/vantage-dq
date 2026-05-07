@@ -296,3 +296,77 @@ THIS OUTPUT IS BASED ON:
 ${inv.length ? inv.map(l => `- ${l}`).join('\n') : '- No upstream data available'}
 `;
 }
+
+// ── FRAME QUALITY GATE ────────────────────────────────────────────────────────
+// Minimum frame quality before AI-heavy modules activate
+export function checkFrameGate(data: any): { passes: boolean; score: number; reason: string } {
+  const s = data?.session || {};
+  let score = 0;
+  if (s.decisionStatement?.length > 30) score += 30;
+  if (s.context?.length > 20) score += 20;
+  if (s.deadline) score += 15;
+  if (s.owner) score += 10;
+  if (s.successCriteria?.length > 20) score += 15;
+  if (s.constraints?.length > 10) score += 10;
+  const passes = score >= 50;
+  const reason = passes
+    ? 'Frame quality sufficient for AI analysis'
+    : 'Frame quality too low — add decision statement, context, and deadline before running AI';
+  return { passes, score, reason };
+}
+
+// ── MECHANICAL RECOMMENDATION TRACEABILITY ────────────────────────────────────
+// Derives recommendation mechanically from assessment scores — not AI narrative
+export function computeMechanicalRecommendation(data: any): {
+  recommendedStrategy: string | null;
+  scores: Record<string, number>;
+  confidence: 'High' | 'Medium' | 'Low';
+  margin: number;
+  traceable: boolean;
+  traceability: string;
+} {
+  const strategies = data?.strategies || [];
+  const criteria = data?.criteria || [];
+  const assessmentScores = data?.assessmentScores || [];
+
+  if (!strategies.length || !criteria.length || !assessmentScores.length) {
+    return { recommendedStrategy: null, scores: {}, confidence: 'Low', margin: 0, traceable: false, traceability: 'Insufficient data — complete Strategy Table, Decision Hierarchy, and Qualitative Assessment first' };
+  }
+
+  const weightMap: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+  const scores: Record<string, number> = {};
+  const maxPossible: Record<string, number> = {};
+
+  strategies.forEach((s: any) => {
+    scores[s.name] = 0;
+    maxPossible[s.name] = 0;
+  });
+
+  criteria.forEach((c: any) => {
+    const w = weightMap[c.weight] || 2;
+    strategies.forEach((s: any) => {
+      const score = assessmentScores.find((a: any) => a.strategyId === s.id && a.criterionId === c.id);
+      scores[s.name] += (score?.score || 0) * w;
+      maxPossible[s.name] += 5 * w;
+    });
+  });
+
+  // Normalise to 0-100
+  const normalised: Record<string, number> = {};
+  strategies.forEach((s: any) => {
+    normalised[s.name] = maxPossible[s.name] > 0 ? Math.round((scores[s.name] / maxPossible[s.name]) * 100) : 0;
+  });
+
+  const sorted = Object.entries(normalised).sort((a, b) => b[1] - a[1]);
+  const top = sorted[0];
+  const second = sorted[1];
+  const margin = top && second ? top[1] - second[1] : 0;
+  const confidence = margin >= 15 ? 'High' : margin >= 5 ? 'Medium' : 'Low';
+
+  const traceability = top
+    ? top[0] + ' scores ' + top[1] + '/100 weighted across ' + criteria.length + ' criteria. ' +
+      (second ? 'Runner-up: ' + second[0] + ' (' + second[1] + '/100). Margin: ' + margin + ' points.' : '')
+    : 'Cannot compute';
+
+  return { recommendedStrategy: top?.[0] || null, scores: normalised, confidence, margin, traceable: true, traceability };
+}

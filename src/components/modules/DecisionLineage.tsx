@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Sparkles, ChevronDown, ChevronUp, ArrowRight, AlertTriangle, CheckCircle, Target, TrendingUp } from 'lucide-react';
 import { ModuleDataBanner } from '@/components/ui/module-data-banner';
 import { toastAIError } from '@/lib/toast';
-import { validateModuleData, buildContractPrompt, buildDataInventoryDisplay } from '@/lib/dq-data-contracts';
+import { validateModuleData, buildContractPrompt, buildDataInventoryDisplay, checkFrameGate, computeMechanicalRecommendation } from '@/lib/dq-data-contracts';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import { useDQAI } from '@/hooks/useDQAI';
 
@@ -40,6 +40,9 @@ export function DecisionLineage({ sessionId, data }: ModuleProps) {
   const preferred = strategies.find((s: any) => s.isPreferred) || strategies[0];
   const criticalIssues = issues.filter((i: any) => i.severity === 'Critical');
   const highRisks = risks.filter((r: any) => r.impact === 'Critical' || r.impact === 'High');
+
+  const mechanicalRec = computeMechanicalRecommendation(data);
+  const frameGate = checkFrameGate(data);
 
   const aiGenerateBrief = async () => {
     const validation = validateModuleData('decision-lineage', data);
@@ -128,6 +131,18 @@ Return JSON: {
       {lastResult?.trust && <DQTrustBadge trust={lastResult.trust} meta={lastResult.meta} />}
 
       {/* Empty state */}
+      {/* Mechanical recommendation */}
+      {mechanicalRec.traceable && (
+        <div className="rounded-xl p-4 flex items-start gap-3 mb-2" style={{ background: mechanicalRec.confidence === 'High' ? DS.successSoft : DS.warnSoft, border: '1px solid ' + (mechanicalRec.confidence === 'High' ? DS.success : DS.warning) + '30' }}>
+          <div className="flex-1">
+            <div className="text-[9px] font-bold uppercase mb-1" style={{ color: mechanicalRec.confidence === 'High' ? DS.success : DS.warning }}>MECHANICALLY COMPUTED — {mechanicalRec.confidence} CONFIDENCE</div>
+            <div className="text-sm font-bold" style={{ color: DS.ink }}>{mechanicalRec.recommendedStrategy}</div>
+            <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>{mechanicalRec.traceability}</p>
+          </div>
+          <div className="text-3xl font-black" style={{ color: mechanicalRec.confidence === 'High' ? DS.success : DS.warning }}>{mechanicalRec.scores[mechanicalRec.recommendedStrategy!]}%</div>
+        </div>
+      )}
+
       {!brief && !busy && (
         <div className="rounded-xl border-2 border-dashed flex flex-col items-center justify-center py-16 text-center px-8" style={{ borderColor: DS.borderLight }}>
           <Target size={32} className="mb-3" style={{ color: DS.inkDis }} />
