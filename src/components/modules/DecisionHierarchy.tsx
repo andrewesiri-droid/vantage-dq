@@ -85,7 +85,10 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
   const aiAutoSort = async () => {
     const issueCtx = (data?.issues || []).slice(0, 8).map((i: any) => `"${i.text}" [${i.severity}]`).join('\n');
     const decList = decisions.map(d => `"${d.label}" [currently: ${d.tier}]`).join('\n');
-    const prompt = `Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given: already made, locked, non-negotiable\n- focus: strategic core, must resolve, max 5 (the Focus Five)\n- deferred: depends on focus decisions\n\nDecision context: ${data?.session?.decisionStatement || ''}\nIssues:\n${issueCtx}\n\nDecisions:\n${decList}\n\nReturn JSON: { assignments: [{label: (exact label), tier, rationale}] }`;
+    const prompt = `You are an elite DQ facilitator.
+${DECISION_HIERARCHY_DEFS}
+
+Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given: already made, locked, non-negotiable\n- focus: strategic core, must resolve, max 5 (the Focus Five)\n- deferred: depends on focus decisions\n\nDecision context: ${data?.session?.decisionStatement || ''}\nIssues:\n${issueCtx}\n\nDecisions:\n${decList}\n\nReturn JSON: { assignments: [{label: (exact label), tier, rationale}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'decision-hierarchy' }) });

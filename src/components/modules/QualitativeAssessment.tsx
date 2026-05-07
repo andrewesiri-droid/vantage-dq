@@ -77,7 +77,10 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
   const aiInitAssessment = async () => {
     const critList = criteria.map((c, i) => `${i+1}. ${c.label} [${c.weight}] — ${c.description || c.type}`).join('\n');
     const stratList = strategies.map((s, i) => `${i+1}. ${s.name}: ${s.description || ''}`).join('\n');
-    const prompt = `Score these strategies on each criterion for this decision.\nDecision: "${data?.session?.decisionStatement || ''}"\n\nCriteria:\n${critList}\n\nStrategies:\n${stratList}\n\nReturn JSON: { scores: [{strategyIndex: 1-based, criterionIndex: 1-based, score: 1-5, rationale: string}] }`;
+    const prompt = `You are an elite DQ facilitator.
+${ASSESSMENT_DEFS}
+
+Score these strategies on each criterion for this decision.\nDecision: "${data?.session?.decisionStatement || ''}"\n\nCriteria:\n${critList}\n\nStrategies:\n${stratList}\n\nReturn JSON: { scores: [{strategyIndex: 1-based, criterionIndex: 1-based, score: 1-5, rationale: string}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'qualitative-assessment' }) });

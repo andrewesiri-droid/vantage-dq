@@ -50,7 +50,10 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
       criteria: (data?.criteria || []).length,
       focusDecisions: (data?.decisions || []).filter((d: any) => d.tier === 'focus').length,
     };
-    const prompt = `Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${JSON.stringify(ctx)}\nScoring: 0=Unscored, 20=High-Risk, 40=Weak, 60=Adequate, 80=Strong, 100=Elite\nReturn JSON: { frame, alternatives, information, values, reasoning, commitment }`;
+    const prompt = `You are an elite DQ facilitator.
+${DQ_SCORECARD_DEFS}
+
+Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${JSON.stringify(ctx)}\nScoring: 0=Unscored, 20=High-Risk, 40=Weak, 60=Adequate, 80=Strong, 100=Elite\nReturn JSON: { frame, alternatives, information, values, reasoning, commitment }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });

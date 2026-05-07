@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { PROBLEM_FRAME_DEFS } from '@/lib/dq-definitions';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -98,7 +99,10 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
   );
 
   const runFrameCheck = async () => {
-    const prompt = `DQ frame check. Return ONLY valid JSON, no other text.
+    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+${PROBLEM_FRAME_DEFS}
+
+DQ FRAME CHECK — Return ONLY valid JSON, no other text.
 Decision: "${fd.decisionStatement}"
 Context: ${fd.situation?.slice(0,200)}
 Scope In: ${fd.scopeIn?.slice(0,150)}

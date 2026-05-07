@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { VOI_DEFS } from '@/lib/dq-definitions';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,7 +65,10 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
 
   const aiScreen = async () => {
     const uList = uncertainties.map(u => `"${u.label}": impact=${u.impactOnValue}/5, reducible=${u.abilityToReduce}/5, changes_decision=${u.likelihoodChangesDecision}/5, EVPI=$${u.evpiEstimate}`).join('\n');
-    const prompt = `VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||''}\nUrgency: ${urgency}\nReversibility: ${reversibility}\nValue at stake: $${totalValue.toLocaleString()}\n\nUncertainties:\n${uList}\n\nFor each uncertainty: is it decision-critical? Can we learn before the deadline? What study type? Return JSON: { screeningResults: [{uncertaintyLabel, isDecisionCritical, estimatedVOICategory: "High|Medium|Low|Zero", recommendedStudyType, canLearnBeforeDeadline: boolean, warningFlag}], topPriority: string, keyInsight: string, decisionReadiness: "Ready to commit|Critical gaps remain|Dangerous to proceed" }`;
+    const prompt = `You are an elite DQ facilitator.
+${VOI_DEFS}
+
+VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||''}\nUrgency: ${urgency}\nReversibility: ${reversibility}\nValue at stake: $${totalValue.toLocaleString()}\n\nUncertainties:\n${uList}\n\nFor each uncertainty: is it decision-critical? Can we learn before the deadline? What study type? Return JSON: { screeningResults: [{uncertaintyLabel, isDecisionCritical, estimatedVOICategory: "High|Medium|Low|Zero", recommendedStudyType, canLearnBeforeDeadline: boolean, warningFlag}], topPriority: string, keyInsight: string, decisionReadiness: "Ready to commit|Critical gaps remain|Dangerous to proceed" }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'voi' }) });

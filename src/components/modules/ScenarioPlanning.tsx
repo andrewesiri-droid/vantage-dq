@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { SCENARIO_DEFS } from '@/lib/dq-definitions';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,6 +68,7 @@ export function ScenarioPlanning({ sessionId, data, hooks }: ModuleProps) {
   const aiGenerateScenarios = async () => {
     const uncList = uncertainties.map(u => `- ${u.label} [${u.type}, impact: ${u.impact}]${u.description ? ': ' + u.description : ''}`).join('\n');
     const prompt = `You are a scenario planning expert using the GBN/Shell methodology.
+${SCENARIO_DEFS}
 
 Decision: ${data?.session?.decisionStatement || ''}
 Context: ${(data?.session?.context || '').slice(0, 300)}
