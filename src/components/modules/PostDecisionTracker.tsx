@@ -96,7 +96,7 @@ export function PostDecisionTracker({ sessionId, data, hooks }: ModuleProps) {
 
   const aiReview = async () => {
     const outcomesSummary = outcomes.map(o => `[${o.type}] ${o.label}: predicted=${o.predicted}, actual=${o.actual || 'pending'}, status=${o.status}`).join('\n');
-    const prompt = `Post-decision learning review.
+    const prompt = `${buildContractPrompt('post-decision', data)}\n\nPost-decision learning review.
 Decision: ${session.decisionStatement || ''}
 Strategy chosen: ${preferred?.name || ''}
 Commit date: ${commitDate}
