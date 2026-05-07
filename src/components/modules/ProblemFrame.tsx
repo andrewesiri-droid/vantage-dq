@@ -44,6 +44,7 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
   const [fd, setFd] = useState<FrameData>(DEFAULT);
   const [saving, setSaving] = useState(false);
   const [frameCheck, setFrameCheck] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
   const [improvements, setImprovements] = useState<any[]>([]);
 
   useEffect(() => {
