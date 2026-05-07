@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
 import { useNavigate } from 'react-router';
 import { DS } from '@/constants';
 import { createSession } from '@/lib/supabase-client';
@@ -12,6 +13,7 @@ interface AIDeepDiveProps { onBack: () => void; }
 
 export function AIDeepDive({ onBack }: AIDeepDiveProps) {
   const navigate = useNavigate();
+  const { call: dqCall } = useDQAI();
   const [step, setStep] = useState<'input' | 'analysing' | 'results'>('input');
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
@@ -39,41 +41,26 @@ export function AIDeepDive({ onBack }: AIDeepDiveProps) {
     setError('');
     setStep('analysing');
     try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: `You are a Decision Quality analyst. Extract a structured decision frame from this document.
+      const prompt = `You are a Decision Quality analyst. Extract a structured decision frame from this document.
 
 DOCUMENT:
 ${content.slice(0, 8000)}
 
-Extract:
-1. A clear decision statement (the key decision to be made)
-2. Context (situation and background)
-3. Key constraints (hard limits)
-4. Success criteria
-5. A short session name
-
-Return JSON only:
+Extract and return JSON only — no other text:
 {
-  "name": "short session name",
-  "decisionStatement": "Which option should we choose...",
-  "context": "background context",
-  "constraints": "key constraints",
-  "successCriteria": "what good looks like"
-}`,
-          module: 'ai-deep-dive',
-          task_type: 'ai-generate',
-        }),
-      });
+  "name": "short session name (max 50 chars)",
+  "decisionStatement": "Which specific option should we choose... (clear decision question)",
+  "context": "situation and background (2-3 sentences)",
+  "constraints": "key hard limits and boundaries",
+  "successCriteria": "what a good outcome looks like"
+}`;
 
-      const data = await res.json();
-      const text = data.result || data.content?.[0]?.text || '';
-      const match = text.match(/\{[\s\S]*\}/);
-      const parsed = match ? JSON.parse(match[0]) : {};
+      const dqResult = await dqCall(prompt, { module: 'ai-deep-dive', dqElement: 'Frame', sessionData: {} });
+      const parsed = dqResult?.data || {};
+      if (!parsed.decisionStatement) throw new Error('No decision extracted');
 
-      const slug = await createSession(parsed.name || name);
+      const { data: { user } } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
+      const slug = await createSession(parsed.name || name, user?.email, user?.id);
       try {
         // Update session with AI-extracted data
         if (supabase) {
