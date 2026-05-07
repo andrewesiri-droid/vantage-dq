@@ -14,7 +14,9 @@ import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { Button } from '@/components/ui/button';
 import { Sparkles, ChevronDown, ChevronUp, ArrowRight, AlertTriangle, CheckCircle, Target, TrendingUp } from 'lucide-react';
+import { ModuleDataBanner } from '@/components/ui/module-data-banner';
 import { toastAIError } from '@/lib/toast';
+import { validateModuleData, buildContractPrompt, buildDataInventoryDisplay } from '@/lib/dq-data-contracts';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import { useDQAI } from '@/hooks/useDQAI';
 
@@ -40,7 +42,12 @@ export function DecisionLineage({ sessionId, data }: ModuleProps) {
   const highRisks = risks.filter((r: any) => r.impact === 'Critical' || r.impact === 'High');
 
   const aiGenerateBrief = async () => {
-    const prompt = `Generate an executive decision brief for this decision.
+    const validation = validateModuleData('decision-lineage', data);
+    const contractRules = buildContractPrompt('decision-lineage', data);
+    const dataInventory = buildDataInventoryDisplay(data);
+    const prompt = `${contractRules}
+
+Generate an executive decision brief for this decision.
 
 Decision: ${session.decisionStatement || ''}
 Context: ${(session.context || '').slice(0, 300)}
@@ -96,6 +103,7 @@ Return JSON: {
 
   return (
     <div className="space-y-4">
+      <ModuleDataBanner moduleId="decision-lineage" data={data} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>

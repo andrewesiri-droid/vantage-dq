@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { ModuleDataBanner } from '@/components/ui/module-data-banner';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -147,12 +148,16 @@ Return JSON: {
   };
 
   const aiStressTest = async () => {
+    const validation = validateModuleData('scenario-planning', data);
     const strategies = data?.strategies || [];
     const stratList = strategies.length
       ? strategies.map((s: any) => `${s.name}: ${s.rationale || ''}`).join('\n')
-      : 'No strategies defined yet — infer 2-3 generic strategic options from the decision context and scenarios';
+      : 'No strategies defined — add strategies in Strategy Table first';
+    const contractRules = buildContractPrompt('scenario-planning', data);
     const scenList = scenarios.map(s => `${s.name}: ${s.description}`).join('\n');
-    const prompt = `Stress test strategies across scenarios for this decision.
+    const prompt = `${contractRules}
+
+Stress test strategies across scenarios for this decision.
 Decision: ${data?.session?.decisionStatement || ''}
 ${strategies.length ? `Strategies:\n${stratList}` : `No strategies defined. Infer 2-3 plausible strategic options from the decision context and test those.`}
 Scenarios:
@@ -175,6 +180,7 @@ Return JSON: { profiles: [{name, robustness: "robust|conditional|fragile", winsI
 
   return (
     <div className="space-y-4">
+      <ModuleDataBanner moduleId="scenario-planning" data={data} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>

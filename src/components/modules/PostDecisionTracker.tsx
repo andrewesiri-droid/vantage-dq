@@ -7,6 +7,7 @@ import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { Button } from '@/components/ui/button';
 import { Sparkles, CheckCircle, X, AlertTriangle, TrendingUp } from 'lucide-react';
+import { ModuleDataBanner } from '@/components/ui/module-data-banner';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';

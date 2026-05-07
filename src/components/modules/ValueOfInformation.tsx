@@ -3,6 +3,7 @@ import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { ModuleDataBanner } from '@/components/ui/module-data-banner';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -125,6 +126,7 @@ VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||
 
   return (
     <div className="space-y-4">
+      <ModuleDataBanner moduleId="voi" data={data} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>

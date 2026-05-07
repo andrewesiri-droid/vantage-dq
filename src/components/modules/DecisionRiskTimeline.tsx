@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { ModuleDataBanner } from '@/components/ui/module-data-banner';
 import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +88,7 @@ export function DecisionRiskTimeline({ sessionId, data, hooks }: ModuleProps) {
 
   return (
     <div className="space-y-4">
+      <ModuleDataBanner moduleId="risk-timeline" data={data} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
