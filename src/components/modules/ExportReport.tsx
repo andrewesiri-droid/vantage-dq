@@ -1,3 +1,4 @@
+import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 /**
  * Export & Report Module — Vantage DQ
@@ -410,6 +411,7 @@ function scoreReportHealth(sections: ReportSection[], data: any): { score: numbe
 // ── COMPONENT ──────────────────────────────────────────────────────────────────
 export function ExportReport({ sessionId, data }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const frameGate = checkFrameGate(data);
   const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [step, setStep] = useState(1); // 1-7
   const [config, setConfig] = useState<ReportConfig>({
@@ -576,6 +578,12 @@ Return JSON: { content: string }`;
       {/* ══ STEP 1: REPORT TYPE ════════════════════════════════════════════════ */}
       {step === 1 && (
         <div className="space-y-4">
+      {frameGate.score < 50 && (
+        <div className="rounded-xl p-3 flex items-center gap-2 mb-2" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
+          <span className="text-lg">🔒</span>
+          <span className="text-[10px] font-bold" style={{ color: '#D97706' }}>AI locked — complete Problem Frame first (score {frameGate.score}/50)</span>
+        </div>
+      )}
       {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
           <p className="text-xs" style={{ color: DS.inkSub }}>Choose the report type that fits your audience and purpose.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

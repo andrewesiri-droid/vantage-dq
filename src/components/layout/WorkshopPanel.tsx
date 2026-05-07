@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useWorkshopSync } from '@/hooks/useWorkshopSync';
+import { useSessionData } from '@/hooks/useSessionData';
 import { WorkshopCopilot } from '@/components/workshop/WorkshopCopilot';
 import { useDemoContext } from '@/App';
 import { DS } from '@/constants';
@@ -137,6 +138,7 @@ interface LogEntry { id: number; text: string; timestamp: Date; type: 'decision'
 
 export function WorkshopPanel({ onClose, sessionId, data }: Props) {
   const { call: dqCall, busy } = useDQAI();
+  const sessionHooks = useSessionData(sessionId);
   const { authUser } = useDemoContext();
   const sync = useWorkshopSync({
     sessionId: sessionId || 1,
@@ -409,12 +411,18 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
                   sessionContext={{ decisionStatement: data?.session?.decisionStatement, sessionName: data?.session?.name }}
                   onDraftCreated={(item) => {
                     sync.submitNote(`[${item.category}] ${item.text}`, phase.id, false);
-                    // Push accepted item to session — store in localStorage for demo mode
+                    // Push accepted item to session data
                     try {
-                      const stored = JSON.parse(localStorage.getItem('vantage_dq_scribe_items') || '[]');
-                      stored.push({ ...item, sessionId, acceptedAt: Date.now() });
-                      localStorage.setItem('vantage_dq_scribe_items', JSON.stringify(stored.slice(-100)));
-                    } catch(e) { console.error(e); }
+                      const cat = (item.category || 'uncertainty-external').toLowerCase();
+                      const validCats = ['uncertainty-external','uncertainty-internal','stakeholder-concern','assumption','information-gap','opportunity','constraint','brutal-truth','regulatory-trap','second-order','black-swan','focus-decision'];
+                      const issueCat = validCats.includes(cat) ? cat : 'uncertainty-external';
+                      const sev = item.confidence === 'high' ? 'High' : 'Medium';
+                      if (item.targetModule === 'stakeholder-alignment') {
+                        sessionHooks.createStakeholder?.({ sessionId, name: item.speakerName || 'Workshop Participant', role: item.text });
+                      } else {
+                        sessionHooks.createIssue?.({ sessionId, text: item.text, category: issueCat, severity: sev });
+                      }
+                    } catch(e) { console.error('[scribe]', e); }
                   }}
                   onClose={() => setScribeOpen(false)}
                 />
