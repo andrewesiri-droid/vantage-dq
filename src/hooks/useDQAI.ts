@@ -4,7 +4,7 @@
  */
 import { useState, useCallback } from 'react';
 import { buildDQCompliantPrompt, classifyOutputTrust, detectCrossModuleContradictions } from '@/lib/dq-ai-engine';
-import { trackAICall } from '@/lib/ai-rate-limiter';
+import { trackAICall, trackAICallServer } from '@/lib/ai-rate-limiter';
 import { toastAIError, toastError } from '@/lib/toast';
 
 export interface DQAIResult {
@@ -22,9 +22,13 @@ export function useDQAI() {
     rawPrompt: string,
     options: { module: string; dqElement: string; sessionData: any }
   ): Promise<DQAIResult | null> => {
-    const rateCheck = trackAICall(options.sessionData?.session?.id);
+    const sessionId = options.sessionData?.session?.id;
+    // Use Supabase rate limiter for auth sessions, localStorage for demo
+    const rateCheck = trackAICall(sessionId);
     if (!rateCheck.allowed) { toastError(rateCheck.warning || 'AI call limit reached'); setBusy(false); return null; }
     if (rateCheck.warning && rateCheck.count >= 50) toastError(rateCheck.warning);
+    // Fire-and-forget server rate tracking for authenticated sessions
+    if (sessionId) trackAICallServer(sessionId).catch(() => {});
     // Load cached trust result for this module
     const cacheKey = 'vdq_trust_' + (options.sessionData?.session?.id || 'demo') + '_' + (options.module || '');
     try {

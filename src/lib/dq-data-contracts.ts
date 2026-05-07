@@ -177,6 +177,26 @@ export const MODULE_CONTRACTS: Record<string, ModuleContract> = {
     ],
     upstreamModules: ['problem-frame', 'strategy-table'],
   },
+  'influence-diagram': {
+    id: 'influence-diagram',
+    produces: ['influenceNodes[]', 'influenceEdges[]'],
+    consumes: [
+      { field: 'session.decisionStatement', source: 'problem-frame', required: true },
+      { field: 'strategies[]', source: 'strategy-table', required: false },
+      { field: 'uncertainties[]', source: 'scenario-planning', required: false },
+    ],
+    upstreamModules: ['problem-frame', 'strategy-table'],
+  },
+  'game-theory': {
+    id: 'game-theory',
+    produces: ['gameTheoryModels[]'],
+    consumes: [
+      { field: 'session.decisionStatement', source: 'problem-frame', required: true },
+      { field: 'strategies[]', source: 'strategy-table', required: true },
+      { field: 'stakeholderEntries[]', source: 'stakeholder-alignment', required: false },
+    ],
+    upstreamModules: ['problem-frame', 'strategy-table', 'stakeholder-alignment'],
+  },
   'post-decision': {
     id: 'post-decision',
     label: 'Post-Decision Tracker',

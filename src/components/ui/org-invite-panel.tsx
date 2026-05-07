@@ -17,12 +17,9 @@ export function OrgInvitePanel({ organisationId, orgName, onClose }: Props) {
     if (!email.trim() || !supabase) return;
     setSending(true); setError('');
     try {
-      // Find user by email
-      const { data: profile } = await supabase.from('profiles').select('id').eq('email', email.trim()).single();
-      if (!profile) { setError('No account found for ' + email + '. Ask them to sign up first.'); setSending(false); return; }
-      // Add to org
-      const { error: insertError } = await supabase.from('organisation_members').insert({
-        organisation_id: organisationId, user_id: profile.id, role
+      // Store pending invite — user will be added when they log in
+      const { error: insertError } = await supabase.from('organisation_invites').insert({
+        organisation_id: organisationId, email: email.trim(), role, invited_at: new Date().toISOString()
       });
       if (insertError) { setError(insertError.message); setSending(false); return; }
       setSent(true); setEmail('');
