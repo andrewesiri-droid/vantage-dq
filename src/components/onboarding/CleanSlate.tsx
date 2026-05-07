@@ -14,7 +14,7 @@ export function CleanSlate({ onBack }: CleanSlateProps) {
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return;
     setCreating(true);
     // Create session in Supabase or localStorage fallback
