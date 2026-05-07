@@ -434,7 +434,17 @@ export function ExportReport({ sessionId, data }: ModuleProps) {
   const TypeIcon = typeCfg.icon;
 
   // Step 5: AI Generate all sections
+  const checkDataGate = () => {
+    const s = data?.session || {};
+    const strategies = data?.strategies || [];
+    if (!s.decisionStatement?.length) return 'Add a decision statement in Problem Frame before generating a report';
+    if (strategies.length < 2) return 'Add at least 2 strategies in Strategy Table before generating a report';
+    return null;
+  };
+
   const generateAllSections = async () => {
+    const gateError = checkDataGate();
+    if (gateError) { import('@/lib/toast').then(({ toastError }) => toastError(gateError)); return; }
     const baseSections = buildInitialSections(config.type, sessionData);
     setSections(baseSections);
     setGenerating(true);
@@ -774,7 +784,12 @@ Return JSON: { content: string }`;
           ) : (
             <div className="flex justify-between">
               <Button variant="outline" className="gap-1 text-xs" onClick={() => setStep(4)}><ChevronLeft size={12} /> Back</Button>
-              <Button className="gap-2 px-6" style={{ background: typeCfg.color }} onClick={generateAllSections} disabled={busy}>
+              {checkDataGate() && (
+                <div className="text-[10px] font-bold px-3 py-1.5 rounded-lg" style={{ background: '#FEF3C7', color: '#D97706' }}>
+                  🔒 {checkDataGate()}
+                </div>
+              )}
+              <Button className="gap-2 px-6" style={{ background: typeCfg.color }} onClick={generateAllSections} disabled={busy || !!checkDataGate()}>
                 <Sparkles size={14} /> Generate {typeCfg.label}
               </Button>
             </div>
