@@ -96,7 +96,7 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
     ([fd.situation, fd.decisionStatement, fd.scopeIn, fd.scopeOut, fd.successCriteria].filter(Boolean).length / 5) * 100
   );
 
-  const runFrameCheck = () => {
+  const runFrameCheck = async () => {
     const prompt = `DQ frame check. Return ONLY valid JSON, no other text.
 Decision: "${fd.decisionStatement}"
 Context: ${fd.situation?.slice(0,200)}
@@ -108,24 +108,27 @@ Constraints: ${fd.constraints?.slice(0,150)}
 Success: ${fd.successCriteria?.slice(0,150)}
 
 JSON format: {"overallScore":0-100,"band":"Elite|Strong|Adequate|Weak|High-Risk","summary":"string","checks":[{"name":"string","pass":true,"note":"string"}],"improvements":[{"field":"string","current":"string","suggestion":"string","reason":"string"}],"verdict":"string"}`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) {
-        try {
-          const match = (r._raw || '').match(/\{[\s\S]*\}/);
-          if (match) result = JSON.parse(match[0]);
-        } catch (e) {
-          console.error('[FrameCheck] parse error:', e, r?._raw?.slice(0, 300));
-        }
-      }
-      if (result && !result.error && (result.overallScore !== undefined || result.band || result.checks)) {
+    try {
+      setBusy(true);
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, module: 'problem-frame' }),
+      });
+      const data = await res.json();
+      const text = (data.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const result = JSON.parse(match[0]);
         setFrameCheck(result);
         setImprovements(result.improvements || []);
         setActiveTab('ai');
-      } else if (!result?.overallScore) {
-        console.warn('[FrameCheck] bad shape:', JSON.stringify(result)?.slice(0, 200));
       }
-    });
+    } catch(e) {
+      console.error('[FrameCheck]', e);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const applyImprovement = (imp: any) => {
