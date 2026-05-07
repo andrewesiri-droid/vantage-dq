@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { DS } from '@/constants';
 import { Shield, AlertTriangle, CheckCircle, Info, ChevronDown, ChevronUp, Eye } from 'lucide-react';
-import type { TrustResult } from '@/hooks/useAI';
+// TrustResult type moved to dq-ai-engine
 
 interface Props {
   trust: TrustResult | null;
