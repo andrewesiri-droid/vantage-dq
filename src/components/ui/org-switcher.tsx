@@ -1,12 +1,14 @@
+import { OrgInvitePanel } from '@/components/ui/org-invite-panel';
 import { useState } from 'react';
 import { DS } from '@/constants';
 import { useOrganisation } from '@/hooks/useOrganisation';
-import { Building2, Plus, ChevronDown, Check } from 'lucide-react';
+import { Building2, Plus, ChevronDown, Check, UserPlus } from 'lucide-react';
 
 export function OrgSwitcher() {
   const { orgs, currentOrg, createOrg, switchOrg } = useOrganisation();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [newName, setNewName] = useState('');
 
   if (!currentOrg && orgs.length === 0) return null;
@@ -57,7 +59,12 @@ export function OrgSwitcher() {
                     className="text-xs px-2 py-1 rounded" style={{ color: DS.inkDis }}>✕</button>
                 </div>
               ) : (
-                <button onClick={() => setCreating(true)}
+                <button onClick={() => { setInviting(true); setOpen(false); }}
+                className="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs mb-0.5"
+                style={{ color: DS.inkSub }}>
+                <UserPlus size={11} /> Invite Member
+              </button>
+              <button onClick={() => setCreating(true)}
                   className="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs"
                   style={{ color: DS.information.fill }}>
                   <Plus size={11} /> New Organisation
@@ -66,6 +73,10 @@ export function OrgSwitcher() {
             </div>
           </div>
         </>
+      )}
+    </div>
+      {inviting && currentOrg && (
+        <OrgInvitePanel organisationId={currentOrg.id} orgName={currentOrg.name} onClose={() => setInviting(false)} />
       )}
     </div>
   );

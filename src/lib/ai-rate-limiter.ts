@@ -1,10 +1,26 @@
 /**
+ * AI Call Rate Limiter — Supabase-backed for authenticated users, localStorage for demo
+ */
+import { supabase } from '@/lib/supabase-client';
+
+/**
  * AI Call Rate Limiter
  * Tracks per-session AI calls and enforces soft/hard limits.
  */
 const RATE_KEY = 'vdq_ai_calls';
 const SOFT_LIMIT = 50;
 const HARD_LIMIT = 100;
+
+export async function trackAICallServer(sessionId?: number, userId?: string): Promise<{ allowed: boolean; count: number }> {
+  if (!supabase || !userId || !sessionId) return { allowed: true, count: 0 };
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data } = await supabase.from('session_metadata').select('ai_calls').eq('session_id', sessionId).eq('date', today).single();
+    const count = (data?.ai_calls || 0) + 1;
+    await supabase.from('session_metadata').upsert({ session_id: sessionId, date: today, ai_calls: count }, { onConflict: 'session_id,date' });
+    return { allowed: count <= 100, count };
+  } catch { return { allowed: true, count: 0 }; }
+}
 
 export function trackAICall(sessionId?: number): { allowed: boolean; count: number; remaining: number; warning: string | null } {
   try {

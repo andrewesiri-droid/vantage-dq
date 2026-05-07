@@ -198,7 +198,8 @@ export function GameTheoryModule({ sessionId, data }: ModuleProps) {
 
   // ── QUICK MODE AI ──────────────────────────────────────────────────────────
   const runQuickAnalysis = async () => {
-    const prompt = `You are a strategic game theory analyst. Analyse this decision situation quickly and give executive-level strategic intelligence.
+    const contractRules = buildContractPrompt('game-theory', data);
+    const prompt = `${contractRules}\n\nYou are a strategic game theory analyst. Analyse this decision situation quickly and give executive-level strategic intelligence.
 
 Decision: ${decisionContext}
 Objective: ${strategicObjective}

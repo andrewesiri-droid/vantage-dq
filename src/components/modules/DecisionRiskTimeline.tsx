@@ -60,7 +60,8 @@ export function DecisionRiskTimeline({ sessionId, data, hooks }: ModuleProps) {
 
   const aiGenerate = async () => {
     const stratName = (data?.strategies || [])[0]?.name || 'primary strategy';
-    const prompt = `Generate decision risks for: ${data?.session?.decisionStatement || ''}\nStrategy: ${stratName}\nDeadline: ${data?.session?.deadline || ''}\n\nReturn JSON: { risks: [{label, likelihood: High|Medium|Low, impact: Critical|High|Medium|Low, timeframe, month: 1-18, owner, mitigation}] }`;
+    const contractRules = buildContractPrompt('risk-timeline', data);
+    const prompt = `${contractRules}\n\nGenerate decision risks for: ${data?.session?.decisionStatement || ''}\nStrategy: ${stratName}\nDeadline: ${data?.session?.deadline || ''}\n\nReturn JSON: { risks: [{label, likelihood: High|Medium|Low, impact: Critical|High|Medium|Low, timeframe, month: 1-18, owner, mitigation}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'risk' }) });

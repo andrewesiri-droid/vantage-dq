@@ -85,7 +85,8 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
   const aiInitAssessment = async () => {
     const critList = criteria.map((c, i) => `${i+1}. ${c.label} [${c.weight}] — ${c.description || c.type}`).join('\n');
     const stratList = strategies.map((s, i) => `${i+1}. ${s.name}: ${s.description || ''}`).join('\n');
-    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+    const contractRules = buildContractPrompt('qualitative-assessment', data);
+    const prompt = `${contractRules}\n\nYou are an elite DQ facilitator. Apply these definitions strictly:
 
 WHAT IS A CRITERION:
 - Definition: A dimension of value that matters to decision-makers when choosing between alternatives

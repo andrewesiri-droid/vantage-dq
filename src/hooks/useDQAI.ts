@@ -25,7 +25,8 @@ export function useDQAI() {
     const rateCheck = trackAICall(options.sessionData?.session?.id);
     if (!rateCheck.allowed) { toastError(rateCheck.warning || 'AI call limit reached'); setBusy(false); return null; }
     if (rateCheck.warning && rateCheck.count >= 50) toastError(rateCheck.warning);
-    setBusy(true);
+    // Load cached trust result for this module
+    const cacheKey = 'vdq_trust_' + (options.sessionData?.session?.id || 'demo') + '_' + (options.module || '');
     try {
       const contradictions = detectCrossModuleContradictions(options.sessionData || {});
       const fullPrompt = buildDQCompliantPrompt(rawPrompt, {
@@ -51,6 +52,10 @@ export function useDQAI() {
       const trust = meta ? classifyOutputTrust(meta) : null;
       const result: DQAIResult = { data: parsed, trust, meta, contradictions };
       setLastResult(result);
+      // Cache trust result
+      if (result?.trust) {
+        try { localStorage.setItem('vdq_trust_' + (options.sessionData?.session?.id || 'demo') + '_' + (options.module || ''), JSON.stringify(result.trust)); } catch(e) {}
+      }
       return result;
     } catch(e) {
       console.error('[useDQAI]', e);
