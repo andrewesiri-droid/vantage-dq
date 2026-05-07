@@ -42,7 +42,7 @@ export function useSessionData(sessionId: number | undefined) {
         { data: riskItems },
         { data: scenarios },
         { data: voiAnalyses },
-        db.from('outcome_tracking').select('*').eq('session_id', sessionId),
+        { data: outcomes },
       ] = await Promise.all([
         db.from('dq_sessions').select('*').eq('id', sessionId).single(),
         db.from('issues').select('*').eq('session_id', sessionId).order('sort_order'),
@@ -55,6 +55,7 @@ export function useSessionData(sessionId: number | undefined) {
         db.from('risk_items').select('*').eq('session_id', sessionId),
         db.from('scenarios').select('*').eq('session_id', sessionId),
         db.from('voi_analyses').select('*').eq('session_id', sessionId),
+        db.from('outcome_tracking').select('*').eq('session_id', sessionId),
       ]);
 
       setData({
@@ -89,8 +90,7 @@ export function useSessionData(sessionId: number | undefined) {
             confidence: i.severity === 'Critical' ? 'low' : 'medium', validationStatus: 'unvalidated',
           })),
           ...(strategies || []).flatMap((s: any) =>
-            (s.assumptions || '').split('
-').filter(Boolean).map((a: string, ai: number) => ({
+            (s.assumptions || '').split('\n').filter(Boolean).map((a: string, ai: number) => ({
               id: s.id * 10000 + ai, sessionId: s.session_id, text: a.trim(),
               source: 'strategy-table', strategyId: s.id, confidence: 'medium', validationStatus: 'unvalidated',
             }))
