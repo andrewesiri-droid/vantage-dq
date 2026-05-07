@@ -179,6 +179,7 @@ Return JSON only: {
           <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiPickBest} disabled={busy || strategies.length < 2}>+ AI Pick Best</Button>
           <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.alternatives.fill }} onClick={aiSuggest} disabled={busy}><Sparkles size={11} /> AI Suggest</Button>
           <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={aiAnalyse} disabled={busy || !strategies.length}>AI Analyse</Button>
+          {activeStratId && <Button size="sm" className="gap-1.5 text-xs h-7" style={{ background: DS.alternatives.fill }} onClick={() => aiFillStrategy(activeStratId)}><Sparkles size={11} /> AI Fill Strategy</Button>}
         </div>
       </div>
 
@@ -257,9 +258,7 @@ Return JSON only: {
                       <span className="text-sm font-bold" style={{ color: DS.ink }}>{s.name}</span>
                       <Badge style={{ background: `${c.fill}18`, color: c.fill, border: 'none', fontSize: 8 }}>{completeness(s)}% complete</Badge>
                     </div>
-                    <Button size="sm" className="gap-1 h-6 text-[10px]" style={{ background: c.fill }} onClick={(e) => { e.stopPropagation(); aiFillStrategy(s!.id); }}>
-                      <Sparkles size={10} /> AI Fill
-                    </Button>
+
                   </div>
                 </div>
                 <div>
