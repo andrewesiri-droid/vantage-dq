@@ -35,6 +35,8 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
   const [newName, setNewName] = useState('');
   const [recommendation, setRecommendation] = useState<any>(null);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [devilResult, setDevilResult] = useState<any>(null);
+  const [showDevil, setShowDevil] = useState(false);
 
   const focusDecisions: FocusDec[] = (data?.decisions || [])
     .filter((d: any) => d.tier === 'focus')
