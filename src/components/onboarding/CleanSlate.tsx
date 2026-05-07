@@ -14,6 +14,7 @@ export function CleanSlate({ onBack }: CleanSlateProps) {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
+  const { currentOrg } = useOrganisation();
 
   const handleCreate = async () => {
     if (!name.trim()) return;
