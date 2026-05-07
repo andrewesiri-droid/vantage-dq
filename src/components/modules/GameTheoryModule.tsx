@@ -717,7 +717,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
           {!quickResult && (
             <div className="rounded-xl p-4" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
               <div className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: DS.inkDis }}>WHAT YOU'LL GET</div>
-              <div className="grid grid-cols-2 gap-2 text-[10px]" style={{ color: DS.inkSub }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]" style={{ color: DS.inkSub }}>
                 {['Game type classification (Competitive / Collaboration / Coordination)', 'Game structure (Simultaneous, Sequential, Repeated, Auction, Bargaining)', 'Key players and their likely moves', 'Top 3 strategic moves with rationale', 'Biggest strategic risk', 'Equilibrium to target'].map(item => (
                   <div key={item} className="flex items-start gap-1.5"><CheckCircle size={10} style={{ color: DS.success, flexShrink: 0, marginTop: 1 }} />{item}</div>
                 ))}

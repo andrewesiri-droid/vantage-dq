@@ -716,7 +716,7 @@ Return JSON: { content: string }`;
                 <Badge style={{ background: `${typeCfg.color}20`, color: typeCfg.color, border: 'none', marginLeft: 'auto' }}>{config.confidentiality}</Badge>
               </div>
             </div>
-            <div className="px-5 py-4 grid grid-cols-3 gap-4 text-[10px]" style={{ background: DS.bg }}>
+            <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-[10px]" style={{ background: DS.bg }}>
               <div><span style={{ color: DS.inkDis }}>Project: </span><strong style={{ color: DS.ink }}>{config.projectName || sessionData?.session?.name || '—'}</strong></div>
               <div><span style={{ color: DS.inkDis }}>Author: </span><strong style={{ color: DS.ink }}>{config.author || '—'}</strong></div>
               <div><span style={{ color: DS.inkDis }}>Date: </span><strong style={{ color: DS.ink }}>{config.date}</strong></div>

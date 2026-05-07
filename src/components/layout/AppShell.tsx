@@ -194,12 +194,12 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
       {/* MAIN LAYOUT */}
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && (
-          <nav className="hidden md:flex w-64 flex-col bg-white border-r shrink-0 overflow-y-auto" style={{ borderColor: DS.borderLight }}>
+          <nav className="hidden md:flex md:w-16 lg:w-64 flex-col bg-white border-r shrink-0 overflow-y-auto" style={{ borderColor: DS.borderLight }}>
             <SidebarContent activeModule={activeModule} onModuleChange={onModuleChange} activeTool={activeTool} onToolChange={onToolChange} />
           </nav>
         )}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-5xl mx-auto px-2 py-4 sm:px-4 md:px-8">
+          <div className="max-w-5xl mx-auto px-2 py-4 sm:px-4 md:px-6 lg:px-8">
             {children}
           </div>
         </main>

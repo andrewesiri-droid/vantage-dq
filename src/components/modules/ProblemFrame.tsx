@@ -236,7 +236,7 @@ STRICT RULES FOR IMPROVEMENTS:
             <FieldBlock label="DECISION TRIGGER" hint="What forced this decision now?" className="mt-4">
               <Textarea value={fd.trigger} onChange={e => set('trigger', e.target.value)} rows={2} className="text-sm resize-none" placeholder="Board strategy session approved APAC as priority. Competitor entered Singapore 14 months ago." />
             </FieldBlock>
-            <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               <FieldBlock label="DECISION OWNER">
                 <Input value={fd.owner} onChange={e => set('owner', e.target.value)} className="text-sm h-9" placeholder="CSO / CEO" />
               </FieldBlock>
