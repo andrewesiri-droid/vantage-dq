@@ -26,6 +26,8 @@ export function DecisionLineage({ sessionId, data }: ModuleProps) {
   const [riskSplit, setRiskSplit] = useState<any>(null);
   const [expanded, setExpanded] = useState<string | null>('brief');
   const { call: dqCall, busy, lastResult } = useDQAI();
+  const [devilResult, setDevilResult] = useState<any>(null);
+  const [showDevil, setShowDevil] = useState(false);
 
   const session = data?.session || {};
   const strategies = data?.strategies || [];
@@ -43,6 +45,37 @@ export function DecisionLineage({ sessionId, data }: ModuleProps) {
 
   const mechanicalRec = computeMechanicalRecommendation(data);
   const frameGate = checkFrameGate(data);
+
+  const aiChallengeRecommendation = async () => {
+    const rec = mechanicalRec.recommendedStrategy || preferred?.name || 'primary strategy';
+    const prompt = `You are a brutal devil's advocate in an executive decision review.
+
+The current recommendation is: "${rec}"
+Decision: ${session.decisionStatement || ''}
+Mechanical score: ${mechanicalRec.scores[rec] || 'N/A'}/100
+Key assumptions: ${preferred?.assumptions || 'none stated'}
+Key uncertainties: ${uncertainties.slice(0,4).map((u: any) => u.label).join(', ')}
+Critical issues: ${criticalIssues.slice(0,3).map((i: any) => i.text).join('; ')}
+DQ scores: ${JSON.stringify(Object.entries(dqScores).map(([k,v]) => k+'='+v).join(', '))}
+
+Make the STRONGEST possible case against this recommendation.
+Be specific, grounded, and brutal.
+
+Return JSON: {
+  headline: string,
+  caseAgainst: [string],
+  killerAssumption: string,
+  neglectedAlternative: { name: string, case: string },
+  silentRisk: string,
+  worstScenario: string,
+  verdict: "Proceed with caution|Reconsider seriously|Strong case against"
+}`;
+    setBusy(true);
+    try {
+      const result = await dqCall(prompt, { module: 'decision-lineage', dqElement: 'Reasoning', sessionData: data || {} });
+      if (result?.data) { setDevilResult(result.data); setShowDevil(true); }
+    } catch(e) { console.error(e); } finally { setBusy(false); }
+  };
 
   const aiGenerateBrief = async () => {
     const validation = validateModuleData('decision-lineage', data);
@@ -114,9 +147,14 @@ Return JSON: {
           <h2 className="text-xl font-bold" style={{ color: DS.ink }}>Decision Lineage</h2>
           <p className="text-xs mt-0.5" style={{ color: DS.inkSub }}>Full traceability from strategy to recommendation</p>
         </div>
-        <Button size="sm" className="gap-1.5 text-xs h-8" style={{ background: DS.accent }} onClick={aiGenerateBrief} disabled={busy}>
-          <Sparkles size={11} /> {busy ? 'Generating…' : 'Generate Executive Brief'}
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" className="gap-1.5 text-xs h-8" style={{ background: DS.accent }} onClick={aiGenerateBrief} disabled={busy}>
+            <Sparkles size={11} /> {busy ? 'Generating…' : 'Generate Executive Brief'}
+          </Button>
+          <Button size="sm" className="gap-1.5 text-xs h-8" style={{ background: '#7F1D1D' }} onClick={aiChallengeRecommendation} disabled={busy || (!mechanicalRec.recommendedStrategy && !preferred)}>
+            👿 {busy ? 'Challenging…' : 'Challenge Recommendation'}
+          </Button>
+        </div>
       </div>
 
       {/* Board readiness strip */}
@@ -129,6 +167,47 @@ Return JSON: {
 
       {/* Trust badge */}
       {lastResult?.trust && <DQTrustBadge trust={lastResult.trust} meta={lastResult.meta} />}
+
+      {/* Devil's Advocate Result */}
+      {showDevil && devilResult && (
+        <div className="rounded-xl overflow-hidden border-2" style={{ borderColor: '#7F1D1D' }}>
+          <div className="flex items-center justify-between px-4 py-3" style={{ background: '#7F1D1D' }}>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">👿</span>
+              <span className="text-sm font-bold text-white">Challenge to Recommendation</span>
+              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: devilResult.verdict === 'Strong case against' ? '#EF4444' : devilResult.verdict === 'Reconsider seriously' ? '#F59E0B' : '#10B981' }}>{devilResult.verdict}</span>
+            </div>
+            <button onClick={() => setShowDevil(false)} className="text-white opacity-60 hover:opacity-100 text-xs">✕</button>
+          </div>
+          <div className="p-4 space-y-3" style={{ background: '#FEF2F2' }}>
+            <p className="text-sm font-bold italic" style={{ color: '#7F1D1D' }}>"{devilResult.headline}"</p>
+            {(devilResult.caseAgainst || []).map((c: string, i: number) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-xs shrink-0" style={{ color: '#EF4444' }}>✗</span>
+                <p className="text-xs" style={{ color: DS.ink }}>{c}</p>
+              </div>
+            ))}
+            {devilResult.killerAssumption && (
+              <div className="rounded-xl p-3" style={{ background: '#FEE2E2', border: '1px solid #FECACA' }}>
+                <div className="text-[9px] font-bold uppercase mb-1" style={{ color: '#EF4444' }}>KILLER ASSUMPTION</div>
+                <p className="text-xs font-semibold" style={{ color: DS.ink }}>{devilResult.killerAssumption}</p>
+              </div>
+            )}
+            {devilResult.silentRisk && (
+              <div className="rounded-xl p-3" style={{ background: '#F5F3FF', border: '1px solid #DDD6FE' }}>
+                <div className="text-[9px] font-bold uppercase mb-1" style={{ color: '#7C3AED' }}>SILENT RISK</div>
+                <p className="text-xs" style={{ color: DS.ink }}>{devilResult.silentRisk}</p>
+              </div>
+            )}
+            {devilResult.worstScenario && (
+              <div className="rounded-xl p-3" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
+                <div className="text-[9px] font-bold uppercase mb-1" style={{ color: DS.danger }}>WORST CASE SCENARIO</div>
+                <p className="text-xs" style={{ color: DS.ink }}>{devilResult.worstScenario}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Empty state */}
       {/* Mechanical recommendation */}

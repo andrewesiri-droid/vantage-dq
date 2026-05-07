@@ -28,6 +28,7 @@ const DQ_PRINCIPLES: Record<string, string> = {
 
 export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const frameGate = checkFrameGate(data);
   const { call: dqCall, busy: dqBusy } = useDQAI();
   const [activeTab, setActiveTab] = useState('hierarchy');
   const [decisions, setDecisions] = useState<DecisionItem[]>([]);
@@ -320,7 +321,7 @@ Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>Define what matters before scoring strategies. Criteria should reflect genuine stakeholder values.</p>
-            <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiSuggestCriteria} disabled={busy}>
+            <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiSuggestCriteria} disabled={busy || frameGate.score < 30}>
               <Sparkles size={11} /> AI Suggest
             </Button>
           </div>

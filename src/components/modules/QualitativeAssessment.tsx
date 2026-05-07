@@ -33,6 +33,7 @@ const DQ_PRINCIPLES: Record<string, string> = {
 
 export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const mechanicalRec = computeMechanicalRecommendation(data);
   const { call: dqCall, busy: dqBusy } = useDQAI();
   const [activeTab, setActiveTab] = useState('matrix');
   const [criteria, setCriteria] = useState<CritItem[]>([]);
@@ -202,6 +203,31 @@ Score these strategies on each criterion for this decision.\nDecision: "${data?.
           </Button>
         </div>
       </div>
+
+      {/* Mechanical recommendation */}
+      {mechanicalRec.traceable && mechanicalRec.recommendedStrategy && (
+        <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: mechanicalRec.confidence === 'High' ? DS.successSoft : mechanicalRec.confidence === 'Medium' ? DS.warnSoft : DS.bg, border: '1px solid ' + (mechanicalRec.confidence === 'High' ? DS.success : mechanicalRec.confidence === 'Medium' ? DS.warning : DS.borderLight) + '40' }}>
+          <div className="flex-1">
+            <div className="text-[9px] font-bold uppercase mb-0.5" style={{ color: mechanicalRec.confidence === 'High' ? DS.success : DS.warning }}>WEIGHTED SCORE — {mechanicalRec.confidence} CONFIDENCE · {mechanicalRec.margin}pt margin</div>
+            <div className="text-sm font-bold" style={{ color: DS.ink }}>{mechanicalRec.recommendedStrategy} leads at {mechanicalRec.scores[mechanicalRec.recommendedStrategy]}/100</div>
+            <p className="text-[10px] mt-0.5" style={{ color: DS.inkSub }}>{mechanicalRec.traceability}</p>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {Object.entries(mechanicalRec.scores).sort((a,b) => (b[1] as number)-(a[1] as number)).map(([name, score]) => (
+              <div key={name} className="flex items-center gap-2">
+                <div className="text-[9px] w-24 truncate" style={{ color: DS.inkSub }}>{name}</div>
+                <div className="h-1.5 rounded-full" style={{ width: (score as number) + 'px', maxWidth: 80, background: name === mechanicalRec.recommendedStrategy ? DS.success : DS.borderLight }} />
+                <div className="text-[9px] font-bold" style={{ color: name === mechanicalRec.recommendedStrategy ? DS.success : DS.inkDis }}>{score as number}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {mechanicalRec.traceable && !mechanicalRec.recommendedStrategy && (
+        <div className="rounded-xl p-3" style={{ background: DS.warnSoft, border: '1px solid ' + DS.warning + '30' }}>
+          <p className="text-[10px]" style={{ color: DS.warning }}>⚠ Score strategies against criteria to see mechanical recommendation</p>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b mb-0 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>

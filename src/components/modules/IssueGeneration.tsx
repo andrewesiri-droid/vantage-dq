@@ -47,6 +47,7 @@ const DQ_PRINCIPLES: Record<string, string> = {
 
 export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const frameGate = checkFrameGate(data);
   const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState('raise');
   const [issues, setIssues] = useState<IssueItem[]>([]);
@@ -220,15 +221,21 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
           {focusCount > 0 && <Badge style={{ background: DS.accentSoft, color: DS.accent, border: 'none' }}>{focusCount} FOCUS DECISIONS</Badge>}
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiCategorise} disabled={busy || !issues.length}>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiCategorise} disabled={busy || !issues.length || frameGate.score < 30}>
             <Sparkles size={11} /> AI Categorise
           </Button>
-          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.warning }} onClick={aiGenerate} disabled={busy || generating}>
+          <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.warning }} onClick={aiGenerate} disabled={busy || generating || frameGate.score < 30} title={frameGate.score < 30 ? 'Add a decision statement in Problem Frame first' : ''}>
             <Sparkles size={11} /> {generating ? 'Generating…' : 'AI Generate'}
           </Button>
         </div>
       </div>
 
+      {frameGate.score < 30 && (
+        <div className="rounded-xl p-3 flex items-center gap-2" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
+          <span className="text-lg">🔒</span>
+          <span className="text-[10px] font-bold" style={{ color: '#D97706' }}>AI locked — add a decision statement in Problem Frame first (frame score {frameGate.score}/100)</span>
+        </div>
+      )}
       {/* Tabs */}
       <div className="flex border-b mb-4 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>
         {TABS.map(tab => (
@@ -518,7 +525,7 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
           <span>{openCount} open</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={aiBlindSpots} disabled={busy || !issues.length}>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={aiBlindSpots} disabled={busy || !issues.length || frameGate.score < 30}>
             <Eye size={11} /> Check Blind Spots
           </Button>
           <Button size="sm" className="h-7 text-xs gap-1" style={{ background: DS.warning }}
