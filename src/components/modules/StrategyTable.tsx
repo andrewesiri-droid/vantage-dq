@@ -1,5 +1,4 @@
 import { buildContractPrompt, computeMechanicalRecommendation, checkFrameGate } from '@/lib/dq-data-contracts';
-      const _contract = buildContractPrompt('strategy-table', data);
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
@@ -92,7 +91,7 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
 
   const aiSuggest = async () => {
     const decMenu = focusDecisions.map((d, i) => `D${i + 1}: "${d.label}" — options: ${d.choices.map((c, j) => j + '=' + c).join(', ')}`).join('\n');
-    const prompt = `${_contract}\n\nYou are a Decision Quality (DQ) expert. Suggest 3 genuinely distinct strategies.
+    const prompt = `You are a Decision Quality (DQ) expert. Suggest 3 genuinely distinct strategies.
 
 CRITICAL: Each strategy must be genuinely different in its core logic — not just scale variations.
 Include a null/status quo option if relevant.

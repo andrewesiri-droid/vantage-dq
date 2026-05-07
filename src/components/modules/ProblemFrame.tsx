@@ -1,5 +1,4 @@
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
-      const _contract = buildContractPrompt('problem-frame', data);
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
@@ -103,7 +102,7 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
   );
 
   const runFrameCheck = async () => {
-    const prompt = `${_contract}\n\nYou are an elite DQ facilitator. Apply these definitions strictly:
+    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
 
 DECISION STATEMENT:
 - Definition: The specific choice being made, expressed as an open question

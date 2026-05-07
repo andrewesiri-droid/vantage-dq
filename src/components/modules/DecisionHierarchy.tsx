@@ -1,5 +1,4 @@
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
-      const _contract = buildContractPrompt('decision-hierarchy', data);
 import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
@@ -91,7 +90,7 @@ export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
   const aiAutoSort = async () => {
     const issueCtx = (data?.issues || []).slice(0, 8).map((i: any) => `"${i.text}" [${i.severity}]`).join('\n');
     const decList = decisions.map(d => `"${d.label}" [currently: ${d.tier}]`).join('\n');
-    const prompt = `${_contract}\n\nYou are an elite DQ facilitator. Apply these definitions strictly:
+    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
 
 GIVEN DECISIONS:
 - Definition: Already made, locked, non-negotiable — the context for all other decisions

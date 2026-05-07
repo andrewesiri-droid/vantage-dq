@@ -1,5 +1,4 @@
 import { checkFrameGate } from '@/lib/dq-data-contracts';
-      const _contract = buildContractPrompt('issue-generation', data);
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
@@ -90,7 +89,7 @@ export function IssueGeneration({ sessionId, data, hooks }: ModuleProps) {
     setGenerating(true);
     const s = data?.session || {};
     const existing = issues.slice(0, 8).map(i => i.text).join('; ');
-    const prompt = `${_contract}\n\nYou are an elite DQ facilitator.
+    const prompt = `You are an elite DQ facilitator.
 
 WHAT IS AN ISSUE:
 - Definition: A question, concern, or uncertainty that MUST be addressed to make a good decision

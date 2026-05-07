@@ -1,5 +1,4 @@
 import { checkFrameGate } from '@/lib/dq-data-contracts';
-      const _contract = buildContractPrompt('dq-scorecard', data);
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { computeMechanicalRecommendation } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
@@ -56,7 +55,7 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
   const scoreLabel = (s: number) => s >= 80 ? 'Elite' : s >= 60 ? 'Strong' : s >= 40 ? 'Adequate' : s > 0 ? 'Weak' : 'Unscored';
 
   const aiChallengeCommitment = async () => {
-    const prompt = `${_contract}\n\nYou are a devil's advocate challenging a premature commitment decision.
+    const prompt = `You are a devil's advocate challenging a premature commitment decision.
 
 Decision: ${data?.session?.decisionStatement || ''}
 Commitment DQ score: ${scores.commitment || 0}/100
