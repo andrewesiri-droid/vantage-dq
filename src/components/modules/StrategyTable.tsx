@@ -1,3 +1,4 @@
+import { buildContractPrompt, computeMechanicalRecommendation, checkFrameGate } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
