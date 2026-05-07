@@ -210,7 +210,7 @@ Return JSON only: {
       </div>
 
       {/* Tab bar — one tab per strategy + overview tabs */}
-      <div className="flex border-b mb-0 overflow-x-auto" style={{ borderColor: DS.borderLight }}>
+      <div className="flex flex-wrap border-b mb-0" style={{ borderColor: DS.borderLight }}>
         {strategies.map(s => {
           const c = col(s.colorIdx);
           const isActive = activeStratId === s.id && !overviewTab;
@@ -249,7 +249,7 @@ Return JSON only: {
         const s = activeStat;
         const c = col(s.colorIdx);
         return (
-          <div className="border rounded-b-xl overflow-hidden" style={{ borderColor: DS.borderLight, borderTop: 'none' }}>
+          <div className="border rounded-b-xl" style={{ borderColor: DS.borderLight, borderTop: 'none' }}>
             <div className="grid grid-cols-2 gap-0">
               {/* LEFT: Strategy info */}
               <div className="border-r p-5 space-y-4" style={{ borderColor: DS.borderLight }}>
@@ -257,7 +257,12 @@ Return JSON only: {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ background: c.fill }} />
-                      <span className="text-sm font-bold" style={{ color: DS.ink }}>{s.name}</span>
+                      <input
+                        value={s.name}
+                        onChange={e => updateStrategy(s.id, 'name', e.target.value)}
+                        className="text-sm font-bold bg-transparent border-b border-dashed outline-none"
+                        style={{ color: DS.ink, borderColor: c.fill, minWidth: 120 }}
+                      />
                       <Badge style={{ background: `${c.fill}18`, color: c.fill, border: 'none', fontSize: 8 }}>{completeness(s)}% complete</Badge>
                     </div>
 
