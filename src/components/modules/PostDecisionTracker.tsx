@@ -14,7 +14,6 @@ import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 
 interface OutcomeEntry {
-      const _contract = buildContractPrompt('post-decision', data);
   id: number;
   type: 'assumption' | 'uncertainty' | 'risk' | 'milestone';
   label: string;
