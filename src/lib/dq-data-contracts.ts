@@ -179,6 +179,7 @@ export const MODULE_CONTRACTS: Record<string, ModuleContract> = {
   },
   'influence-diagram': {
     id: 'influence-diagram',
+    label: 'Influence Diagram',
     produces: ['influenceNodes[]', 'influenceEdges[]'],
     consumes: [
       { field: 'session.decisionStatement', source: 'problem-frame', required: true },
@@ -189,6 +190,7 @@ export const MODULE_CONTRACTS: Record<string, ModuleContract> = {
   },
   'game-theory': {
     id: 'game-theory',
+    label: 'Game Theory',
     produces: ['gameTheoryModels[]'],
     consumes: [
       { field: 'session.decisionStatement', source: 'problem-frame', required: true },
