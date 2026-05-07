@@ -207,9 +207,8 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
     const phaseNotes = notes.filter(n => n.phase === phase.id).map(n => n.text).join('; ');
     const logItems = log.slice(-5).map(l => l.text).join('; ');
     const prompt = `You are a senior DQ workshop facilitator. Analyse what's happening in phase "${phase.label}" and give a pointed facilitation insight.\n\nPhase objective: ${phase.objective}\nParticipant notes/ideas captured: ${phaseNotes || 'None yet'}\nFacilitator log: ${logItems || 'None'}\nDecision context: ${data?.session?.decisionStatement || 'Unknown'}\n\nProvide ONE specific, actionable facilitation move for right now. Be direct. Max 2 sentences. This will be read by a facilitator in front of a room.\n\nReturn JSON: { insight: string, move: string, tension?: string }`;
-    dqCall(prompt, { module: 'workshop', dqElement: 'Reasoning', sessionData: sessionData || {} }).then((r) => { const result = r?.data; if (result) {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    dqCall(prompt, { module: 'workshop', dqElement: 'Reasoning', sessionData: sessionData || {} }).then((r) => {
+      const result = r?.data;
       if (result?.insight) {
         setAiInsight(`${result.insight} ${result.move}`);
         if (result.tension) {
