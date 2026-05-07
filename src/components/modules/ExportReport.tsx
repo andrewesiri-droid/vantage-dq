@@ -486,7 +486,6 @@ Return JSON: { content: string }`;
           setSections(p => p.map(s => s.id === sec.id ? { ...s, content, generated: true } : s));
         }
       } catch(e) { console.error('[export-report]', e); } finally { setBusy(false); }
-      });
     }
 
     setGenerating(false);
