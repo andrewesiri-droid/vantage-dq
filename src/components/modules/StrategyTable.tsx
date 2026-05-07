@@ -84,7 +84,25 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
 
   const aiSuggest = async () => {
     const decMenu = focusDecisions.map((d, i) => `D${i + 1}: "${d.label}" — options: ${d.choices.map((c, j) => j + '=' + c).join(', ')}`).join('\n');
-    const prompt = `Suggest 3 genuinely distinct strategies.\nDecision: ${data?.session?.decisionStatement || ''}\nFocus decisions:\n${decMenu}\nExisting: ${strategies.map(s => s.name).join(', ')}\n\nReturn JSON: { strategies: [{name, rationale, objective, assumptions, selections (D1/D2... → choice index)}] }`;
+    const prompt = `You are a Decision Quality (DQ) expert. Suggest 3 genuinely distinct strategies.
+
+CRITICAL: Each strategy must be genuinely different in its core logic — not just scale variations.
+Include a null/status quo option if relevant.
+
+Decision: ${data?.session?.decisionStatement || ''}
+Context: ${(data?.session?.context || '').slice(0, 200)}
+Constraints: ${data?.session?.constraints || ''}
+Focus decisions:\n${decMenu}
+Existing strategies (do not duplicate): ${strategies.map(s => s.name).join(', ')}
+
+For each strategy, apply DQ definitions:
+- name: evocative 2-4 word label capturing the strategic direction
+- objective: outcome-focused success statement (start with maximize/achieve/deliver/secure)
+- rationale: logic-based justification (use "given that", "because")
+- assumptions: critical conditions assumed true (state as facts)
+- selections: best focus decision choices for this strategy
+
+Return JSON: { strategies: [{name, objective, rationale, assumptions, selections}] }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
@@ -131,21 +149,50 @@ export function StrategyTable({ sessionId, data, hooks }: ModuleProps) {
     const s = strategies.find(st => st.id === stratId);
     if (!s) return;
     const decMenu = focusDecisions.map((d, i) => `D${i+1} (id:${d.id}): "${d.label}" — choices: ${d.choices.map((c,j) => j+'='+c).join(', ')}`).join('\n');
-    const prompt = `Fill in missing details for this strategy and select the best focus decision choices.
-Strategy name: ${s.name}
-Current objective: ${s.objective || 'EMPTY'}
-Current rationale: ${s.rationale || 'EMPTY'}
-Current assumptions: ${s.assumptions || 'EMPTY'}
-Current uncertainties: ${s.uncertainties || 'EMPTY'}
-Decision context: ${data?.session?.decisionStatement || ''}
-Focus decisions with choices:\n${decMenu}
+    const prompt = `You are a Decision Quality (DQ) expert completing a strategy card.
 
-Return JSON only: {
-  "objective": "string (keep existing if good, improve if weak or empty)",
-  "rationale": "string (keep existing if good, improve if weak or empty)", 
-  "assumptions": "string (keep existing if good, improve if weak or empty)",
-  "uncertainties": "string (keep existing if good, improve if weak or empty)",
-  "selections": {"d_id": choiceIndex} for each focus decision that best fits this strategy
+CRITICAL RULE: The strategy name defines the theme. ALL outputs must strictly align with that strategy direction.
+
+Strategy Name: ${s.name}
+Decision Context: ${data?.session?.decisionStatement || ''}
+Session Context: ${(data?.session?.context || '').slice(0, 300)}
+Constraints: ${data?.session?.constraints || ''}
+
+DEFINITIONS:
+OBJECTIVE: The specific outcome this strategy is trying to achieve. Must be outcome-focused (not actions), measurable or directional, reflect value creation. Start with verbs: maximize, achieve, deliver, secure, optimize.
+RATIONALE: Why this strategy makes logical sense given the situation. Use "given that", "because", "in light of". Must NOT repeat the objective or introduce new assumptions.
+KEY ASSUMPTIONS: Critical conditions that must hold true for the strategy to succeed. State as facts (not uncertainties). Cover technical, commercial, operational, and stakeholder dimensions.
+KEY UNCERTAINTIES: Major unknowns that could significantly impact success. These are variables, not assumptions. Must be decision-relevant and high-impact.
+
+QUALITY RULES:
+- Be concise and precise — no generic business language
+- Ensure all fields are internally consistent
+- Do not contradict the strategy theme
+- Keep existing content if it is already strong
+
+Current values (improve if weak or empty, keep if strong):
+- Objective: ${s.objective || 'EMPTY'}
+- Rationale: ${s.rationale || 'EMPTY'}
+- Assumptions: ${s.assumptions || 'EMPTY'}
+- Uncertainties: ${s.uncertainties || 'EMPTY'}
+
+Focus decisions to select best choices for this strategy:
+${decMenu}
+
+Return JSON only — no other text:
+{
+  "objective": "outcome-focused success statement",
+  "rationale": "logic-based justification using given facts",
+  "assumptions": "bullet list of critical conditions assumed true",
+  "uncertainties": "bullet list of high-impact unknowns",
+  "qualityCheck": {
+    "objectiveIsOutcome": true,
+    "rationaleIsLogic": true,
+    "assumptionsAreFacts": true,
+    "uncertaintiesAreUnknowns": true,
+    "allAlignToTheme": true
+  },
+  "selections": {"decision_id": choiceIndex}
 }`;
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
@@ -160,6 +207,17 @@ Return JSON only: {
         if (result.uncertainties) updateStrategy(stratId, 'uncertainties', result.uncertainties);
         if (result.selections) {
           setStrategies(p => p.map(st => st.id === stratId ? { ...st, selections: { ...st.selections, ...result.selections } } : st));
+        }
+        // Show DQ quality check result
+        if (result.qualityCheck) {
+          const checks = Object.values(result.qualityCheck) as boolean[];
+          const passed = checks.filter(Boolean).length;
+          const total = checks.length;
+          if (passed === total) {
+            import('@/lib/toast').then(({ toastSuccess }) => toastSuccess(`Strategy filled — DQ quality: ${passed}/${total} checks passed ✓`));
+          } else {
+            import('@/lib/toast').then(({ toastError }) => toastError(`Strategy filled — ${total - passed} DQ issue${total - passed > 1 ? 's' : ''} detected — review fields`));
+          }
         }
       }
     } catch(e) { console.error('[ai]', e); } finally { setBusy(false); }
