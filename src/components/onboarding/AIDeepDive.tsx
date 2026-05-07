@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { DS } from '@/constants';
-import { initializeEmptySession } from '@/lib/demoData';
+import { createSession } from '@/lib/supabase-client';
+import { supabase } from '@/lib/supabase-client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -72,15 +73,27 @@ Return JSON only:
       const match = text.match(/\{[\s\S]*\}/);
       const parsed = match ? JSON.parse(match[0]) : {};
 
-      const slug = initializeEmptySession(parsed.name || name);
+      const slug = await createSession(parsed.name || name);
       try {
-        const stored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
-        if (stored.sessions?.[0]) {
-          if (parsed.decisionStatement) stored.sessions[0].decisionStatement = parsed.decisionStatement;
-          if (parsed.context) stored.sessions[0].context = parsed.context;
-          if (parsed.constraints) stored.sessions[0].constraints = parsed.constraints;
-          if (parsed.successCriteria) stored.sessions[0].successCriteria = parsed.successCriteria;
-          localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify(stored));
+        // Update session with AI-extracted data
+        if (supabase) {
+          await supabase.from('dq_sessions').update({
+            decision_statement: parsed.decisionStatement || '',
+            context: parsed.context || '',
+            constraints: parsed.constraints || '',
+            success_criteria: parsed.successCriteria || '',
+            updated_at: new Date().toISOString(),
+          }).eq('slug', slug);
+        } else {
+          // Fallback: update localStorage
+          const stored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
+          if (stored.sessions?.[0]) {
+            if (parsed.decisionStatement) stored.sessions[0].decisionStatement = parsed.decisionStatement;
+            if (parsed.context) stored.sessions[0].context = parsed.context;
+            if (parsed.constraints) stored.sessions[0].constraints = parsed.constraints;
+            if (parsed.successCriteria) stored.sessions[0].successCriteria = parsed.successCriteria;
+            localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify(stored));
+          }
         }
       } catch { /**/ }
 

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS, RATING_LABELS } from '@/constants';
-import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, Lightbulb, ChevronRight, AlertTriangle, CheckCircle, X } from 'lucide-react';

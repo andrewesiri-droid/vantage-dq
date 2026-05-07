@@ -92,6 +92,18 @@ export function useSessionData(sessionId: number | undefined) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Real-time sync — listen for DB changes and refetch
+  useEffect(() => {
+    if (!sessionId || !db) return;
+    const tables = ['issues','decisions','strategies','criteria','assessment_scores','uncertainties','stakeholder_entries','risk_items','scenarios'];
+    const channels = tables.map(table =>
+      db.channel(`${table}:${sessionId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table, filter: `session_id=eq.${sessionId}` }, () => fetchAll())
+        .subscribe()
+    );
+    return () => { channels.forEach(c => db.removeChannel(c)); };
+  }, [sessionId, db, fetchAll]);
+
   const refetch = useCallback(() => fetchAll(), [fetchAll]);
 
   // ── CRUD helpers ────────────────────────────────────────────────────────────

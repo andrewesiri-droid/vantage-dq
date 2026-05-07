@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS, DQ_ELEMENTS, DQ_SCORE_BANDS } from '@/constants';
-import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, Lightbulb, ChevronRight } from 'lucide-react';

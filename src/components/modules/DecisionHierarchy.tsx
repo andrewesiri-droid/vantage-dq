@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS, H_TIERS, CRITERIA_TYPES, CRITERIA_WEIGHTS } from '@/constants';
-import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
