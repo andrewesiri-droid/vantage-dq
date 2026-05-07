@@ -1,3 +1,4 @@
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
@@ -30,7 +31,7 @@ const DQ_PRINCIPLES: Record<string, string> = {
 export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
   const frameGate = checkFrameGate(data);
-  const { call: dqCall, busy: dqBusy } = useDQAI();
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState('hierarchy');
   const [decisions, setDecisions] = useState<DecisionItem[]>([]);
   const [criteria, setCriteria] = useState<CriterionItem[]>([]);
@@ -220,6 +221,7 @@ Classify these decisions into the correct DQ hierarchy tiers.\n\nTiers:\n- given
       {/* === HIERARCHY TAB === */}
       {activeTab === 'hierarchy' && (
         <div className="space-y-4">
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
           {/* Add row */}
           <div className="flex gap-2 p-3 rounded-xl" style={{ background: DS.bg, border: `1px solid ${DS.borderLight}` }}>
             <Input value={newLabel} onChange={e => setNewLabel(e.target.value)} onKeyDown={e => e.key === 'Enter' && addDecision()}

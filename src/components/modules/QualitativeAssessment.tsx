@@ -1,3 +1,4 @@
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { computeMechanicalRecommendation } from '@/lib/dq-data-contracts';
@@ -38,7 +39,7 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
   const frameGate = checkFrameGate(data);
   const mechanicalRec = computeMechanicalRecommendation(data);
-  const { call: dqCall, busy: dqBusy } = useDQAI();
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [activeTab, setActiveTab] = useState('matrix');
   const [criteria, setCriteria] = useState<CritItem[]>([]);
   const [strategies, setStrategies] = useState<StratItem[]>([]);

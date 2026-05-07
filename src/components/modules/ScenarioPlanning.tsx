@@ -1,3 +1,4 @@
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import { checkFrameGate } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
@@ -29,7 +30,7 @@ export function ScenarioPlanning({ sessionId, data, hooks }: ModuleProps) {
   const [axisInsight, setAxisInsight] = useState('');
   const [busy, setBusy] = useState(false);
   const frameGate = checkFrameGate(data);
-  const { call: dqCall, busy: dqBusy } = useDQAI();
+  const { call: dqCall, busy: dqBusy, lastResult: dqResult } = useDQAI();
   const [expandedUncId, setExpandedUncId] = useState<number | null>(null);
   const [expandedScenId, setExpandedScenId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'uncertainties'|'scenarios'|'stress'>('uncertainties');
@@ -185,6 +186,7 @@ Return JSON: { profiles: [{name, robustness: "robust|conditional|fragile", winsI
 
   return (
     <div className="space-y-4">
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
       {frameGate.score < 30 && (
         <div className="rounded-xl p-3 flex items-center gap-2" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
           <span className="text-lg">🔒</span>

@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS, DQ_ELEMENTS } from '@/constants';
-import { useAI } from '@/hooks/useAI';
+import { useAI } from '@/hooks/useDQAI';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Brain, Sparkles, ChevronRight, AlertTriangle, CheckCircle, Flame } from 'lucide-react';
 
 export function DeepDiveTool({ sessionId, data, hooks }: ModuleProps) {
-  const { call, busy } = useAI();
+  const { call: dqCall, busy } = useDQAI();
+  const call = (prompt: string, cb: any) => dqCall(prompt, { module: 'tool', dqElement: 'Reasoning', sessionData: {} }).then(r => r?.data && cb(r.data));
   const [results, setResults] = useState<any>(null);
   const [currentPass, setCurrentPass] = useState(0);
   const [passResults, setPassResults] = useState<any[]>([]);

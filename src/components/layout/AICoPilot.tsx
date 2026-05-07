@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { detectCrossModuleContradictions, DQ_COPILOT_PROMPTS } from '@/lib/dq-ai-engine';
 import { DS, MODULES } from '@/constants';
 import type { ModuleId } from '@/types';
-import { useAI } from '@/hooks/useAI';
+import { useAI } from '@/hooks/useDQAI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -69,7 +69,8 @@ const PROMPTS: Record<string, { label: string; icon: any; prompt: string }[]> = 
 };
 
 export function AICoPilot({ module, sessionId, collapsed, onToggle, data }: Props) {
-  const { call, busy } = useAI();
+  const { call: dqCall, busy } = useDQAI();
+  const call = (prompt: string, cb: any) => dqCall(prompt, { module: 'tool', dqElement: 'Reasoning', sessionData: {} }).then(r => r?.data && cb(r.data));
   const [messages, setMessages] = useState<{ id: string; role: 'user' | 'ai'; text: string }[]>([
     { id: 'welcome', role: 'ai', text: "I'm your AI decision co-pilot. Select a suggested analysis or ask me anything about this decision." },
   ]);
