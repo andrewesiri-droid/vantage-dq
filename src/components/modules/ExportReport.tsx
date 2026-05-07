@@ -576,6 +576,7 @@ Return JSON: { content: string }`;
       {/* ══ STEP 1: REPORT TYPE ════════════════════════════════════════════════ */}
       {step === 1 && (
         <div className="space-y-4">
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
           <p className="text-xs" style={{ color: DS.inkSub }}>Choose the report type that fits your audience and purpose.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {(Object.entries(REPORT_TYPES) as [ReportType, typeof REPORT_TYPES['executive-brief']][]).map(([type, tcfg]) => {

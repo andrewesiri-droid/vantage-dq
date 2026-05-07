@@ -356,6 +356,7 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
       {/* === TAB: CATEGORISE === */}
       {activeTab === 'categorise' && (
         <div className="space-y-4">
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>Review and adjust the category for each issue. Click AI Categorise to let AI suggest recategorisations.</p>
             <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiCategorise} disabled={busy}>

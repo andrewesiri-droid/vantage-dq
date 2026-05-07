@@ -611,6 +611,7 @@ Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPow
       {/* ══ QUICK MODE ══════════════════════════════════════════════════════════ */}
       {mode === 'quick' && activeTab === 'Brief' && (
         <div className="space-y-4">
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-[9px] font-bold uppercase tracking-wider mb-1 block" style={{ color: DS.inkDis }}>DESCRIBE YOUR SITUATION</label>

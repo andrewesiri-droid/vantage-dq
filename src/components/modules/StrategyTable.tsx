@@ -426,6 +426,7 @@ Return JSON only — no other text:
                   </div>
                 ) : (
                   <div className="space-y-4">
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
                     {focusDecisions.map((d, i) => {
                       const selectedIdx = s.selections[d.id];
                       return (

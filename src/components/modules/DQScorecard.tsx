@@ -324,6 +324,7 @@ Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${
       {/* === CHAIN ANALYSIS TAB === */}
       {activeTab === 'chain' && (
         <div className="space-y-4">
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
           <div className="flex items-center justify-between">
             <p className="text-xs" style={{ color: DS.inkSub }}>Radar view + improvement plan for elements below 60.</p>
             <Button size="sm" className="gap-1 text-xs h-7 shrink-0" style={{ background: DS.reasoning.fill }} onClick={aiImprovements} disabled={busy}>

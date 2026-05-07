@@ -333,6 +333,7 @@ STRICT RULES FOR IMPROVEMENTS:
       {/* Tab: AI Frame Check */}
       {activeTab === 'ai' && (
         <div className="space-y-4">
+      {dqResult?.trust && <DQTrustBadge trust={dqResult.trust} meta={dqResult.meta} />}
           {!frameCheck ? (
             <div className="text-center py-14">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: DS.frame.soft }}>
