@@ -4,6 +4,7 @@ import { useSessionData } from '@/hooks/useSessionData';
 import { ModuleSkeleton } from '@/components/ui/skeleton-module';
 import { useDemoContext } from '@/App';
 import { demoApi, getDemoData, isDemoMode } from '@/lib/demoData';
+import { useOrganisation } from '@/hooks/useOrganisation';
 import { MODULES, DS, type ToolId } from '@/constants';
 import type { ModuleId } from '@/types';
 import { AppShell } from '@/components/layout/AppShell';

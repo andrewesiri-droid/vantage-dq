@@ -34,6 +34,18 @@ const STATUS_CONFIG = {
 export function PostDecisionTracker({ sessionId, data, hooks }: ModuleProps) {
   const [outcomes, setOutcomes] = useState<OutcomeEntry[]>([]);
   const frameGate = checkFrameGate(data);
+
+  const reviewReminder = (() => {
+    const committed = data?.session?.status === 'committed' || data?.session?.status === 'tracking';
+    if (!committed) return null;
+    const updatedAt = data?.session?.updatedAt || data?.session?.updated_at;
+    if (!updatedAt) return null;
+    const days = Math.floor((Date.now() - new Date(updatedAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (days >= 90) return { days, msg: 'It has been ' + days + ' days since commitment — time for a 90-day outcome review.', color: '#EF4444' };
+    if (days >= 60) return { days, msg: 'It has been ' + days + ' days since commitment — time for a 60-day check-in.', color: '#F59E0B' };
+    if (days >= 30) return { days, msg: 'It has been ' + days + ' days since commitment — how is the decision playing out?', color: '#3B82F6' };
+    return null;
+  })();
   // Load persisted outcomes
   useEffect(() => {
     if (data?.outcomeTracking?.length && !outcomes.length) {
