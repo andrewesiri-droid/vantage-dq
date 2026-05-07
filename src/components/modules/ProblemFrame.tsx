@@ -108,7 +108,14 @@ Deadline: ${fd.deadline}
 Constraints: ${fd.constraints?.slice(0,150)}
 Success: ${fd.successCriteria?.slice(0,150)}
 
-JSON format: {"overallScore":0-100,"band":"Elite|Strong|Adequate|Weak|High-Risk","summary":"string","checks":[{"name":"string","pass":true,"note":"string"}],"improvements":[{"field":"string","current":"string","suggestion":"string","reason":"string"}],"verdict":"string"}`;
+JSON format: {"overallScore":0-100,"band":"Elite|Strong|Adequate|Weak|High-Risk","summary":"string","checks":[{"name":"string","pass":true,"note":"string"}],"improvements":[{"field":"string","current":"string","suggestion":"string","reason":"string","scoreImpact":"+5 to +15"}],"verdict":"string"}
+
+STRICT RULES FOR IMPROVEMENTS:
+- Only include improvements where applying them would INCREASE the overallScore
+- If a field is already well-defined, do NOT suggest changing it
+- Maximum 3 improvements, minimum 0 — only suggest what genuinely helps
+- Never suggest cosmetic changes — only structural DQ improvements
+- Each suggestion must directly fix a failed check or close a scored gap`;
     try {
       setBusy(true);
       const res = await fetch('/api/ai', {
