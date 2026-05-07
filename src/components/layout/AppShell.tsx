@@ -61,6 +61,13 @@ export function AppShell({ sessionName, sessionId, activeModule, onModuleChange,
         <div className="w-px h-4 bg-white/20 mx-1" />
         <div className="flex-1 min-w-0">
           <span className="text-[11px] text-white/60 truncate block">{sessionName}</span>
+          {data?.session?.dqScores && Object.keys(data.session.dqScores).length > 0 && (() => {
+            const vals = Object.values(data.session.dqScores) as number[];
+            const avg = Math.round(vals.reduce((a:number,b:number)=>a+b,0)/vals.length);
+            const color = avg>=70?'#10B981':avg>=50?'#F59E0B':'#EF4444';
+            const label = avg>=70?'Ready':avg>=50?'Review':'Not Ready';
+            return <div className="flex items-center gap-1 mt-0.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:color}}/><span className="text-[9px] font-bold" style={{color}}>{avg}% · {label}</span></div>;
+          })()}
         </div>
 
         {/* Current module/tool badge */}
