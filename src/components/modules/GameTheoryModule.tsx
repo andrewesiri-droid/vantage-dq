@@ -192,7 +192,7 @@ export function GameTheoryModule({ sessionId, data }: ModuleProps) {
   const GTIcon = gt.icon;
 
   // ── QUICK MODE AI ──────────────────────────────────────────────────────────
-  const runQuickAnalysis = () => {
+  const runQuickAnalysis = async () => {
     const prompt = `You are a strategic game theory analyst. Analyse this decision situation quickly and give executive-level strategic intelligence.
 
 Decision: ${decisionContext}
@@ -271,7 +271,7 @@ Return JSON: { players: [{name, role (competitor/regulator/partner/customer/supp
   };
 
   // ── MODEL FUNCTIONS ─────────────────────────────────────────────────────────
-  const createModel = () => {
+  const createModel = async () => {
     const n: GameModel = {
       id: Date.now(), name: `${GAME_TYPES[gameType].label} Game`, gameType, gameClass, description: '',
       ourMoves: [{ id: Date.now()+1, label: 'Option A', description: '' }, { id: Date.now()+2, label: 'Option B', description: '' }],

@@ -122,7 +122,7 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
     } catch(e) { console.error('[qualitative-assessment]', e); } finally { setBusy(false); }
   };
 
-  const generateBrief = () => {
+  const generateBrief = async () => {
     const matrix = strategies.map(s => `${s.name}: weighted score ${weightedTotal(s.id)}/${maxPossible} (${pct(s.id)}%)`).join(', ');
     const topStrat = [...strategies].sort((a, b) => pct(b.id) - pct(a.id))[0];
     const prompt = `Write a Decision Brief based on this assessment.\nDecision: ${data?.session?.decisionStatement||''}\nScores: ${matrix}\nTop strategy: ${topStrat?.name}\nCriteria: ${criteria.map(c=>c.label).join(', ')}\n\nReturn JSON: { recommendedStrategy: string, headline: string, rationale: string, keyTradeoff: string, criticalAssumption: string, conditionsToRevisit: [string], nextStep: string, dqNote: string }`;
