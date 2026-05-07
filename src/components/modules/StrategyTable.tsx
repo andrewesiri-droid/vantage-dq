@@ -257,7 +257,7 @@ Return JSON only: {
                       <span className="text-sm font-bold" style={{ color: DS.ink }}>{s.name}</span>
                       <Badge style={{ background: `${c.fill}18`, color: c.fill, border: 'none', fontSize: 8 }}>{completeness(s)}% complete</Badge>
                     </div>
-                    <Button size="sm" className="gap-1 h-6 text-[10px]" style={{ background: c.fill }} onClick={() => aiFillStrategy(s.id)}>
+                    <Button size="sm" className="gap-1 h-6 text-[10px]" style={{ background: c.fill }} onClick={(e) => { e.stopPropagation(); aiFillStrategy(s!.id); }}>
                       <Sparkles size={10} /> AI Fill
                     </Button>
                   </div>
