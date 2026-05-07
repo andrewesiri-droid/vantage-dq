@@ -147,9 +147,19 @@ Return JSON: {
   };
 
   const aiStressTest = async () => {
-    const stratList = (data?.strategies || []).map((s: any) => `${s.name}: ${s.rationale || ''}`).join('\n');
+    const strategies = data?.strategies || [];
+    const stratList = strategies.length
+      ? strategies.map((s: any) => `${s.name}: ${s.rationale || ''}`).join('\n')
+      : 'No strategies defined yet — infer 2-3 generic strategic options from the decision context and scenarios';
     const scenList = scenarios.map(s => `${s.name}: ${s.description}`).join('\n');
-    const prompt = `Stress test each strategy across all scenarios.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies:\n${stratList}\nScenarios:\n${scenList}\n\nReturn JSON: { profiles: [{name, robustness: robust|conditional|fragile, winsIn: [scenario names], failsIn: [scenario names], failureCondition: string, recommendation: string}], mostRobust: string, insight: string, regretMatrix: string }`;
+    const prompt = `Stress test strategies across scenarios for this decision.
+Decision: ${data?.session?.decisionStatement || ''}
+${strategies.length ? `Strategies:\n${stratList}` : `No strategies defined. Infer 2-3 plausible strategic options from the decision context and test those.`}
+Scenarios:
+${scenList}
+
+For each strategy: assess robustness across all scenarios. Which scenarios does it win in? Which does it fail in?
+Return JSON: { profiles: [{name, robustness: "robust|conditional|fragile", winsIn: [scenario names], failsIn: [scenario names], failureCondition: string, recommendation: string}], mostRobust: string, insight: string, regretMatrix: string }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'scenario' }) });
@@ -377,7 +387,7 @@ Return JSON: {
           })}
 
           {scenarios.length > 0 && (
-            <Button className="gap-1.5 w-full" style={{ background: DS.reasoning.fill }} onClick={aiStressTest} disabled={busy || !data?.strategies?.length}>
+            <Button className="gap-1.5 w-full" style={{ background: DS.reasoning.fill }} onClick={aiStressTest} disabled={busy || !scenarios.length}>
               <Sparkles size={14} /> {busy ? 'Testing…' : 'Stress Test Strategies Against These Scenarios'}
             </Button>
           )}
@@ -390,7 +400,7 @@ Return JSON: {
           {!stressResult ? (
             <div className="text-center py-10 rounded-xl" style={{ background: DS.bg, border: `1px dashed ${DS.border}` }}>
               <p className="text-xs mb-3" style={{ color: DS.inkDis }}>Test how each strategy performs across all scenarios</p>
-              <Button size="sm" className="gap-1.5 text-xs" style={{ background: DS.reasoning.fill }} onClick={aiStressTest} disabled={busy || !scenarios.length || !data?.strategies?.length}>
+              <Button size="sm" className="gap-1.5 text-xs" style={{ background: DS.reasoning.fill }} onClick={aiStressTest} disabled={busy || !scenarios.length}>
                 <Sparkles size={11} /> Run Stress Test
               </Button>
             </div>
