@@ -59,25 +59,26 @@ export function OrgSwitcher() {
                     className="text-xs px-2 py-1 rounded" style={{ color: DS.inkDis }}>✕</button>
                 </div>
               ) : (
-                <button onClick={() => { setInviting(true); setOpen(false); }}
-                className="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs mb-0.5"
-                style={{ color: DS.inkSub }}>
-                <UserPlus size={11} /> Invite Member
-              </button>
-              <button onClick={() => setCreating(true)}
-                  className="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs"
-                  style={{ color: DS.information.fill }}>
-                  <Plus size={11} /> New Organisation
-                </button>
+                <div className="space-y-0.5">
+                  <button onClick={() => { setInviting(true); setOpen(false); }}
+                    className="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs"
+                    style={{ color: DS.inkSub }}>
+                    <UserPlus size={11} /> Invite Member
+                  </button>
+                  <button onClick={() => setCreating(true)}
+                    className="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs"
+                    style={{ color: DS.information.fill }}>
+                    <Plus size={11} /> New Organisation
+                  </button>
+                </div>
               )}
             </div>
           </div>
         </>
       )}
-    </div>
-      {inviting && currentOrg && (
-        <OrgInvitePanel organisationId={currentOrg.id} orgName={currentOrg.name} onClose={() => setInviting(false)} />
-      )}
+    {inviting && currentOrg && (
+      <OrgInvitePanel organisationId={currentOrg.id} orgName={currentOrg.name} onClose={() => setInviting(false)} />
+    )}
     </div>
   );
 }
