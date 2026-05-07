@@ -150,7 +150,7 @@ Return JSON: {
           <Button size="sm" className="gap-1.5 text-xs h-8" style={{ background: DS.accent }} onClick={aiGenerateBrief} disabled={busy}>
             <Sparkles size={11} /> {busy ? 'Generating…' : 'Generate Executive Brief'}
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-8" style={{ background: '#7F1D1D' }} onClick={aiChallengeRecommendation} disabled={busy || (!mechanicalRec.recommendedStrategy && !preferred)}>
+          <Button size="sm" className="gap-1.5 text-xs h-8" style={{ background: '#7F1D1D' }} onClick={aiChallengeRecommendation} disabled={busy || !(data?.strategies?.length)}>
             👿 {busy ? 'Challenging…' : 'Challenge Recommendation'}
           </Button>
         </div>

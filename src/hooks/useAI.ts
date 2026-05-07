@@ -1,4 +1,9 @@
 /**
+ * @deprecated useAI is deprecated. Use useDQAI from '@/hooks/useDQAI' instead.
+ * useDQAI wraps all AI calls with the DQ Constitution, grounding, and trust scoring.
+ * This file exists only for backward compatibility during migration.
+ */
+/**
  * useAI — Vantage DQ Trusted AI Hook
  *
  * Every AI call now goes through the DQ Trustworthiness Engine:

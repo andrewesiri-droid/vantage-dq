@@ -81,7 +81,7 @@ export function SessionPage() {
   const handleToolChange = (id: ToolId | null) => setActiveTool(id);
 
   // Demo sessions use localStorage, real sessions use Supabase
-  const isDemo = !slug || slug === 'demo-apac-entry' || slug.startsWith('demo-');
+  const isDemo = !slug || slug === 'demo-apac-entry' || slug.startsWith('demo-') || slug.startsWith('local-');
   if (isDemo) {
     return <DemoSessionPage slug={slug || 'demo'} activeModule={activeModule} setActiveModule={handleModuleChange} activeTool={activeTool} setActiveTool={handleToolChange} />;
   }

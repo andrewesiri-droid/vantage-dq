@@ -133,7 +133,8 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
   const frameGate = checkFrameGate(data);
 
   const aiDevilsAdvocate = async () => {
-    if (!mechanicalRec.recommendedStrategy) return;
+    if (!strategies.length) return;
+    const targetStrategy = mechanicalRec.recommendedStrategy || strategies[0]?.name || 'primary strategy';
     const losingStrategies = strategies.filter((s: any) => s.name !== mechanicalRec.recommendedStrategy);
     const prompt = `You are a senior devil's advocate in a high-stakes decision workshop.
 

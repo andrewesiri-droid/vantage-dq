@@ -1,3 +1,5 @@
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
+import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
 import type { ModuleProps } from '@/types';

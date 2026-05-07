@@ -1,3 +1,4 @@
+import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';

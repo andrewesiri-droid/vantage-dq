@@ -34,10 +34,12 @@ export async function createSession(name: string, ownerEmail?: string, userId?: 
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
   const suffix = Date.now().toString(36);
 
-  // If no supabase or no authenticated user — use localStorage
+  // If no supabase or no authenticated user — use localStorage with local- prefix
   if (!supabase || !userId) {
     const { initializeEmptySession } = await import('@/lib/demoData');
-    return initializeEmptySession(name);
+    const localSlug = 'local-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '-' + Date.now().toString(36);
+    initializeEmptySession(name, localSlug);
+    return localSlug;
   }
 
   const slug = base + '-' + suffix;

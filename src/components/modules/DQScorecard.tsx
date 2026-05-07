@@ -1,3 +1,5 @@
+import { buildContractPrompt } from '@/lib/dq-data-contracts';
+import { computeMechanicalRecommendation } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
@@ -168,6 +170,20 @@ Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${
           <Button size="sm" variant="outline" className="gap-1 text-xs h-7 shrink-0" onClick={aiNarrative} disabled={busy}>Generate DQ Report</Button>
         </div>
       </div>
+
+      {/* Mechanical rec contradiction warning */}
+      {commitmentContradiction && (
+        <div className="rounded-xl p-3" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
+          <div className="text-[10px] font-bold mb-1" style={{ color: '#EF4444' }}>⚠ CONTRADICTION DETECTED</div>
+          <p className="text-xs" style={{ color: DS.ink }}>Commitment score is {scores.commitment}/100 but mechanical recommendation shows Low Confidence — strategies are not sufficiently differentiated to justify commitment.</p>
+        </div>
+      )}
+      {marginWarning && (
+        <div className="rounded-xl p-3" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+          <div className="text-[10px] font-bold mb-1" style={{ color: '#D97706' }}>⚠ THIN MARGIN</div>
+          <p className="text-xs" style={{ color: DS.ink }}>{mechanicalRec.recommendedStrategy} leads by only {mechanicalRec.margin} points — strategies are nearly equivalent. High commitment requires stronger differentiation.</p>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b mb-5 overflow-x-auto scrollbar-none" style={{ borderColor: DS.borderLight }}>

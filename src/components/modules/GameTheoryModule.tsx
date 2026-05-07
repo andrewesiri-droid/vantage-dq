@@ -1,3 +1,5 @@
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
+import { buildContractPrompt } from '@/lib/dq-data-contracts';
 /**
  * Strategic Gaming Module — Vantage DQ
  * Three analysis modes:

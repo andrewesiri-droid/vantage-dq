@@ -28,6 +28,11 @@ export function DQTrustBadge({ trust, meta }: { trust: TrustResult | null; meta?
           <span className="text-[9px]" style={{ color: DS.inkDis }}>{meta.assumptionsMade.slice(0,2).join(' · ')}</span>
         </div>
       )}
+      <div className="w-full mt-1 flex items-center gap-1">
+        <div className="w-1.5 h-1.5 rounded-full" style={{ background: DS.information.fill }} />
+        <span className="text-[9px] font-bold" style={{ color: DS.information.fill }}>DQ GOVERNED</span>
+        <span className="text-[9px]" style={{ color: DS.inkDis }}>· Frame · Alternatives · Information · Values · Reasoning · Commitment</span>
+      </div>
     </div>
   );
 }

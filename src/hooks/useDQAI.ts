@@ -4,6 +4,7 @@
  */
 import { useState, useCallback } from 'react';
 import { buildDQCompliantPrompt, classifyOutputTrust, detectCrossModuleContradictions } from '@/lib/dq-ai-engine';
+import { trackAICall } from '@/lib/ai-rate-limiter';
 import { toastAIError } from '@/lib/toast';
 
 export interface DQAIResult {
@@ -21,6 +22,9 @@ export function useDQAI() {
     rawPrompt: string,
     options: { module: string; dqElement: string; sessionData: any }
   ): Promise<DQAIResult | null> => {
+    const rateCheck = trackAICall(options.sessionData?.session?.id);
+    if (!rateCheck.allowed) { toastError(rateCheck.warning || 'AI call limit reached'); setBusy(false); return null; }
+    if (rateCheck.warning) { import('@/lib/toast').then(({ toastError: te }) => te(rateCheck.warning!)); }
     setBusy(true);
     try {
       const contradictions = detectCrossModuleContradictions(options.sessionData || {});

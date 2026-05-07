@@ -1,3 +1,4 @@
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 /**
  * Export & Report Module — Vantage DQ
  *
