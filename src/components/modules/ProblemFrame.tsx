@@ -166,7 +166,7 @@ JSON format: {"overallScore":0-100,"band":"Elite|Strong|Adequate|Weak|High-Risk"
         <div className="flex-1" />
         {improvements.length > 0 && (
           <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" style={{ borderColor: DS.warning, color: DS.warning }}
-            onClick={() => { improvements.slice(0, 3).forEach(applyImprovement); setImprovements([]); }}>
+            onClick={() => { improvements.slice(0, 3).forEach(applyImprovement); setImprovements([]); setTimeout(() => runFrameCheck(), 300); }}>
             <Wand2 size={11} /> Apply Improvements ({improvements.length})
           </Button>
         )}
@@ -331,7 +331,7 @@ JSON format: {"overallScore":0-100,"band":"Elite|Strong|Adequate|Weak|High-Risk"
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: DS.inkDis }}>Suggested Improvements</span>
                     <Button size="sm" variant="outline" className="h-6 text-[9px] gap-1" style={{ color: DS.warning, borderColor: DS.warning }}
-                      onClick={() => { improvements.forEach(applyImprovement); setImprovements([]); }}>
+                      onClick={() => { improvements.forEach(applyImprovement); setImprovements([]); setTimeout(() => runFrameCheck(), 300); }}>
                       <Wand2 size={9} /> Apply All
                     </Button>
                   </div>
@@ -342,7 +342,7 @@ JSON format: {"overallScore":0-100,"band":"Elite|Strong|Adequate|Weak|High-Risk"
                         <div className="text-xs" style={{ color: DS.inkSub }}>{imp.suggestion?.slice(0, 140)}</div>
                         {imp.reason && <div className="text-[10px] mt-1 italic" style={{ color: DS.inkDis }}>{imp.reason}</div>}
                       </div>
-                      <Button size="sm" variant="outline" className="h-7 text-[10px] shrink-0" onClick={() => { applyImprovement(imp); setImprovements(p => p.filter((_, j) => j !== i)); }}>
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] shrink-0" onClick={() => { applyImprovement(imp); setImprovements(p => p.filter((_, j) => j !== i)); setTimeout(() => runFrameCheck(), 300); }}>
                         Apply
                       </Button>
                     </div>
