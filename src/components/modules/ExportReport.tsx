@@ -474,10 +474,9 @@ Requirements:
 
 Return JSON: { content: string }`;
 
-      await new Promise<void>((resolve) => {
-        setBusy(true);
-        try {
-          const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'export-report' }) });
+      setBusy(true);
+      try {
+        const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'export-report' }) });
           const d = await res.json();
           const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
           const _m = _text.match(/\{[\s\S]*\}/);
@@ -485,9 +484,8 @@ Return JSON: { content: string }`;
             let result = JSON.parse(_m[0]);
           const content = result?.content || sec.content;
           setSections(p => p.map(s => s.id === sec.id ? { ...s, content, generated: true } : s));
-          resolve();
-          }
-        } catch(e) { console.error('[export-report]', e); } finally { setBusy(false); }
+        }
+      } catch(e) { console.error('[export-report]', e); } finally { setBusy(false); }
       });
     }
 
