@@ -6,7 +6,11 @@
 import { useState } from 'react';
 import { DS } from '@/constants';
 import { Shield, AlertTriangle, CheckCircle, Info, ChevronDown, ChevronUp, Eye } from 'lucide-react';
-interface TrustResult { level: string; color: string; label: string; reason: string; }
+interface TrustResult {
+  level: string; color: string; label: string; reason: string;
+  trustScore?: number; flags?: string[]; assumptionsMade?: string[];
+  dataPointsUsed?: string[]; caveats?: string[];
+}
 
 interface Props {
   trust: TrustResult | null;
