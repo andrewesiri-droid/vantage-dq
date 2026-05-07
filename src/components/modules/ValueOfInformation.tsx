@@ -1,4 +1,5 @@
 import { checkFrameGate } from '@/lib/dq-data-contracts';
+      const _contract = buildContractPrompt('voi', data);
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
@@ -71,7 +72,7 @@ export function ValueOfInformation({ sessionId, data }: ModuleProps) {
 
   const aiScreen = async () => {
     const uList = uncertainties.map(u => `"${u.label}": impact=${u.impactOnValue}/5, reducible=${u.abilityToReduce}/5, changes_decision=${u.likelihoodChangesDecision}/5, EVPI=$${u.evpiEstimate}`).join('\n');
-    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+    const prompt = `${_contract}\n\nYou are an elite DQ facilitator. Apply these definitions strictly:
 
 WHAT HAS VALUE OF INFORMATION:
 - An uncertainty has VOI only if: resolving it would change the preferred alternative

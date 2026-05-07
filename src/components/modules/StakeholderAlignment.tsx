@@ -1,4 +1,5 @@
 import { checkFrameGate } from '@/lib/dq-data-contracts';
+      const _contract = buildContractPrompt('stakeholder-alignment', data);
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { useState, useEffect } from 'react';
 import { useDQAI } from '@/hooks/useDQAI';
@@ -62,7 +63,7 @@ export function StakeholderAlignment({ sessionId, data, hooks }: ModuleProps) {
 
   const aiGenerate = async () => {
     const existing = stakeholders.map(s => s.name).join(', ');
-    const prompt = `You are an elite DQ facilitator. Apply these definitions strictly:
+    const prompt = `${_contract}\n\nYou are an elite DQ facilitator. Apply these definitions strictly:
 
 WHO IS A STAKEHOLDER (for DQ purposes):
 - Those with AUTHORITY over the decision (must approve or can veto)

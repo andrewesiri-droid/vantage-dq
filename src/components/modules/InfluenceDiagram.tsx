@@ -1,4 +1,5 @@
 import { checkFrameGate } from '@/lib/dq-data-contracts';
+      const _contract = buildContractPrompt('influence-diagram', data);
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import { buildContractPrompt } from '@/lib/dq-data-contracts';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -102,7 +103,7 @@ export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
     const focusDecs = (data?.decisions||[]).filter((d:any)=>d.tier==='focus').map((d:any)=>d.label).join(', ');
     const stratNames = (data?.strategies||[]).map((s:any)=>s.name).join(', ');
     const existing = nodes.map(n=>n.label).join(', ');
-    const prompt = `Build a DQ influence diagram.\nDecision: ${data?.session?.decisionStatement||''}\nFocus Decisions: ${focusDecs}\nStrategies: ${stratNames}\nExisting nodes (do not duplicate): ${existing}\n\nReturn JSON: { nodes: [{label, type (decision/uncertainty/deterministic/value), col: 1-5, row: 1-4}], edges: [{from (exact label), to (exact label)}], insight: string }`;
+    const prompt = `${_contract}\n\nBuild a DQ influence diagram.\nDecision: ${data?.session?.decisionStatement||''}\nFocus Decisions: ${focusDecs}\nStrategies: ${stratNames}\nExisting nodes (do not duplicate): ${existing}\n\nReturn JSON: { nodes: [{label, type (decision/uncertainty/deterministic/value), col: 1-5, row: 1-4}], edges: [{from (exact label), to (exact label)}], insight: string }`;
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'influence-diagram' }) });

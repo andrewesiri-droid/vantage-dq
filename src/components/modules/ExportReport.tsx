@@ -451,6 +451,7 @@ export function ExportReport({ sessionId, data }: ModuleProps) {
     if (recommendations.length < 2) return;
     const prompt = 'Review these report sections for internal contradictions. If any section recommends a different strategy than another, flag it. Sections: ' + recommendations.join(' | ') + ' Return JSON: { hasContradiction: boolean, details: string }';
     try {
+      const _contract = buildContractPrompt('export-report', data);
       const result = await dqCall(prompt, { module: 'export-report', dqElement: 'Reasoning', sessionData: data || {} });
       if (result?.data?.hasContradiction) {
         import('@/lib/toast').then(({ toastError }) => toastError('⚠ Report consistency issue: ' + result.data.details));
@@ -478,7 +479,7 @@ export function ExportReport({ sessionId, data }: ModuleProps) {
       const sec = aiSections[i];
       setGenerationProgress(Math.round((i / aiSections.length) * 100));
 
-      const prompt = `You are a senior Decision Quality consultant generating a section for a ${typeCfg.label}.
+      const prompt = `${_contract}\n\nYou are a senior Decision Quality consultant generating a section for a ${typeCfg.label}.
 
 AUDIENCE: ${audienceCfg.label} — ${audienceCfg.desc}
 TONE: ${toneCfg.label} — ${toneCfg.desc}

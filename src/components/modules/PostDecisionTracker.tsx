@@ -14,6 +14,7 @@ import { useDQAI } from '@/hooks/useDQAI';
 import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 
 interface OutcomeEntry {
+      const _contract = buildContractPrompt('post-decision', data);
   id: number;
   type: 'assumption' | 'uncertainty' | 'risk' | 'milestone';
   label: string;
@@ -96,7 +97,7 @@ export function PostDecisionTracker({ sessionId, data, hooks }: ModuleProps) {
 
   const aiReview = async () => {
     const outcomesSummary = outcomes.map(o => `[${o.type}] ${o.label}: predicted=${o.predicted}, actual=${o.actual || 'pending'}, status=${o.status}`).join('\n');
-    const prompt = `Post-decision learning review.
+    const prompt = `${_contract}\n\nPost-decision learning review.
 Decision: ${session.decisionStatement || ''}
 Strategy chosen: ${preferred?.name || ''}
 Commit date: ${commitDate}
