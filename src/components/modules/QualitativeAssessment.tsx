@@ -76,13 +76,18 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
   const sColors = DS.sColors;
   const col = (idx: number) => sColors[idx % sColors.length];
 
-  const aiInitAssessment = () => {
+  const aiInitAssessment = async () => {
     const critList = criteria.map((c, i) => `${i+1}. ${c.label} [${c.weight}] — ${c.description || c.type}`).join('\n');
     const stratList = strategies.map((s, i) => `${i+1}. ${s.name}: ${s.description || ''}`).join('\n');
     const prompt = `Score these strategies on each criterion for this decision.\nDecision: "${data?.session?.decisionStatement || ''}"\n\nCriteria:\n${critList}\n\nStrategies:\n${stratList}\n\nReturn JSON: { scores: [{strategyIndex: 1-based, criterionIndex: 1-based, score: 1-5, rationale: string}] }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'qualitative-assessment' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       const newScores = { ...scores };
       const newRationales = { ...rationales };
       (result?.scores || []).forEach((s: any) => {
@@ -97,28 +102,41 @@ export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
       });
       setScores(newScores);
       setRationales(newRationales);
-    });
+      }
+    } catch(e) { console.error('[qualitative-assessment]', e); } finally { setBusy(false); }
   };
 
-  const aiAnalyse = () => {
+  const aiAnalyse = async () => {
     const matrix = strategies.map(s => s.name + ': ' + criteria.map(c => c.label + '=' + getScore(s.id, c.id)).join(', ')).join('\n');
     const prompt = `Analyse this assessment matrix for DQ quality.\nDecision: ${data?.session?.decisionStatement||''}\n\nMatrix:\n${matrix}\n\nReturn JSON: { qualityScore: 0-100, dominantStrategy: string, tradeOffInsights: [string], flags: [{type, severity: critical|warning, criterion, message}], recommendation: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'qualitative-assessment' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) { setAnalysisResult(result); setActiveTab('analysis'); }
-    });
+      }
+    } catch(e) { console.error('[qualitative-assessment]', e); } finally { setBusy(false); }
   };
 
   const generateBrief = () => {
     const matrix = strategies.map(s => `${s.name}: weighted score ${weightedTotal(s.id)}/${maxPossible} (${pct(s.id)}%)`).join(', ');
     const topStrat = [...strategies].sort((a, b) => pct(b.id) - pct(a.id))[0];
     const prompt = `Write a Decision Brief based on this assessment.\nDecision: ${data?.session?.decisionStatement||''}\nScores: ${matrix}\nTop strategy: ${topStrat?.name}\nCriteria: ${criteria.map(c=>c.label).join(', ')}\n\nReturn JSON: { recommendedStrategy: string, headline: string, rationale: string, keyTradeoff: string, criticalAssumption: string, conditionsToRevisit: [string], nextStep: string, dqNote: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'qualitative-assessment' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) { setBrief(result); setActiveTab('brief'); }
-    });
+      }
+    } catch(e) { console.error('[qualitative-assessment]', e); } finally { setBusy(false); }
   };
 
   const activeCellKey = activeCell ? `${activeCell.sid}_${activeCell.cid}` : null;

@@ -93,14 +93,19 @@ export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
     }));
   };
 
-  const aiGenerate = () => {
+  const aiGenerate = async () => {
     const focusDecs = (data?.decisions||[]).filter((d:any)=>d.tier==='focus').map((d:any)=>d.label).join(', ');
     const stratNames = (data?.strategies||[]).map((s:any)=>s.name).join(', ');
     const existing = nodes.map(n=>n.label).join(', ');
     const prompt = `Build a DQ influence diagram.\nDecision: ${data?.session?.decisionStatement||''}\nFocus Decisions: ${focusDecs}\nStrategies: ${stratNames}\nExisting nodes (do not duplicate): ${existing}\n\nReturn JSON: { nodes: [{label, type (decision/uncertainty/deterministic/value), col: 1-5, row: 1-4}], edges: [{from (exact label), to (exact label)}], insight: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'influence-diagram' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (!result?.nodes?.length) return;
       const colCounters: Record<number,number> = {};
       const newNodes: INode[] = result.nodes.map((n: any) => {
@@ -119,18 +124,25 @@ export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
       const edgeKeys = new Set(edges.map(e=>e.from+'_'+e.to));
       setNodes(p=>[...p,...newNodes]);
       setEdges(p=>[...p,...newEdges.filter((e:IEdge)=>!edgeKeys.has(e.from+'_'+e.to))]);
-    });
+      }
+    } catch(e) { console.error('[influence-diagram]', e); } finally { setBusy(false); }
   };
 
-  const aiValidate = () => {
+  const aiValidate = async () => {
     const nodeList = nodes.map(n=>`${n.label} [${n.type}]`).join(', ');
     const edgeList = edges.map(e=>{const f=nodes.find(n=>n.id===e.from),t=nodes.find(n=>n.id===e.to);return f&&t?`${f.label}→${t.label}`:null;}).filter(Boolean).join(', ');
     const prompt = `Validate this influence diagram.\nNodes: ${nodeList}\nEdges: ${edgeList}\nDecision: ${data?.session?.decisionStatement||''}\n\nReturn JSON: { validationScore: 0-100, checks: [{name, pass: boolean, note}], missingLinks: [string], redundantLinks: [string], verdict: string }`;
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'influence-diagram' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) { setValidation(result); setActiveTab('validate'); }
-    });
+      }
+    } catch(e) { console.error('[influence-diagram]', e); } finally { setBusy(false); }
   };
 
   const W = 1100, H = 500;

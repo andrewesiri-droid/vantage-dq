@@ -218,15 +218,21 @@ Return JSON: {
   warningFlags: [string]
 }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) {
         setQuickResult(result);
         if (result.gameType) setGameType(result.gameType);
         if (result.gameClass) setGameClass(result.gameClass);
       }
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
   // ── PLAYER FUNCTIONS ────────────────────────────────────────────────────────
@@ -234,7 +240,7 @@ Return JSON: {
   const updatePlayer = (id: number, field: string, val: any) => setPlayers(p => p.map(pl => pl.id === id ? { ...pl, [field]: val } : pl));
   const removePlayer = (id: number) => setPlayers(p => p.filter(pl => pl.id !== id));
 
-  const aiGeneratePlayers = () => {
+  const aiGeneratePlayers = async () => {
     const prompt = `Identify the key players for this strategic decision.
 
 Decision: ${decisionContext}
@@ -244,9 +250,14 @@ For each player analyse objectives, incentives, capabilities, constraints, and l
 
 Return JSON: { players: [{name, role (competitor/regulator/partner/customer/supplier/government/other), objective, incentives, capabilities, constraints, riskTolerance (high/medium/low), likelyBehavior}] }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result?.players) {
         setPlayers(p => [...p, ...result.players.map((pl: any, i: number) => ({
           id: Date.now()+i, name: pl.name||'Player', role: pl.role||'other',
@@ -255,7 +266,8 @@ Return JSON: { players: [{name, role (competitor/regulator/partner/customer/supp
           riskTolerance: pl.riskTolerance||'medium', likelyBehavior: pl.likelyBehavior||'',
         }))]);
       }
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
   // ── MODEL FUNCTIONS ─────────────────────────────────────────────────────────
@@ -273,7 +285,7 @@ Return JSON: { players: [{name, role (competitor/regulator/partner/customer/supp
   const updatePayoff = (modelId: number, row: number, col: number, field: 'usPayoff'|'opponentPayoff', val: number) =>
     setModels(p => p.map(m => m.id === modelId ? { ...m, payoffMatrix: m.payoffMatrix.map(c => c.row===row&&c.col===col ? {...c,[field]:val} : c) } : m));
 
-  const aiAnalyseMatrix = () => {
+  const aiAnalyseMatrix = async () => {
     if (!activeModel) return;
     const matrixStr = activeModel.payoffMatrix.map(c =>
       `(${activeModel.ourMoves[c.row]?.label||'R'+c.row}, ${activeModel.opponentMoves[c.col]?.label||'C'+c.col}): us=${c.usPayoff}, them=${c.opponentPayoff}`
@@ -290,14 +302,20 @@ Identify: dominant strategies, Nash equilibrium, Pareto improvements, recommende
 
 Return JSON: { dominantStrategy: string|null, nashEquilibrium: string, paretoOptimal: string, recommendedStrategy: string, keyRisk: string, strategicInsight: string, warnings: [string], executionHints: [string] }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) setMatrixAnalysis(result);
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
-  const aiEscalation = () => {
+  const aiEscalation = async () => {
     const prompt = `Map escalation risks and signaling dynamics.
 
 Decision: ${decisionContext}
@@ -309,14 +327,20 @@ Identify escalation chains, credible vs incredible threats, signaling opportunit
 
 Return JSON: { escalationChains: [{trigger, response, consequence, probability: high|medium|low}], credibleThreats: [string], incredibleThreats: [string], signalingOpportunities: [{signal, intendedMessage, credibility: high|medium|low}], commitmentDevices: [string], strategicTraps: [string], overallEscalationRisk: High|Medium|Low }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) setEscalationMap(result);
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
-  const aiExecutionPlan = () => {
+  const aiExecutionPlan = async () => {
     const prompt = `Build a dynamic execution roadmap for this strategic interaction.
 
 Decision: ${decisionContext}
@@ -329,15 +353,21 @@ Build a dynamic move sequence: our moves, expected responses, contingencies, tri
 
 Return JSON: { roadmap: [{phase, ourMove, expectedResponse, contingency, triggerCondition, timing}], keyMilestones: [string], earlyWarningIndicators: [string], pivotConditions: [string], winCondition: string, fallbackStrategy: string }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) setExecutionPlan(result);
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
   // ── FULL MODE AI FUNCTIONS ──────────────────────────────────────────────────
-  const aiCoalition = () => {
+  const aiCoalition = async () => {
     const prompt = `Analyse coalition dynamics for this multi-player strategic situation.
 
 Decision: ${decisionContext}
@@ -352,14 +382,20 @@ Apply cooperative game theory:
 
 Return JSON: { grandCoalitionValue: string, stableCoalitions: [{members, rationale, value, stability: high|medium|low}], shapleyValues: [{player, value, interpretation}], ourLeverage: string, recommendedCoalition: string, blockingStrategy: string, instabilityRisks: [string] }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) setCoalitionAnalysis(result);
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
-  const aiRepeatedGame = () => {
+  const aiRepeatedGame = async () => {
     const prompt = `Analyse repeated game dynamics for this strategic situation.
 
 Decision: ${decisionContext}
@@ -376,14 +412,20 @@ Apply repeated game theory (Folk theorem, tit-for-tat, reputation effects):
 
 Return JSON: { cooperationViable: boolean, cooperationConditions: string, recommendedStrategy: tit-for-tat|grim-trigger|generous-tit-for-tat|defect|cooperate, strategyRationale: string, reputationEffects: string, roundByRoundGuidance: [{round, action, rationale}], breakdownRisks: [string], recoveryMechanisms: [string] }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) setRepeatedGameAnalysis(result);
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
-  const aiAuction = () => {
+  const aiAuction = async () => {
     const prompt = `Analyse the auction/bidding dynamics for this situation.
 
 Decision: ${decisionContext}
@@ -399,14 +441,20 @@ Apply auction theory:
 
 Return JSON: { auctionFormat: string, winnersCurseRisk: High|Medium|Low, optimalBidStrategy: string, bidRange: {low: string, high: string, rationale: string}, privateInfoAdvantage: string, commonValueEstimate: string, tacticalRecommendations: [string], redFlags: [string] }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) setAuctionAnalysis(result);
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
-  const aiBargaining = () => {
+  const aiBargaining = async () => {
     const prompt = `Analyse the bargaining dynamics for this negotiation.
 
 Decision: ${decisionContext}
@@ -423,11 +471,17 @@ Apply bargaining theory (Nash bargaining, Rubinstein alternating offers):
 
 Return JSON: { ourBATNA: string, theirBATNA: string, zopa: string, bargainingPower: us|balanced|them, powerRationale: string, nashSolution: string, firstOffer: string, concessionStrategy: string, anchoring: string, dealBreakers: [string], closingTactics: [string] }`;
 
-    call(prompt, (r) => {
-      let result = r;
-      if (r?._raw) { try { result = JSON.parse((r._raw||'').match(/\{[\s\S]*\}/)?.[0]||''); } catch { return; } }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'game-theory' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) setBargainingAnalysis(result);
-    });
+      }
+    } catch(e) { console.error('[game-theory]', e); } finally { setBusy(false); }
   };
 
   const payoffColor = (v: number) => PAYOFF_COLORS[Math.min(4, Math.max(0, v - 1))];

@@ -44,7 +44,7 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
   const scoreColor = (s: number) => s >= 70 ? DS.success : s >= 45 ? DS.warning : s > 0 ? DS.danger : DS.inkDis;
   const scoreLabel = (s: number) => s >= 80 ? 'Elite' : s >= 60 ? 'Strong' : s >= 40 ? 'Adequate' : s > 0 ? 'Weak' : 'Unscored';
 
-  const aiAutoPopulate = () => {
+  const aiAutoPopulate = async () => {
     const ctx = {
       decisionStatement: data?.session?.decisionStatement || '',
       issues: (data?.issues || []).length,
@@ -54,88 +54,58 @@ export function DQScorecard({ sessionId, data, hooks }: ModuleProps) {
     };
     const prompt = `Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${JSON.stringify(ctx)}\nScoring: 0=Unscored, 20=High-Risk, 40=Weak, 60=Adequate, 80=Strong, 100=Elite\nReturn JSON: { frame, alternatives, information, values, reasoning, commitment }`;
     setBusy(true);
-
-    fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) })
-
-      .then(r => r.json())
-
-      .then(d => {
-
-        const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-
-        const match = text.match(/\{[\s\S]*\}/);
-
-        if (match) { try { const result = JSON.parse(match[0]);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (!result || result.error) return;
       const newScores: Record<string, number> = {};
       DQ_ELEMENTS.forEach(el => {
         if (typeof result[el.key] === 'number') {
           newScores[el.key] = Math.round(result[el.key] / 20) * 20;
         }
-      } catch(e) { console.error('[dq-scorecard]', e); } }
-
-      })
-
-      .catch(e => console.error('[dq-scorecard]', e))
-
-      .finally(() => setBusy(false));
+      });
       if (Object.keys(newScores).length) {
         setScores(p => ({ ...p, ...newScores }));
         if (sessionId) hooks?.updateSession?.({ id: sessionId, data: { dqScores: { ...scores, ...newScores } } });
       }
-    });
+      }
+    } catch(e) { console.error('[dq-scorecard]', e); } finally { setBusy(false); }
   };
 
-  const aiNarrative = () => {
+  const aiNarrative = async () => {
     const scoreSummary = DQ_ELEMENTS.map(el => `${el.short}: ${scores[el.key] || 0}`).join(', ');
     const prompt = `Executive DQ narrative.\nDecision: ${data?.session?.decisionStatement || ''}\nOverall: ${overall}/100 (${band.label})\nScores: ${scoreSummary}\nReturn JSON: { overallVerdict: string, readinessStatement: string, weakestLinkAnalysis: string, priorityActions: [{action, element, urgency: now|soon|later}], decidingNow: string }`;
     setBusy(true);
-
-    fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) })
-
-      .then(r => r.json())
-
-      .then(d => {
-
-        const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-
-        const match = text.match(/\{[\s\S]*\}/);
-
-        if (match) { try { const result = JSON.parse(match[0]);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) { setNarrative(result); setActiveTab('report'); }
-    } catch(e) { console.error('[dq-scorecard]', e); } }
-
-      })
-
-      .catch(e => console.error('[dq-scorecard]', e))
-
-      .finally(() => setBusy(false));
+      }
+    } catch(e) { console.error('[dq-scorecard]', e); } finally { setBusy(false); }
   };
 
-  const aiImprovements = () => {
+  const aiImprovements = async () => {
     const weakEls = DQ_ELEMENTS.filter(el => (scores[el.key] || 0) < 60).map(el => `${el.short}: ${scores[el.key] || 0}`).join(', ');
     const prompt = `DQ improvement plan for: ${weakEls}.\nReturn JSON: { improvements: [{element, currentScore, targetScore, actions: [{action, effort: low|medium|high, timeframe}], quickWin}] }`;
     setBusy(true);
-
-    fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) })
-
-      .then(r => r.json())
-
-      .then(d => {
-
-        const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-
-        const match = text.match(/\{[\s\S]*\}/);
-
-        if (match) { try { const result = JSON.parse(match[0]);
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });
+      const d = await res.json();
+      const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const _m = _text.match(/\{[\s\S]*\}/);
+      if (_m) {
+        let result = JSON.parse(_m[0]);
       if (result && !result.error) { setImprovements(result); setActiveTab('chain'); }
-    } catch(e) { console.error('[dq-scorecard]', e); } }
-
-      })
-
-      .catch(e => console.error('[dq-scorecard]', e))
-
-      .finally(() => setBusy(false));
+      }
+    } catch(e) { console.error('[dq-scorecard]', e); } finally { setBusy(false); }
   };
 
   return (
