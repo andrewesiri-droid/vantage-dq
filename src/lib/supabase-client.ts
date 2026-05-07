@@ -30,7 +30,7 @@ export function generateInviteToken(): string {
 }
 
 // Create a new session in Supabase, fall back to localStorage
-export async function createSession(name: string, ownerEmail?: string, userId?: string): Promise<string> {
+export async function createSession(name: string, ownerEmail?: string, userId?: string, organisationId?: number): Promise<string> {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
   const suffix = Date.now().toString(36);
 
@@ -51,6 +51,7 @@ export async function createSession(name: string, ownerEmail?: string, userId?: 
     status: 'draft',
     owner_email: ownerEmail || '',
     created_by: userId,
+    organisation_id: organisationId || null,
     dq_scores: {},
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

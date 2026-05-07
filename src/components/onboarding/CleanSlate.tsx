@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DS } from '@/constants';
 import { createSession, supabase } from '@/lib/supabase-client';
+import { useOrganisation } from '@/hooks/useOrganisation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,7 +20,7 @@ export function CleanSlate({ onBack }: CleanSlateProps) {
     setCreating(true);
     // Create session in Supabase or localStorage fallback
     const { data: { user } } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
-    const slug = await createSession(name.trim(), user?.email, user?.id);
+    const slug = await createSession(name.trim(), user?.email, user?.id, currentOrg?.id);
     navigate(`/session/${slug}`);
   };
 

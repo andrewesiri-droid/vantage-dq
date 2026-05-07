@@ -414,8 +414,8 @@ export function WorkshopPanel({ onClose, sessionId, data }: Props) {
                     // Push accepted item to session data
                     try {
                       const cat = (item.category || 'uncertainty-external').toLowerCase();
-                      const validCats = ['uncertainty-external','uncertainty-internal','stakeholder-concern','assumption','information-gap','opportunity','constraint','brutal-truth','regulatory-trap','second-order','black-swan','focus-decision'];
-                      const issueCat = validCats.includes(cat as string) ? cat : 'uncertainty-external';
+                      const validCats: string[] = ['uncertainty-external','uncertainty-internal','stakeholder-concern','assumption','information-gap','opportunity','constraint','brutal-truth','regulatory-trap','second-order','black-swan','focus-decision'];
+                      const issueCat = validCats.includes(cat) ? cat : 'uncertainty-external';
                       const sev = item.confidence === 'high' ? 'High' : 'Medium';
                       if (item.targetModule === 'stakeholder-alignment') {
                         sessionHooks.createStakeholder?.({ sessionId: sessionId!, name: item.speakerName || 'Workshop Participant', role: item.text });

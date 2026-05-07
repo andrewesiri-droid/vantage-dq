@@ -33,6 +33,7 @@ const STATUS_CONFIG = {
 
 export function PostDecisionTracker({ sessionId, data, hooks }: ModuleProps) {
   const [outcomes, setOutcomes] = useState<OutcomeEntry[]>([]);
+  const frameGate = checkFrameGate(data);
   // Load persisted outcomes
   useEffect(() => {
     if (data?.outcomeTracking?.length && !outcomes.length) {
