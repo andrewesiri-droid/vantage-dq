@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { toastAIError, toastSaved } from '@/lib/toast';

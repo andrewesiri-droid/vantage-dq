@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { detectCrossModuleContradictions, DQ_COPILOT_PROMPTS } from '@/lib/dq-ai-engine';
 import { DS, MODULES } from '@/constants';
 import type { ModuleId } from '@/types';
 import { useAI } from '@/hooks/useAI';

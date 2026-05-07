@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
+import { DQTrustBadge } from '@/components/ui/dq-trust-badge';
 import type { ModuleProps } from '@/types';
 import { DS, DQ_ELEMENTS, DQ_SCORE_BANDS } from '@/constants';
 import { Button } from '@/components/ui/button';
