@@ -287,16 +287,15 @@ Return JSON only: {
               {/* LEFT: Strategy info */}
               <div className="border-r p-5 space-y-4" style={{ borderColor: DS.borderLight }}>
                 <div className="pb-3 border-b" style={{ borderColor: DS.borderLight }}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: c.fill }} />
-                    <span className="text-sm font-bold" style={{ color: DS.ink }}>{s.name}</span>
-                    <Badge style={{ background: `${c.fill}18`, color: c.fill, border: 'none', fontSize: 8 }}>{completeness(s)}% complete</Badge>
-                    <button onClick={() => aiFillStrategy(s.id)} className="ml-auto flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded" style={{ background: `${c.fill}18`, color: c.fill }}>
-                      <Sparkles size={9} /> AI Fill
-                    </button>
-                    <button onClick={() => aiFillStrategy(s.id)} className="ml-auto flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded" style={{ background: `${c.fill}18`, color: c.fill }}>
-                      <Sparkles size={9} /> AI Fill
-                    </button>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ background: c.fill }} />
+                      <span className="text-sm font-bold" style={{ color: DS.ink }}>{s.name}</span>
+                      <Badge style={{ background: `${c.fill}18`, color: c.fill, border: 'none', fontSize: 8 }}>{completeness(s)}% complete</Badge>
+                    </div>
+                    <Button size="sm" className="gap-1 h-6 text-[10px]" style={{ background: c.fill }} onClick={() => aiFillStrategy(s.id)}>
+                      <Sparkles size={10} /> AI Fill
+                    </Button>
                   </div>
                 </div>
                 <div>
