@@ -101,6 +101,18 @@ export function OnboardingPage() {
           </p>
         </div>
 
+        {/* New user tip */}
+        {!localStorage.getItem('vdq_visited') && (
+          <div className="rounded-xl p-4 mb-2 flex items-start gap-3" style={{ background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.3)' }}
+            onClick={() => localStorage.setItem('vdq_visited', '1')}>
+            <span className="text-lg">👋</span>
+            <div>
+              <p className="text-sm font-bold text-white mb-0.5">New to Decision Quality?</p>
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Start with <strong className="text-white">Pre-loaded Example</strong> to explore a fully populated session, or use <strong className="text-white">5-Question Wizard</strong> for a guided start. Click to dismiss.</p>
+            </div>
+          </div>
+        )}
+
         {/* Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {CARDS.map(card => (

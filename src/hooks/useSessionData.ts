@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase-client';
 import { getDemoData, updateDemoData } from '@/lib/demoData';
+import { toastSuccess } from '@/lib/toast';
 
 function useSupa() {
   return supabase;
@@ -98,7 +99,7 @@ export function useSessionData(sessionId: number | undefined) {
     const tables = ['issues','decisions','strategies','criteria','assessment_scores','uncertainties','stakeholder_entries','risk_items','scenarios'];
     const channels = tables.map(table =>
       db.channel(`${table}:${sessionId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table, filter: `session_id=eq.${sessionId}` }, () => fetchAll())
+        .on('postgres_changes', { event: '*', schema: 'public', table, filter: `session_id=eq.${sessionId}` }, (payload) => { fetchAll(); if (payload.eventType === 'INSERT') toastSuccess('Session updated by collaborator', ); })
         .subscribe()
     );
     return () => { channels.forEach(c => db.removeChannel(c)); };

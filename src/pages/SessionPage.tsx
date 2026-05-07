@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router';
-import { trpc } from '@/providers/trpc';
 import { useSessionData } from '@/hooks/useSessionData';
+import { ModuleSkeleton } from '@/components/ui/skeleton-module';
 import { useDemoContext } from '@/App';
 import { demoApi, getDemoData, isDemoMode } from '@/lib/demoData';
 import { MODULES, DS, type ToolId } from '@/constants';
@@ -164,7 +164,9 @@ function BackendSessionPage({ slug, activeModule, setActiveModule, activeTool, s
       activeModule={activeModule} onModuleChange={setActiveModule}
       activeTool={activeTool} onToolChange={setActiveTool}
       isSyncing={sessionData.isLoading} data={sessionData.data}>
-      {activeTool ? renderTool(activeTool, moduleProps) : <ModuleComponent {...moduleProps} />}
+      {sessionData.isLoading
+        ? <ModuleSkeleton />
+        : activeTool ? renderTool(activeTool, moduleProps) : <ModuleComponent {...moduleProps} />}
     </AppShell>
   );
 }
