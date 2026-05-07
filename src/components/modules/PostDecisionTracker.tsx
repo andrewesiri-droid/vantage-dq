@@ -2,7 +2,7 @@
  * PostDecisionTracker — Track outcomes vs predictions
  * After a decision is committed, track what actually happened.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,16 @@ const STATUS_CONFIG = {
 
 export function PostDecisionTracker({ sessionId, data }: ModuleProps) {
   const [outcomes, setOutcomes] = useState<OutcomeEntry[]>([]);
+  // Load persisted outcomes
+  useEffect(() => {
+    if (data?.outcomeTracking?.length && !outcomes.length) {
+      setOutcomes(data.outcomeTracking.map((o: any) => ({
+        id: o.id, type: o.type, label: o.label, predicted: o.predicted,
+        actual: o.actual, status: o.status, impact: o.impact, learnedAt: o.learnedAt || o.learned_at || '',
+      })));
+      if (data.outcomeTracking.length > 0) setDecisionStatus('tracking');
+    }
+  }, [data?.outcomeTracking]);
   const [decisionStatus, setDecisionStatus] = useState<'draft'|'committed'|'tracking'|'complete'>('draft');
   const [commitDate, setCommitDate] = useState('');
   const [review, setReview] = useState<any>(null);
@@ -64,6 +74,10 @@ export function PostDecisionTracker({ sessionId, data }: ModuleProps) {
 
   const updateOutcome = (id: number, field: string, val: string) => {
     setOutcomes(p => p.map(o => o.id === id ? { ...o, [field]: val } : o));
+    if (hooks?.updateOutcome) {
+      const updated = outcomes.find(o => o.id === id);
+      if (updated) hooks.updateOutcome({ id, ...updated, [field]: val, sessionId });
+    }
   };
 
   const aiReview = async () => {

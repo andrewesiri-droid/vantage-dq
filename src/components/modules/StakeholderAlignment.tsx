@@ -94,6 +94,7 @@ Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisio
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'stakeholder' }) });
+      dqCall(prompt, { module: 'stakeholder-alignment', dqElement: 'Values', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust stakeholder]', r.trust.label); });
       const d = await res.json();
       const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);
@@ -116,6 +117,7 @@ Identify key stakeholders for this decision.\nDecision: ${data?.session?.decisio
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'stakeholder' }) });
+      dqCall(prompt, { module: 'stakeholder-alignment', dqElement: 'Values', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust stakeholder]', r.trust.label); });
       const d = await res.json();
       const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);

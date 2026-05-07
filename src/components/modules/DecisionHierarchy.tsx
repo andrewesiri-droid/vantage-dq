@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
 import type { ModuleProps } from '@/types';
 import { DS, H_TIERS, CRITERIA_TYPES, CRITERIA_WEIGHTS } from '@/constants';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ const DQ_PRINCIPLES: Record<string, string> = {
 
 export function DecisionHierarchy({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy } = useDQAI();
   const [activeTab, setActiveTab] = useState('hierarchy');
   const [decisions, setDecisions] = useState<DecisionItem[]>([]);
   const [criteria, setCriteria] = useState<CriterionItem[]>([]);

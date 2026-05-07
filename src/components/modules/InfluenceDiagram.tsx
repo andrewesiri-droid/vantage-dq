@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { toastAIError, toastSaved } from '@/lib/toast';
@@ -29,6 +30,7 @@ const TABS = [
 
 export function InfluenceDiagram({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy } = useDQAI();
   const [activeTab, setActiveTab] = useState('diagram');
   const [nodes, setNodes] = useState<INode[]>([]);
   const [edges, setEdges] = useState<IEdge[]>([]);

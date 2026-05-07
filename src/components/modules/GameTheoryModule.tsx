@@ -7,6 +7,7 @@
  *                 auctions, bargaining, mechanism design
  */
 import { useState, useEffect } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { toastAIError, toastSaved } from '@/lib/toast';
@@ -151,6 +152,7 @@ const PAYOFF_LABELS = ['Very Bad', 'Bad', 'Neutral', 'Good', 'Very Good'];
 // ── COMPONENT ─────────────────────────────────────────────────────────────────
 export function GameTheoryModule({ sessionId, data }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy } = useDQAI();
 
   // Mode selection
   const [mode, setMode] = useState<AnalysisMode | null>(null);

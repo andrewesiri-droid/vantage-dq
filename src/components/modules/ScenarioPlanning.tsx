@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { ModuleDataBanner } from '@/components/ui/module-data-banner';
@@ -26,6 +27,7 @@ export function ScenarioPlanning({ sessionId, data, hooks }: ModuleProps) {
   const [stressResult, setStressResult] = useState<any>(null);
   const [axisInsight, setAxisInsight] = useState('');
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy } = useDQAI();
   const [expandedUncId, setExpandedUncId] = useState<number | null>(null);
   const [expandedScenId, setExpandedScenId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'uncertainties'|'scenarios'|'stress'>('uncertainties');

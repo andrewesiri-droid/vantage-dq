@@ -158,6 +158,7 @@ STRICT RULES FOR IMPROVEMENTS:
 - Each suggestion must directly fix a failed check or close a scored gap`;
     try {
       setBusy(true);
+      dqCall(prompt, { module: 'problem-frame', dqElement: 'Frame', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust frame]', r.trust.label); });
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

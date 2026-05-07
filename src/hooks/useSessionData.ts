@@ -42,6 +42,7 @@ export function useSessionData(sessionId: number | undefined) {
         { data: riskItems },
         { data: scenarios },
         { data: voiAnalyses },
+        db.from('outcome_tracking').select('*').eq('session_id', sessionId),
       ] = await Promise.all([
         db.from('dq_sessions').select('*').eq('id', sessionId).single(),
         db.from('issues').select('*').eq('session_id', sessionId).order('sort_order'),
@@ -81,6 +82,20 @@ export function useSessionData(sessionId: number | undefined) {
         riskItems: (riskItems || []).map((r: any) => ({ ...r, sessionId: r.session_id })),
         scenarios: (scenarios || []).map((s: any) => ({ ...s, sessionId: s.session_id })),
         voiAnalyses: (voiAnalyses || []).map((v: any) => ({ ...v, sessionId: v.session_id })),
+        outcomeTracking: (outcomes || []).map((o: any) => ({ ...o, sessionId: o.session_id })),
+        assumptions: [
+          ...(issues || []).filter((i: any) => i.category === 'assumption').map((i: any, idx: number) => ({
+            id: i.id * 1000 + idx, sessionId: i.session_id, text: i.text, source: 'issue-generation',
+            confidence: i.severity === 'Critical' ? 'low' : 'medium', validationStatus: 'unvalidated',
+          })),
+          ...(strategies || []).flatMap((s: any) =>
+            (s.assumptions || '').split('
+').filter(Boolean).map((a: string, ai: number) => ({
+              id: s.id * 10000 + ai, sessionId: s.session_id, text: a.trim(),
+              source: 'strategy-table', strategyId: s.id, confidence: 'medium', validationStatus: 'unvalidated',
+            }))
+          ),
+        ],
         gameTheoryModels: [],
         aiSuggestions: [],
       });
@@ -337,6 +352,28 @@ export function useSessionData(sessionId: number | undefined) {
     refetch();
   }, [db, refetch]);
 
+  const createSnapshot = useCallback(async (type: string, summary: string) => {
+    if (!db || !sessionId) return;
+    try {
+      await db.from('session_snapshots').insert({
+        session_id: sessionId, snapshot_type: type, summary,
+        created_at: new Date().toISOString(),
+      });
+    } catch(e) { console.error('[snapshot]', e); }
+  }, [db, sessionId]);
+
+  const createOutcome = useCallback(async (input: any) => {
+    if (!db) return;
+    await db.from('outcome_tracking').insert({ session_id: input.sessionId, type: input.type, label: input.label, predicted: input.predicted || '', actual: input.actual || '', status: input.status || 'pending', impact: input.impact || 'pending', learned_at: input.learnedAt || '' });
+    refetch();
+  }, [db, refetch]);
+
+  const updateOutcome = useCallback(async (input: any) => {
+    if (!db) return;
+    await db.from('outcome_tracking').update({ actual: input.actual, status: input.status, impact: input.impact, learned_at: input.learnedAt }).eq('id', input.id);
+    refetch();
+  }, [db, refetch]);
+
   return {
     data,
     isLoading,
@@ -363,6 +400,9 @@ export function useSessionData(sessionId: number | undefined) {
     deleteRisk,
     createScenario,
     deleteScenario,
+    createSnapshot,
+    createOutcome,
+    updateOutcome,
     createVOI: (_: any) => {},
     deleteVOI: (_: any) => {},
     createGameTheory: (_: any) => {},

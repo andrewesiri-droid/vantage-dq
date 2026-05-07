@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
 import { ModuleDataBanner } from '@/components/ui/module-data-banner';
@@ -33,6 +34,7 @@ export function DecisionRiskTimeline({ sessionId, data, hooks }: ModuleProps) {
   const [newImp, setNewImp] = useState('High');
   const [readiness, setReadiness] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy } = useDQAI();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'risks'|'readiness'>('risks');
 

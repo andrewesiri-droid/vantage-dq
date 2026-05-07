@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDQAI } from '@/hooks/useDQAI';
 import type { ModuleProps } from '@/types';
 import { DS, RATING_LABELS } from '@/constants';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ const DQ_PRINCIPLES: Record<string, string> = {
 
 export function QualitativeAssessment({ sessionId, data, hooks }: ModuleProps) {
   const [busy, setBusy] = useState(false);
+  const { call: dqCall, busy: dqBusy } = useDQAI();
   const [activeTab, setActiveTab] = useState('matrix');
   const [criteria, setCriteria] = useState<CritItem[]>([]);
   const [strategies, setStrategies] = useState<StratItem[]>([]);

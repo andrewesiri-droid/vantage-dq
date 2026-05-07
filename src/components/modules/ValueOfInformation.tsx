@@ -102,6 +102,7 @@ VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'voi' }) });
+      dqCall(prompt, { module: 'voi', dqElement: 'Information', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust voi]', r.trust.label); });
       const d = await res.json();
       const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);
@@ -115,6 +116,7 @@ VOI screening for this decision.\nDecision: ${data?.session?.decisionStatement||
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'voi' }) });
+      dqCall(prompt, { module: 'voi', dqElement: 'Information', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust voi]', r.trust.label); });
       const d = await res.json();
       const text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);

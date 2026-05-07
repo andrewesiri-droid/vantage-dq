@@ -95,6 +95,7 @@ Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });
+      dqCall(prompt, { module: 'dq-scorecard', dqElement: 'All 6 Elements', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust dq-scorecard]', r.trust.label); });
       const d = await res.json();
       const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const _m = _text.match(/\{[\s\S]*\}/);
@@ -121,6 +122,7 @@ Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });
+      dqCall(prompt, { module: 'dq-scorecard', dqElement: 'All 6 Elements', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust dq-scorecard]', r.trust.label); });
       const d = await res.json();
       const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const _m = _text.match(/\{[\s\S]*\}/);
@@ -137,6 +139,7 @@ Score this decision on all 6 DQ elements (0-100, use multiples of 20).\nData: ${
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'dq-scorecard' }) });
+      dqCall(prompt, { module: 'dq-scorecard', dqElement: 'All 6 Elements', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust dq-scorecard]', r.trust.label); });
       const d = await res.json();
       const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const _m = _text.match(/\{[\s\S]*\}/);

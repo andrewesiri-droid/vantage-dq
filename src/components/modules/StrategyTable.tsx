@@ -109,6 +109,7 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
+      dqCall(prompt, { module: 'strategy-table', dqElement: 'Alternatives', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust strategy-table]', r.trust.label); });
       const data2 = await res.json();
       const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);
@@ -129,6 +130,7 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
     const prompt = `Recommend the best strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies: ${strategies.map(s => `${s.name}: ${s.rationale}`).join('; ')}\nCriteria: ${(data?.criteria || []).map((c: any) => c.label).join(', ')}\n\nReturn JSON: { recommendation: string, confidence: High|Medium|Low, reasoning: string, keyTradeoff: string }`;
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
+      dqCall(prompt, { module: 'strategy-table', dqElement: 'Alternatives', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust strategy-table]', r.trust.label); });
       const data2 = await res.json();
       const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);
@@ -140,6 +142,7 @@ Return JSON: { strategies: [{name, objective, rationale, assumptions, selections
     const prompt = `Analyse each strategy.\nDecision: ${data?.session?.decisionStatement || ''}\nStrategies:\n${strategies.map(s => `${s.name}: ${s.rationale}`).join('\n')}\n\nReturn JSON: { analyses: [{name, strengths:[string], weaknesses:[string], distinctiveRisk:string}], crossCuttingInsight: string }`;
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
+      dqCall(prompt, { module: 'strategy-table', dqElement: 'Alternatives', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust strategy-table]', r.trust.label); });
       const data2 = await res.json();
       const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);
@@ -199,6 +202,7 @@ Return JSON only — no other text:
 }`;
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
+      dqCall(prompt, { module: 'strategy-table', dqElement: 'Alternatives', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust strategy-table]', r.trust.label); });
       const data2 = await res.json();
       const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const match = text.match(/\{[\s\S]*\}/);

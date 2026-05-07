@@ -119,6 +119,7 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) });
+      dqCall(prompt, { module: 'issue-generation', dqElement: 'Information', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust issue-generation]', r.trust.label); });
       const d = await res.json();
       const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const _m = _text.match(/\{[\s\S]*\}/);
@@ -142,6 +143,7 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) });
+      dqCall(prompt, { module: 'issue-generation', dqElement: 'Information', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust issue-generation]', r.trust.label); });
       const d = await res.json();
       const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const _m = _text.match(/\{[\s\S]*\}/);
@@ -162,6 +164,7 @@ Generate 10 high-quality DQ issues for this decision.\nDecision: "${s.decisionSt
     setBusy(true);
     try {
       const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'issue-generation' }) });
+      dqCall(prompt, { module: 'issue-generation', dqElement: 'Information', sessionData: data || {} }).then(r => { if (r?.trust) console.log('[DQ Trust issue-generation]', r.trust.label); });
       const d = await res.json();
       const _text = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const _m = _text.match(/\{[\s\S]*\}/);
