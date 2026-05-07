@@ -163,6 +163,44 @@ Return JSON only: {
       }
     } catch(e) { console.error('[aiFill]', e); }
   };
+
+  const aiFillStrategy = async (stratId: number) => {
+    const s = strategies.find(st => st.id === stratId);
+    if (!s) return;
+    const decMenu = focusDecisions.map((d, i) => `D${i+1} (id:${d.id}): "${d.label}" — choices: ${d.choices.map((c,j) => j+'='+c).join(', ')}`).join('\n');
+    const prompt = `Fill in missing details for this strategy and select the best focus decision choices.
+Strategy name: ${s.name}
+Current objective: ${s.objective || 'EMPTY'}
+Current rationale: ${s.rationale || 'EMPTY'}
+Current assumptions: ${s.assumptions || 'EMPTY'}
+Current uncertainties: ${s.uncertainties || 'EMPTY'}
+Decision context: ${data?.session?.decisionStatement || ''}
+Focus decisions with choices:\n${decMenu}
+
+Return JSON only: {
+  "objective": "string (keep existing if good, improve if weak or empty)",
+  "rationale": "string (keep existing if good, improve if weak or empty)", 
+  "assumptions": "string (keep existing if good, improve if weak or empty)",
+  "uncertainties": "string (keep existing if good, improve if weak or empty)",
+  "selections": {"d_id": choiceIndex} for each focus decision that best fits this strategy
+}`;
+    try {
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, module: 'strategy-table' }) });
+      const data2 = await res.json();
+      const text = (data2.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const result = JSON.parse(match[0]);
+        if (result.objective) updateStrategy(stratId, 'objective', result.objective);
+        if (result.rationale) updateStrategy(stratId, 'rationale', result.rationale);
+        if (result.assumptions) updateStrategy(stratId, 'assumptions', result.assumptions);
+        if (result.uncertainties) updateStrategy(stratId, 'uncertainties', result.uncertainties);
+        if (result.selections) {
+          setStrategies(p => p.map(st => st.id === stratId ? { ...st, selections: { ...st.selections, ...result.selections } } : st));
+        }
+      }
+    } catch(e) { console.error('[aiFill]', e); }
+  };
   const activeStat = activeStratId ? strategies.find(s => s.id === activeStratId) : null;
 
   return (
@@ -253,6 +291,9 @@ Return JSON only: {
                     <div className="w-3 h-3 rounded-full" style={{ background: c.fill }} />
                     <span className="text-sm font-bold" style={{ color: DS.ink }}>{s.name}</span>
                     <Badge style={{ background: `${c.fill}18`, color: c.fill, border: 'none', fontSize: 8 }}>{completeness(s)}% complete</Badge>
+                    <button onClick={() => aiFillStrategy(s.id)} className="ml-auto flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded" style={{ background: `${c.fill}18`, color: c.fill }}>
+                      <Sparkles size={9} /> AI Fill
+                    </button>
                     <button onClick={() => aiFillStrategy(s.id)} className="ml-auto flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded" style={{ background: `${c.fill}18`, color: c.fill }}>
                       <Sparkles size={9} /> AI Fill
                     </button>
