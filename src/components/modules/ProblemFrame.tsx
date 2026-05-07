@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { toastAIError, toastSaved } from '@/lib/toast';
 import { useAI } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -83,6 +84,7 @@ export function ProblemFrame({ sessionId, data, hooks }: ModuleProps) {
       }});
     }
     setSaving(false);
+    toastSaved();
   };
 
   // DQ checks

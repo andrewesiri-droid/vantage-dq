@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ModuleProps } from '@/types';
 import { DS } from '@/constants';
+import { toastAIError, toastSaved } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sparkles, Plus, Trash2, TrendingUp, CheckCircle, X, Clock } from 'lucide-react';

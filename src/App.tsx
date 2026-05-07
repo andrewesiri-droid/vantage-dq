@@ -7,6 +7,8 @@ const SessionPage = lazy(() => import('@/pages/SessionPage').then(m => ({ defaul
 import { LoginPage } from '@/pages/LoginPage';
 const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import { DemoBanner } from '@/components/layout/DemoBanner';
 const ProjectorPage = lazy(() => import('@/pages/ProjectorPage').then(m => ({ default: m.ProjectorPage })));
 const JoinPage = lazy(() => import('@/pages/JoinPage').then(m => ({ default: m.JoinPage })));
@@ -113,6 +115,7 @@ function AppInner() {
   );
 }
 
+export { toast };
 export default function App() {
-  return <AppInner />;
+  return <><AppInner /><Toaster position="bottom-right" /></>;
 }
