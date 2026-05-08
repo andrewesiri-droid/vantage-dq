@@ -61,7 +61,7 @@ Extract and return JSON only — no other text:
       if (!res.ok) throw new Error('API error ' + res.status);
       const d = await res.json();
       const raw = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-      const match = raw.match(/{[sS]*}/);
+      const match = raw.match(/\{[\s\S]*\}/);
       if (!match) throw new Error('No JSON in response');
       const parsed = JSON.parse(match[0]);
       if (!parsed.decisionStatement) throw new Error('No decision extracted');
