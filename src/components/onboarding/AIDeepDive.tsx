@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef } from 'react';
-import { useDQAI } from '@/hooks/useDQAI';
 import { useNavigate } from 'react-router';
 import { DS } from '@/constants';
 import { createSession } from '@/lib/supabase-client';
@@ -13,7 +12,6 @@ interface AIDeepDiveProps { onBack: () => void; }
 
 export function AIDeepDive({ onBack }: AIDeepDiveProps) {
   const navigate = useNavigate();
-  const { call: dqCall } = useDQAI();
   const [step, setStep] = useState<'input' | 'analysing' | 'results'>('input');
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
@@ -55,8 +53,17 @@ Extract and return JSON only — no other text:
   "successCriteria": "what a good outcome looks like"
 }`;
 
-      const dqResult = await dqCall(prompt, { module: 'ai-deep-dive', dqElement: 'Frame', sessionData: {} });
-      const parsed = dqResult?.data || {};
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, module: 'ai-deep-dive' }),
+      });
+      if (!res.ok) throw new Error('API error ' + res.status);
+      const d = await res.json();
+      const raw = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = raw.match(/{[sS]*}/);
+      if (!match) throw new Error('No JSON in response');
+      const parsed = JSON.parse(match[0]);
       if (!parsed.decisionStatement) throw new Error('No decision extracted');
 
       const { data: { user } } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
@@ -140,13 +147,15 @@ Extract and return JSON only — no other text:
         </div>
 
         <div>
-          <label className="text-xs font-bold uppercase tracking-wider block mb-1.5" style={{ color: DS.inkTer }}>SESSION NAME</label>
-          <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Product Strategy 2026" />
+          <label htmlFor="session-name" className="text-xs font-bold uppercase tracking-wider block mb-1.5" style={{ color: DS.inkTer }}>SESSION NAME</label>
+          <Input id="session-name" name="session-name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Product Strategy 2026" />
         </div>
 
         <div>
-          <label className="text-xs font-bold uppercase tracking-wider block mb-1.5" style={{ color: DS.inkTer }}>DOCUMENT CONTENT</label>
+          <label htmlFor="doc-content" className="text-xs font-bold uppercase tracking-wider block mb-1.5" style={{ color: DS.inkTer }}>DOCUMENT CONTENT</label>
           <Textarea
+            id="doc-content"
+            name="doc-content"
             value={content}
             onChange={e => setContent(e.target.value)}
             placeholder="Paste your board paper, strategy doc, or meeting transcript here..."
@@ -158,7 +167,7 @@ Extract and return JSON only — no other text:
           <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => fileRef.current?.click()}>
             <Upload size={12} /> Upload File
           </Button>
-          <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.pdf,.doc,.docx" onChange={handleFileUpload} />
+          <input ref={fileRef} id="file-upload" name="file-upload" type="file" className="hidden" accept=".txt,.md,.pdf,.doc,.docx" onChange={handleFileUpload} aria-label="Upload document file" />
           {content && <span className="text-xs" style={{ color: DS.inkDis }}>{content.length.toLocaleString()} chars</span>}
         </div>
 
