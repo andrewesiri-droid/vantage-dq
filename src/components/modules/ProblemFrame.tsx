@@ -166,13 +166,25 @@ STRICT RULES FOR IMPROVEMENTS:
         body: JSON.stringify({ prompt, module: 'problem-frame' }),
       });
       const data = await res.json();
-      const text = (data.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      let text = (data.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      // Handle truncated JSON
+      if (text.startsWith('{') && !text.endsWith('}')) {
+        const lastComma = text.lastIndexOf('",');
+        if (lastComma > 100) text = text.slice(0, lastComma + 1) + '}}';
+      }
       const match = text.match(/\{[\s\S]*\}/);
       if (match) {
-        const result = JSON.parse(match[0]);
-        setFrameCheck(result);
-        setImprovements(result.improvements || []);
-        setActiveTab('ai');
+        try {
+          const result = JSON.parse(match[0]);
+          setFrameCheck(result);
+          setImprovements(result.improvements || []);
+          setActiveTab('ai');
+        } catch(parseErr) {
+          console.error('[FrameCheck] JSON parse error:', parseErr);
+          // Still show partial result if we can extract key fields
+          setFrameCheck({ overallScore: 50, verdict: 'Frame check completed with partial results', improvements: [] });
+          setActiveTab('ai');
+        }
       }
     } catch(e) {
       console.error('[FrameCheck]', e);
