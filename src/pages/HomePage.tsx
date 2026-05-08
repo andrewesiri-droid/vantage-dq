@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useDemoContext } from '@/App';
+import { supabase } from '@/lib/supabase-client';
 import { enableDemoMode, initializeDemoData } from '@/lib/demoData';
 import { DS } from '@/constants';
 import { Button } from '@/components/ui/button';
@@ -13,6 +15,14 @@ export function HomePage() {
   const navigate = useNavigate();
   const isLoading = false;
   const { demoMode } = useDemoContext();
+
+  // Redirect authenticated users straight to onboarding/dashboard
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) navigate('/onboarding');
+    });
+  }, [navigate]);
 
   const features = [
     { icon: Brain, title: '12-Module Framework', desc: 'Complete decision quality methodology from framing to execution', color: '#2563EB' },
