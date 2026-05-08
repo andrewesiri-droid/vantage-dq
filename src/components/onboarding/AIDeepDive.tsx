@@ -91,18 +91,17 @@ Extract and return JSON only — no other text:
             updated_at: new Date().toISOString(),
           }).eq('slug', slug);
         }
-        // Always write to localStorage (covers local- sessions and backup)
-        const lsKey = 'vantage_dq_session_' + slug;
-        const existing = JSON.parse(localStorage.getItem(lsKey) || '{}');
-        localStorage.setItem(lsKey, JSON.stringify({
-          ...existing,
-          decisionStatement: parsed.decisionStatement || '',
-          context: parsed.context || '',
-          constraints: parsed.constraints || '',
-          successCriteria: parsed.successCriteria || '',
-          name: parsed.name || name,
-        }));
-        console.log('[DeepDive] Session data written to localStorage:', lsKey);
+        // Write to vantage_dq_demo_sessions so DemoSessionPage can read it
+        const demoStored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
+        if (demoStored.sessions && demoStored.sessions[0]) {
+          demoStored.sessions[0].decisionStatement = parsed.decisionStatement || '';
+          demoStored.sessions[0].context = parsed.context || '';
+          demoStored.sessions[0].constraints = parsed.constraints || '';
+          demoStored.sessions[0].successCriteria = parsed.successCriteria || '';
+          demoStored.sessions[0].name = parsed.name || name;
+          localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify(demoStored));
+        }
+        console.log('[DeepDive] Session data written');
       } catch(e) { console.error('[DeepDive] Write error:', e); }
 
       // Fix 2: Auto-generate DQ issues from the document
@@ -122,10 +121,15 @@ Extract and return JSON only — no other text:
           const issuesParsed = JSON.parse(issueMatch[0]);
           const issues = issuesParsed.issues || [];
           // Store issues in localStorage for local sessions
-          const lsKey = 'vantage_dq_session_' + slug;
-          const sessionData = JSON.parse(localStorage.getItem(lsKey) || '{}');
-          sessionData.bootstrappedIssues = issues;
-          localStorage.setItem(lsKey, JSON.stringify(sessionData));
+          // Write issues to vantage_dq_demo_sessions
+          const demoData = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
+          demoData.issues = issues.map((iss: any, idx: number) => ({
+            id: Date.now() + idx, session_id: 1, text: iss.text,
+            category: iss.category || 'uncertainty-external',
+            severity: iss.severity || 'High', status: 'open', votes: 0,
+            owner: '', description: '', sort_order: idx,
+          }));
+          localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify(demoData));
           console.log('[DeepDive] Generated', issues.length, 'issues');
         }
       } catch(e) { console.error('[DeepDive] Issue generation error:', e); }
