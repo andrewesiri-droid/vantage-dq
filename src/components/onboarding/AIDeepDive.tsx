@@ -75,8 +75,11 @@ Extract and return JSON only — no other text:
       console.log('[DeepDive] Parsed:', JSON.stringify(parsed).slice(0, 300));
       if (!parsed.decisionStatement) throw new Error('No decisionStatement in: ' + JSON.stringify(parsed).slice(0, 200));
 
+      console.log('[DeepDive] Creating session...');
       const { data: { user } } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
+      console.log('[DeepDive] User:', user?.email || 'unauthenticated');
       const slug = await createSession(parsed.name || name, user?.email, user?.id);
+      console.log('[DeepDive] Session slug:', slug);
       try {
         // Update session with AI-extracted data
         if (supabase) {
@@ -100,6 +103,7 @@ Extract and return JSON only — no other text:
         }
       } catch { /**/ }
 
+      console.log('[DeepDive] Success! Navigating to:', slug);
       setResult({ slug });
       setStep('results');
     } catch (err: any) {
