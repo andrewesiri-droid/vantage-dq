@@ -80,9 +80,9 @@ Extract and return JSON only — no other text:
       console.log('[DeepDive] User:', user?.email || 'unauthenticated');
       const slug = await createSession(parsed.name || name, user?.email, user?.id);
       console.log('[DeepDive] Session slug:', slug);
+      // Write extracted data to session
       try {
-        // Update session with AI-extracted data
-        if (supabase) {
+        if (supabase && user) {
           await supabase.from('dq_sessions').update({
             decision_statement: parsed.decisionStatement || '',
             context: parsed.context || '',
@@ -90,18 +90,50 @@ Extract and return JSON only — no other text:
             success_criteria: parsed.successCriteria || '',
             updated_at: new Date().toISOString(),
           }).eq('slug', slug);
-        } else {
-          // Fallback: update localStorage
-          const stored = JSON.parse(localStorage.getItem('vantage_dq_demo_sessions') || '{}');
-          if (stored.sessions?.[0]) {
-            if (parsed.decisionStatement) stored.sessions[0].decisionStatement = parsed.decisionStatement;
-            if (parsed.context) stored.sessions[0].context = parsed.context;
-            if (parsed.constraints) stored.sessions[0].constraints = parsed.constraints;
-            if (parsed.successCriteria) stored.sessions[0].successCriteria = parsed.successCriteria;
-            localStorage.setItem('vantage_dq_demo_sessions', JSON.stringify(stored));
-          }
         }
-      } catch { /**/ }
+        // Always write to localStorage (covers local- sessions and backup)
+        const lsKey = 'vantage_dq_session_' + slug;
+        const existing = JSON.parse(localStorage.getItem(lsKey) || '{}');
+        localStorage.setItem(lsKey, JSON.stringify({
+          ...existing,
+          decisionStatement: parsed.decisionStatement || '',
+          context: parsed.context || '',
+          constraints: parsed.constraints || '',
+          successCriteria: parsed.successCriteria || '',
+          name: parsed.name || name,
+        }));
+        console.log('[DeepDive] Session data written to localStorage:', lsKey);
+      } catch(e) { console.error('[DeepDive] Write error:', e); }
+
+      // Fix 2: Auto-generate DQ issues from the document
+      try {
+        console.log('[DeepDive] Generating issues...');
+        const issuePrompt = 'You are a DQ facilitator. Generate 8 high-quality DQ issues for this decision.
+
+Decision: ' + parsed.decisionStatement + '
+Context: ' + (parsed.context || '').slice(0, 500) + '
+
+Return JSON only:
+{ "issues": [{ "text": "string", "category": "uncertainty-external|uncertainty-internal|stakeholder-concern|assumption|information-gap|opportunity|constraint|brutal-truth", "severity": "Critical|High|Medium|Low" }] }';
+        const issueRes = await fetch('/api/ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: issuePrompt, module: 'issue-generation' }),
+        });
+        const issueData = await issueRes.json();
+        const issueRaw = (issueData.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+        const issueMatch = issueRaw.match(/\{[\s\S]*\}/);
+        if (issueMatch) {
+          const issuesParsed = JSON.parse(issueMatch[0]);
+          const issues = issuesParsed.issues || [];
+          // Store issues in localStorage for local sessions
+          const lsKey = 'vantage_dq_session_' + slug;
+          const sessionData = JSON.parse(localStorage.getItem(lsKey) || '{}');
+          sessionData.bootstrappedIssues = issues;
+          localStorage.setItem(lsKey, JSON.stringify(sessionData));
+          console.log('[DeepDive] Generated', issues.length, 'issues');
+        }
+      } catch(e) { console.error('[DeepDive] Issue generation error:', e); }
 
       console.log('[DeepDive] Success! Navigating to:', slug);
       setResult({ slug });
