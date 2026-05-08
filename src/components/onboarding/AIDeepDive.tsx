@@ -58,13 +58,22 @@ Extract and return JSON only — no other text:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, module: 'ai-deep-dive' }),
       });
-      if (!res.ok) throw new Error('API error ' + res.status);
+      console.log('[DeepDive] API status:', res.status);
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('[DeepDive] API error:', errText);
+        throw new Error('API error ' + res.status + ': ' + errText);
+      }
       const d = await res.json();
+      console.log('[DeepDive] Raw response:', JSON.stringify(d).slice(0, 500));
       const raw = (d.result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      console.log('[DeepDive] Cleaned text:', raw.slice(0, 300));
       const match = raw.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error('No JSON in response');
+      console.log('[DeepDive] JSON match:', match ? 'found' : 'NOT FOUND');
+      if (!match) throw new Error('No JSON in response. Raw: ' + raw.slice(0, 200));
       const parsed = JSON.parse(match[0]);
-      if (!parsed.decisionStatement) throw new Error('No decision extracted');
+      console.log('[DeepDive] Parsed:', JSON.stringify(parsed).slice(0, 300));
+      if (!parsed.decisionStatement) throw new Error('No decisionStatement in: ' + JSON.stringify(parsed).slice(0, 200));
 
       const { data: { user } } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
       const slug = await createSession(parsed.name || name, user?.email, user?.id);
@@ -94,7 +103,8 @@ Extract and return JSON only — no other text:
       setResult({ slug });
       setStep('results');
     } catch (err: any) {
-      setError('Analysis failed — please try again');
+      console.error('[DeepDive] Failed:', err);
+      setError('Analysis failed: ' + (err instanceof Error ? err.message : String(err)));
       setStep('input');
     }
   };
