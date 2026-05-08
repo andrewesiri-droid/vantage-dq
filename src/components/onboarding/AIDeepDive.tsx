@@ -108,13 +108,8 @@ Extract and return JSON only — no other text:
       // Fix 2: Auto-generate DQ issues from the document
       try {
         console.log('[DeepDive] Generating issues...');
-        const issuePrompt = 'You are a DQ facilitator. Generate 8 high-quality DQ issues for this decision.
-
-Decision: ' + parsed.decisionStatement + '
-Context: ' + (parsed.context || '').slice(0, 500) + '
-
-Return JSON only:
-{ "issues": [{ "text": "string", "category": "uncertainty-external|uncertainty-internal|stakeholder-concern|assumption|information-gap|opportunity|constraint|brutal-truth", "severity": "Critical|High|Medium|Low" }] }';
+        const issueParts = ['You are a DQ facilitator. Generate 8 DQ issues for this decision.', 'Decision: ' + parsed.decisionStatement, 'Context: ' + (parsed.context || '').slice(0, 300), 'Return JSON only: { "issues": [{ "text": "string", "category": "uncertainty-external|uncertainty-internal|stakeholder-concern|assumption|information-gap|constraint|brutal-truth", "severity": "Critical|High|Medium|Low" }] }'];
+        const issuePrompt = issueParts.join(' ');
         const issueRes = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
