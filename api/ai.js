@@ -58,7 +58,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: DQ_SYSTEM,
         messages: [{ role: 'user', content: userPrompt }],
       }),
@@ -73,7 +73,16 @@ export default async function handler(req, res) {
     const data = await response.json();
     const rawText = data.content?.[0]?.text || '';
     // Strip markdown code fences so JSON callbacks can parse cleanly
-    const text = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    let text = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    // If JSON appears truncated, try to close it gracefully
+    if (text.startsWith('{') && !text.endsWith('}')) {
+      const lastBrace = text.lastIndexOf('},');
+      if (lastBrace > 0) text = text.slice(0, lastBrace + 1) + '}';
+    }
+    if (text.startsWith('[') && !text.endsWith(']')) {
+      const lastBrace = text.lastIndexOf('}');
+      if (lastBrace > 0) text = text.slice(0, lastBrace + 1) + ']';
+    }
     console.log(`[AI] responded (${text.length} chars)`);
 
     return res.status(200).json({
