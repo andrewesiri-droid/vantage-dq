@@ -1,0 +1,43 @@
+export const DS = {
+  bg: '#F8F9FC',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F2F4F8',
+  border: '#E2E6EE',
+  borderStrong: '#C8CFDC',
+  ink: '#0F1724',
+  inkTer: '#6B7A99',
+  inkFaint: '#A0ABBE',
+  accent: '#4F6AF5',
+  accentLight: '#EEF1FE',
+  accentDark: '#3A52D4',
+  success: '#22C55E',
+  successLight: '#DCFCE7',
+  warning: '#F59E0B',
+  warningLight: '#FEF3C7',
+  danger: '#EF4444',
+  dangerLight: '#FEE2E2',
+  radius: '10px',
+  radiusLg: '16px',
+  radiusFull: '9999px',
+  shadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+  shadowMd: '0 4px 12px rgba(0,0,0,0.08)',
+  shadowLg: '0 8px 24px rgba(0,0,0,0.10)',
+  fontDisplay: "'Inter', system-ui, sans-serif",
+  fontMono: "'JetBrains Mono', monospace",
+};
+
+export const MODULES = [
+  { id: 'problem',      label: 'Problem Frame',        icon: '🎯' },
+  { id: 'issues',       label: 'Issue Generation',     icon: '🗂️' },
+  { id: 'hierarchy',    label: 'Decision Structuring',  icon: '🧠' },
+  { id: 'strategy',     label: 'Strategy Table',       icon: '♟️' },
+  { id: 'assessment',   label: 'Assessment',           icon: '📊' },
+  { id: 'scorecard',    label: 'DQ Scorecard',         icon: '🏆' },
+  { id: 'stakeholders', label: 'Stakeholders',         icon: '👥' },
+  { id: 'influence',    label: 'Influence Diagram',    icon: '🔗' },
+  { id: 'scenario',     label: 'Scenario Planning',    icon: '🔭' },
+  { id: 'voi',          label: 'Value of Information', icon: '💡' },
+  { id: 'export',       label: 'Export Report',        icon: '📄' },
+] as const;
+
+export type ModuleId = typeof MODULES[number]['id'];
