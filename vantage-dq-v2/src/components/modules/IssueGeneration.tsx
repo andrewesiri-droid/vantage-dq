@@ -299,10 +299,16 @@ export default function IssueGeneration({ acceptedItems, sessionData, persistedS
     setAiLoading(true); setAiError(null);
     try {
       const result = await callAI(buildRoutingPrompt(items));
-      setItems(p => p.map(i => { const r = (result.routing ?? []).find((r: any) => r.id === i.id); return r ? { ...i, downstreamTargets: r.downstreamTargets, updatedAt: new Date().toISOString() } : i; }));
+      setItems(p => {
+        const updated = p.map(i => { const r = (result.routing ?? []).find((r: any) => r.id === i.id); return r ? { ...i, downstreamTargets: r.downstreamTargets, updatedAt: new Date().toISOString() } : i; });
+        // Fire onValidated with accepted+routed items so SessionLayout passes them downstream
+        const accepted = updated.filter(i => i.reviewStatus === 'accepted');
+        onValidated?.(accepted);
+        return updated;
+      });
     } catch (e: any) { setAiError(e.message); }
     finally { setAiLoading(false); }
-  }, [items]);
+  }, [items, onValidated]);
 
   const FILTER_TABS = [
     { id: 'all' as FilterMode, label: 'All', count: counts.total },
@@ -327,37 +333,86 @@ export default function IssueGeneration({ acceptedItems, sessionData, persistedS
 
       {/* AI Action Bar */}
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 flex-wrap" style={{ background: DS.surface, borderBottom: `1px solid ${DS.border}` }}>
-        <button onClick={handleExtract} disabled={aiLoading || !frame}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold"
-          style={{ background: aiLoading ? DS.surfaceAlt : DS.accent, color: aiLoading ? DS.inkTer : '#fff' }}>
-          <Sparkles size={12} /> {aiLoading ? 'Analyzing…' : 'Extract Intelligence'}
-        </button>
-        <button onClick={handleClassify} disabled={aiLoading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold" style={{ background: DS.surfaceAlt, color: DS.ink, border: `1px solid ${DS.border}` }}>
-          <Tag size={12} /> Classify & Clean
-        </button>
-        <button onClick={handleCopilot} disabled={aiLoading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold" style={{ background: DS.surfaceAlt, color: DS.ink, border: `1px solid ${DS.border}` }}>
-          <Brain size={12} /> Copilot Analysis
-        </button>
-        <button onClick={handleRoute} disabled={aiLoading || counts.accepted === 0} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold" style={{ background: DS.surfaceAlt, color: DS.ink, border: `1px solid ${DS.border}` }}>
-          <Send size={12} /> Route Downstream
-        </button>
-        <div className="flex-1" />
-        <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${DS.border}` }}>
-          {(['stream', 'clusters'] as ViewMode[]).map(m => (
-            <button key={m} onClick={() => setViewMode(m)} className="px-3 py-1.5 text-xs font-medium capitalize"
-              style={{ background: viewMode === m ? DS.accent : DS.surface, color: viewMode === m ? '#fff' : DS.inkTer }}>{m}</button>
-          ))}
+        {/* ── Sequenced DQ Issue Raising Flow ── */}
+        <div className="flex items-center gap-1.5 flex-wrap flex-1">
+
+          {/* Step 1 — Human raises issues first */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: DS.surfaceAlt, color: DS.inkFaint }}>1</span>
+            <button onClick={() => setShowAddForm(s => !s)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold"
+              style={{ background: '#DCFCE7', color: '#059669', border: '1px solid #86EFAC' }}>
+              <Plus size={12} /> Raise Issue
+            </button>
+          </div>
+
+          <div style={{ width: 1, height: 20, background: DS.border }} />
+
+          {/* Step 2 — Extract Intelligence + AI blind spot check */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: DS.surfaceAlt, color: DS.inkFaint }}>2</span>
+            <button onClick={handleExtract} disabled={aiLoading || !frame}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold"
+              style={{ background: aiLoading ? DS.surfaceAlt : DS.accentLight, color: aiLoading ? DS.inkTer : DS.accent, border: `1px solid ${DS.accent}30` }}>
+              <Sparkles size={12} /> {aiLoading ? 'Analyzing…' : 'Extract Intelligence'}
+            </button>
+          </div>
+
+          <div style={{ width: 1, height: 20, background: DS.border }} />
+
+          {/* Step 3 — Classify & clean */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: DS.surfaceAlt, color: DS.inkFaint }}>3</span>
+            <button onClick={handleClassify} disabled={aiLoading || counts.total === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold"
+              style={{ background: DS.surfaceAlt, color: counts.total > 0 ? DS.ink : DS.inkFaint, border: `1px solid ${DS.border}`, opacity: counts.total === 0 ? 0.5 : 1 }}>
+              <Tag size={12} /> Classify & Clean
+            </button>
+          </div>
+
+          <div style={{ width: 1, height: 20, background: DS.border }} />
+
+          {/* Step 4 — Copilot analysis */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: DS.surfaceAlt, color: DS.inkFaint }}>4</span>
+            <button onClick={handleCopilot} disabled={aiLoading || counts.total === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold"
+              style={{ background: DS.surfaceAlt, color: counts.total > 0 ? DS.ink : DS.inkFaint, border: `1px solid ${DS.border}`, opacity: counts.total === 0 ? 0.5 : 1 }}>
+              <Brain size={12} /> Blind Spot Analysis
+            </button>
+          </div>
+
+          <div style={{ width: 1, height: 20, background: DS.border }} />
+
+          {/* Step 5 — Route downstream */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: DS.surfaceAlt, color: DS.inkFaint }}>5</span>
+            <button onClick={handleRoute} disabled={aiLoading || counts.accepted === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold"
+              style={{ background: counts.accepted > 0 ? '#FFF7ED' : DS.surfaceAlt, color: counts.accepted > 0 ? '#C2410C' : DS.inkFaint, border: `1px solid ${counts.accepted > 0 ? '#FED7AA' : DS.border}`, opacity: counts.accepted === 0 ? 0.5 : 1 }}>
+              <Send size={12} /> Route Downstream
+            </button>
+          </div>
         </div>
-        <button onClick={() => setShowPanel(s => !s)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold" style={{ background: DS.surfaceAlt, color: DS.inkTer, border: `1px solid ${DS.border}` }}>
-          <Brain size={12} /> {showPanel ? 'Hide Panel' : 'Show Panel'}
-        </button>
-        <button onClick={() => setShowAddForm(s => !s)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold" style={{ background: '#DCFCE7', color: '#059669' }}>
-          <Plus size={12} /> Add Item
-        </button>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs px-2 py-1 rounded-full font-medium" style={{ background: DS.surfaceAlt, color: DS.inkTer }}>{counts.total} total</span>
-          {counts.accepted > 0 && <span className="text-xs px-2 py-1 rounded-full font-medium" style={{ background: '#DCFCE7', color: '#059669' }}>{counts.accepted} accepted</span>}
-          {counts.needsReview > 0 && <span className="text-xs px-2 py-1 rounded-full font-medium" style={{ background: '#FEF3C7', color: '#D97706' }}>{counts.needsReview} review</span>}
+
+        {/* Right side controls */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${DS.border}` }}>
+            {(['stream', 'clusters'] as ViewMode[]).map(m => (
+              <button key={m} onClick={() => setViewMode(m)} className="px-3 py-1.5 text-xs font-medium capitalize"
+                style={{ background: viewMode === m ? DS.accent : DS.surface, color: viewMode === m ? '#fff' : DS.inkTer }}>{m}</button>
+            ))}
+          </div>
+          {!showPanel && (
+            <button onClick={() => setShowPanel(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold" style={{ background: DS.surfaceAlt, color: DS.inkTer, border: `1px solid ${DS.border}` }}>
+              <Brain size={12} /> Copilot
+            </button>
+          )}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs px-2 py-1 rounded-full font-medium" style={{ background: DS.surfaceAlt, color: DS.inkTer }}>{counts.total} items</span>
+            {counts.accepted > 0 && <span className="text-xs px-2 py-1 rounded-full font-medium" style={{ background: '#DCFCE7', color: '#059669' }}>{counts.accepted} ✓</span>}
+            {counts.needsReview > 0 && <span className="text-xs px-2 py-1 rounded-full font-medium" style={{ background: '#FEF3C7', color: '#D97706' }}>{counts.needsReview} review</span>}
+          </div>
         </div>
       </div>
 
@@ -434,13 +489,18 @@ export default function IssueGeneration({ acceptedItems, sessionData, persistedS
 
         {/* Right panel */}
         {showPanel && <div className="w-64 shrink-0 flex flex-col overflow-hidden" style={{ borderLeft: `1px solid ${DS.border}`, background: DS.surface }}>
-          <div className="flex shrink-0" style={{ borderBottom: `1px solid ${DS.border}` }}>
+          <div className="flex shrink-0 items-center" style={{ borderBottom: `1px solid ${DS.border}` }}>
             {(['copilot', 'stats'] as const).map(p => (
               <button key={p} onClick={() => setActivePanel(p)} className="flex-1 py-2.5 text-xs font-semibold"
                 style={{ background: activePanel === p ? DS.accentLight : DS.surface, color: activePanel === p ? DS.accent : DS.inkTer, borderBottom: activePanel === p ? `2px solid ${DS.accent}` : '2px solid transparent' }}>
                 {p === 'copilot' ? '🧠 Copilot' : '📊 Stats'}
               </button>
             ))}
+            <button
+              onClick={() => setShowPanel(false)}
+              style={{ width: 32, height: 40, flexShrink: 0, background: 'transparent', border: 'none', borderLeft: `1px solid ${DS.border}`, cursor: 'pointer', color: DS.inkTer, fontSize: 16 }}
+              title="Collapse panel"
+            >›</button>
           </div>
           <div className="flex-1 p-4 overflow-y-auto">
             {activePanel === 'copilot' && (

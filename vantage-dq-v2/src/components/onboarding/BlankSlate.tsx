@@ -109,7 +109,7 @@ export default function BlankSlate({ onComplete, onBack }: Props) {
             <input
               value={sessionName}
               onChange={e => setSessionName(e.target.value)}
-              placeholder="e.g. Stark Offshore Lease Strategy 2026"
+              placeholder="e.g. Market Entry Strategy 2026 or Product Launch Decision"
               className="w-full rounded-xl px-4 py-3 text-sm"
               style={{
                 background: 'rgba(255,255,255,0.06)',
@@ -129,7 +129,7 @@ export default function BlankSlate({ onComplete, onBack }: Props) {
               rows={3}
               value={decisionStatement}
               onChange={e => setDecisionStatement(e.target.value)}
-              placeholder='How should [team] [action] in order to [outcome]? — e.g. "How should Downey Oil move forward with the Stark lease development strategy?"'
+              placeholder='How should [team] [action] in order to [outcome]? — e.g. "How should [Company] decide whether to [option A] or [option B] given [constraint]?"'
               className="w-full rounded-xl px-4 py-3 text-sm resize-none"
               style={{
                 background: 'rgba(255,255,255,0.06)',

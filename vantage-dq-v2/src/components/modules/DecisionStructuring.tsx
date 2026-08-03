@@ -30,6 +30,7 @@ interface StructuredDecision {
   source: 'ai' | 'user';
   reviewStatus: 'needs_review' | 'accepted' | 'rejected';
   linkedItems?: string[];
+  choices?: string[]; // 2-4 mutually exclusive options for this decision
 }
 
 interface StructuredUncertainty {
@@ -121,7 +122,7 @@ async function callAI(prompt: string): Promise<any> {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
       temperature: 0,
-      system: 'You are a world-class Decision Quality facilitator. Structure decision intelligence with precision. Respond ONLY with valid JSON — no markdown, no preamble.',
+      system: 'You are a Decision Quality facilitator grounded in the methodology of established Decision Analysis methodology. PRINCIPLE 1 — PROCESS OVER OUTCOME: Judge decision quality at the time of the decision, not by outcome. PRINCIPLE 2 — CLARITY OF ACTION: Every output must move the human toward a clear, confident, defensible choice. PRINCIPLE 3 — WEAKEST LINK: A decision is only as strong as its weakest DQ element — always surface the weakest link. PRINCIPLE 4 — AI vs HUMAN OWNERSHIP: Surface, structure, and stress-test — but never own values, feasibility, or commitment. PRINCIPLE 5 — HANDOFF RULE: End every recommendation by naming what the human must own, what you cannot determine, and what would change your analysis. FORBIDDEN: Never invent data not in the session. Never give strong recommendations on weak frames. Never hide assumptions as facts. You are operating in the FRAME + ALTERNATIVES link. Structure decision intelligence into Focus Decisions, Uncertainties, Tensions, and Criteria. Flag the weakest link. Extract all relevant focus decisions — do not artificially limit the count. Respond ONLY with valid JSON — no markdown, no preamble.',
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -432,15 +433,20 @@ Structure this into:
 4. CRITERIA — evaluation dimensions with weight 1-5 and type: value, risk, feasibility, timing, stakeholder, strategic_fit
 
 RULES:
-- Focus decisions: 2-4 maximum — only what truly matters strategically
-- Strategy-changing uncertainties: those where resolution would change preferred strategy
-- Tensions must have specific sideA vs sideB language
-- Criteria should be measurable and decision-specific
+- Focus decisions: extract ALL decisions that truly must be resolved to move forward — no artificial limit
+- Every focus decision MUST have 2-4 choices: mutually exclusive options a strategy could take on this decision
+- Choices should be short, specific, and action-oriented reflecting the actual decision context
+- Uncertainties: extract ALL strategy-changing unknowns — no limit
+- Tensions: extract ALL real trade-offs — no limit
+- Criteria: extract ALL evaluation dimensions relevant to this decision — no limit
+- Strategy-changing uncertainties: those where resolution would change the preferred strategy
+- Tensions must have specific sideA vs sideB language grounded in the actual decision
+- Criteria should be measurable and specific to this decision
 
 Return ONLY valid JSON:
 {
   "decisions": [
-    { "title": "", "type": "focus|tactical|deferred|given", "rationale": "" }
+    { "title": "", "type": "focus|tactical|deferred|given", "rationale": "", "choices": ["Option A", "Option B", "Option C"] }
   ],
   "uncertainties": [
     { "title": "", "impact": "high|medium|low", "canChangeStrategy": true, "type": "market|technical|regulatory|stakeholder|financial|operational", "downstreamTargets": ["scenario_planning"] }
@@ -459,6 +465,7 @@ Return ONLY valid JSON:
       setDecisions((result.decisions ?? []).map((d: any) => ({
         id: makeId(), title: d.title, type: d.type ?? 'focus',
         rationale: d.rationale ?? '', source: 'ai' as const, reviewStatus: 'needs_review' as const,
+        choices: d.choices ?? [],
       })));
 
       setUncertainties((result.uncertainties ?? []).map((u: any) => ({

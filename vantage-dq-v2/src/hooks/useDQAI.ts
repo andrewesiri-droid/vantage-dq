@@ -2,7 +2,7 @@
  * Vantage DQ — Master AI Hook (Merged Masterpiece)
  *
  * Combines:
- * - V1: Full Howard-grounded DQ Constitution, module-specific prompts,
+ * - V1: Full DQ-grounded DQ Constitution, module-specific prompts,
  *       Socratic copilot questions, self-critique layer, contradiction
  *       detection, audit trail, rate limiting, data contracts
  * - V2: Decision Memory, clean TypeScript generics, missingData +
@@ -10,27 +10,27 @@
  *       classification, lineage tracking, cleaner architecture
  *
  * Research basis:
- * - Decision Analysis: Ronald A. Howard (Stanford, 1964)
+ * - Decision Analysis: established Decision Analysis methodology
  * - Constitutional AI: Anthropic (2022)
  * - Self-consistency: Wang et al. (2022)
- * - Uncertainty quantification: Howard & Abbas, Foundations of Decision Analysis
+ * - Uncertainty quantification: Decision Analysis research
  */
 
 import { useState, useCallback } from 'react';
 import type { DQAIResult, DecisionMemory } from '@/types/entities';
 
 // ─────────────────────────────────────────────────────────────
-// HOWARD DQ CONSTITUTION
+// DQ CONSTITUTION
 // Injected into every single AI call across all 13 modules.
-// Based on Ronald A. Howard's Decision Analysis methodology.
+// Based on Decision Analysis's Decision Analysis methodology.
 // ─────────────────────────────────────────────────────────────
 
 export const DQ_CONSTITUTION = `
 DECISION QUALITY CONSTITUTION — VANTAGE DQ PLATFORM
-Grounded in the Decision Analysis methodology of Ronald A. Howard (Stanford, 1964).
+Grounded in the Decision Analysis methodology of established Decision Analysis methodology.
 Every AI output MUST comply with all of the following standards.
 
-═══ HOWARD'S FOUNDATIONAL PRINCIPLES ═══════════════════════════════════════════
+═══ DQ FOUNDATIONAL PRINCIPLES ═══════════════════════════════════════════
 
 PRINCIPLE 1 — PROCESS OVER OUTCOME:
 Decision quality is judged at the time of the decision, not by what happens afterward.
@@ -61,7 +61,7 @@ Violating these boundaries degrades decision quality. Know your lane and stay in
 | Commitment   | Cannot create it — summarize path forward only | Implementation and accountability — always |
 
 PRINCIPLE 5 — UNCERTAINTY IS NOT THE ENEMY:
-Howard: "Once you turn the light on, at least you can see what the wrong ways to go are."
+Principle: "Once you clarify the question, you can see what the wrong answers are."
 Surface uncertainty honestly. A decision made with known uncertainty is stronger
 than one made with false confidence.
 
@@ -142,7 +142,7 @@ NEVER ignore a critical DQ weakness to produce a cleaner narrative
 NEVER produce a recommendation that contradicts a stated DQ score
 NEVER regenerate content the user has already validated — check DECISION MEMORY
 
-═══ HOWARD HANDOFF RULE ═════════════════════════════════════════════════════════
+═══ DQ HANDOFF RULE ═════════════════════════════════════════════════════════
 
 At the end of EVERY response involving a recommendation, include a handoff that:
 1. Names exactly what the human must own (values judgment, feasibility call, or commitment)
@@ -550,7 +550,7 @@ Always respond with valid JSON matching this exact shape:
   "suggestedNextActions": ["2-4 concrete next steps for the user"],
   "itemConfidences": { "item_label": 0.0-1.0 },
   "weakestDQLink": "which of the 6 DQ elements is most at risk right now",
-  "howardHandoff": "what the human must own, what you cannot determine, what would change your analysis"
+  "dqHandoff": "what the human must own, what you cannot determine, what would change your analysis"
 }
 
 Do not include any text outside of this JSON object.`;
@@ -588,30 +588,39 @@ export function useDQAI<T = unknown>(): DQAIHookState<T> {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 2000,
+          max_tokens: 4000,
           system: systemPrompt,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
 
+      console.log("[DQ] response status:", response.status);
       if (!response.ok) {
         const errBody = await response.text();
+        console.log("[DQ] error body:", errBody);
         throw new Error(`API error ${response.status}: ${errBody}`);
       }
 
       const apiData = await response.json();
+      console.log("[DQ] apiData:", JSON.stringify(apiData).slice(0, 300));
       const raw = apiData.content?.find((b: any) => b.type === 'text')?.text ?? '{}';
-      const clean = raw.replace(/```json|```/g, '').trim();
+      // Strip markdown fences and find the JSON object
+      const stripped = raw.replace(/```json\n?|```/g, '').trim();
+      const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+      const clean = jsonMatch ? jsonMatch[0] : stripped;
 
       let parsed: any;
       try {
         parsed = JSON.parse(clean);
       } catch {
+        console.error('[DQ] JSON parse failed. Raw:', raw.slice(0, 300));
         throw new Error('AI response was not valid JSON. Please try again.');
       }
 
+      // Claude returns insights at top level, not nested under "data"
+      const resultData = (parsed.data !== undefined) ? parsed.data : parsed;
       const result: DQAIResult<T> = {
-        data: parsed.data as T,
+        data: resultData as T,
         trust,
         meta: {
           model: 'claude-sonnet-4-20250514',

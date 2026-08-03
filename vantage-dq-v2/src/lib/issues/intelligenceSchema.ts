@@ -18,6 +18,7 @@ export type RaisedItemClassification =
   | 'evaluation_criterion'
   | 'dependency'
   | 'conflict_tension'
+  | 'brutal_truth'
   | 'out_of_scope'
   | 'duplicate';
 
@@ -95,6 +96,7 @@ export const CLASSIFICATION_META: Record<RaisedItemClassification, {
   evaluation_criterion:{ label: 'Eval Criterion',       color: '#1D4ED8', bg: '#EFF6FF', icon: '📊', definition: 'Measure used to judge strategy quality', downstreamTargets: ['qualitative_assessment', 'problem_frame'] },
   dependency:          { label: 'Dependency',           color: '#475569', bg: '#F1F5F9', icon: '🔗', definition: 'Something that relies on another condition or event', downstreamTargets: ['decision_hierarchy'] },
   conflict_tension:    { label: 'Conflict / Tension',   color: '#E11D48', bg: '#FFF1F2', icon: '⚡', definition: 'Disagreement, trade-off, or competing objective', downstreamTargets: ['strategy_table'] },
+  brutal_truth:        { label: 'Brutal Truth',         color: '#7C2D12', bg: '#FFF7ED', icon: '🔥', definition: 'The uncomfortable reality nobody in the room wants to say — DQ: the most important and most avoided issue type', downstreamTargets: ['problem_frame', 'strategy_table'] },
   out_of_scope:        { label: 'Out of Scope',         color: '#94A3B8', bg: '#F8FAFC', icon: '🚫', definition: 'Not relevant to this decision', downstreamTargets: [] },
   duplicate:           { label: 'Duplicate',            color: '#94A3B8', bg: '#F1F5F9', icon: '🔁', definition: 'Already captured elsewhere', downstreamTargets: [] },
 };
@@ -122,6 +124,7 @@ export const CLUSTERS: {
   { id: 'risks',         label: 'Risks',                 color: '#DC2626', bg: '#FEF2F2', classifications: ['risk'] },
   { id: 'assumptions',   label: 'Assumptions & Facts',   color: '#9333EA', bg: '#FAF5FF', classifications: ['assumption', 'fact', 'constraint'] },
   { id: 'stakeholders',  label: 'Stakeholder Concerns',  color: '#059669', bg: '#ECFDF5', classifications: ['stakeholder_concern', 'conflict_tension'] },
+  { id: 'brutal_truths', label: 'Brutal Truths',          color: '#7C2D12', bg: '#FFF7ED', classifications: ['brutal_truth'] },
   { id: 'opportunities', label: 'Opportunities',         color: '#16A34A', bg: '#F0FDF4', classifications: ['opportunity'] },
   { id: 'criteria',      label: 'Criteria & Deps',       color: '#1D4ED8', bg: '#EFF6FF', classifications: ['evaluation_criterion', 'dependency'] },
   { id: 'other',         label: 'Actions & Other',       color: '#64748B', bg: '#F8FAFC', classifications: ['action_item', 'out_of_scope', 'duplicate'] },
@@ -158,6 +161,9 @@ export function assessReadiness(items: RaisedItem[]): IntelligenceReadiness {
 
   const hasUncertainty = accepted.some(i => i.classification === 'uncertainty');
   if (!hasUncertainty) blockers.push('At least one uncertainty must be identified');
+
+  const hasBrutalTruth = accepted.some(i => i.classification === 'brutal_truth');
+  if (!hasBrutalTruth) blockers.push('At least one brutal truth must be named — DQ: the most important issue is always the one nobody wants to say');
 
   return {
     ready: blockers.length === 0,

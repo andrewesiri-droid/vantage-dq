@@ -6,8 +6,12 @@ import type { RaisedItem } from './intelligenceSchema';
 import type { ValidatedProblemFrame } from '../dq/problemFrameSchema';
 
 export const INTELLIGENCE_SYSTEM_PROMPT =
-  'You are a world-class Decision Quality facilitator trained in the Decision Frameworks LP methodology. ' +
-  'Your role is to extract, classify, and structure decision intelligence from raw input. ' +
+  'You are a Decision Quality Issue Raising facilitator grounded in the methodology of established Decision Analysis methodology and Decision Quality. ' +
+  'Issue Raising is the second step in the DQ process — it surfaces everything that must be resolved before a good decision can be made. ' +
+  'Your role: surface issues the team needs to discuss, NOT generate a list for them to rubber-stamp. ' +
+  'DQ principle: the most important issue is always the one nobody in the room wants to say — always look for the brutal truth. ' +
+  'DQ principle: issues must connect to the decision statement — generic issues that exist in any decision have no value here. ' +
+  'DQ principle: one missing issue category is more dangerous than ten items in another — always check for blind spots. ' +
   'Always respond with valid JSON only — no markdown, no explanation. ' +
   'Be precise, specific, and tied to the decision context. Never generate generic content.';
 
@@ -19,7 +23,7 @@ export function buildExtractIntelligencePrompt(
 ): string {
   const existing = existingItems.map(i => `- [${i.classification}] ${i.title}`).join('\n');
 
-  return `You are a Decision Quality facilitator. Extract 12–18 items of decision intelligence from the decision frame below.
+  return `You are a Decision Quality facilitator. Extract ALL relevant items of decision intelligence from the decision frame below. Do not limit the number — extract every issue, uncertainty, risk, assumption, strategic decision, stakeholder concern, opportunity, and brutal truth that is relevant to this specific decision. Quality and completeness matter more than brevity.
 
 DECISION STATEMENT: ${frame.decisionStatement}
 CONTEXT: ${frame.context}
@@ -48,15 +52,20 @@ CLASSIFICATION OPTIONS (use EXACT values):
 - evaluation_criterion: Measure to judge strategy quality
 - dependency: Relies on another condition
 - conflict_tension: Trade-off or competing objective
+- brutal_truth: The uncomfortable reality nobody wants to say — the most important and most avoided category. Must be surfaced.
 
 CATEGORY OPTIONS: strategic, technical, commercial, operational, stakeholder, financial, regulatory, timing, organizational
 
-RULES:
-- Be specific to THIS decision — no generic items
-- Include a mix of classifications
-- Prioritize strategic decisions, uncertainties, and risks
-- Each item must have a clear title phrased as a question or concise statement
+DQ ISSUE RAISING RULES:
+- Be specific to THIS decision — no generic items that exist in any decision
+- ALWAYS include at least one brutal_truth — the thing nobody wants to say
+- Check every classification category — missing categories are blind spots
+- Each item must connect explicitly to the decision statement
+- Prioritize: strategic decisions, uncertainties, brutal truths
+- Each item title must be a specific question or concise statement — not a topic
 - Do NOT duplicate existing items
+- Ask: what is the team treating as settled that is actually contested?
+- Ask: what failure mode is being ignored because it is uncomfortable?
 
 Return ONLY valid JSON:
 {
@@ -135,14 +144,16 @@ ASSUMPTIONS: ${frame.assumptions.join(', ')}
 CURRENT INTELLIGENCE:
 ${accepted || 'No items accepted yet'}
 
-ANALYZE:
-1. Which items are truly strategic vs tactical?
-2. What assumptions are driving this decision?
-3. Which uncertainties could change the preferred strategy?
-4. What tensions remain unresolved?
-5. What decision is being avoided?
-6. What blind spots exist?
-7. What has the highest consequence if ignored?
+DQ BLIND SPOT ANALYSIS:
+1. Which classification categories are MISSING from the current list? (check all 16 types)
+2. Is there a brutal_truth that has not been named? What is it?
+3. Which uncertainties could flip the preferred strategy if they resolved badly?
+4. What decision is being avoided or treated as already made?
+5. Which assumptions, if wrong, would invalidate everything?
+6. Who is not in the room whose perspective would change this list entirely?
+7. What is the single most important issue being ignored because it is uncomfortable?
+8. Are there enough strategic_decision items? (Issue Raising must surface what needs to be decided)
+9. What would a skeptical external reviewer say is missing from this list?
 
 Return ONLY valid JSON:
 {
@@ -157,7 +168,10 @@ Return ONLY valid JSON:
     "What are we treating as fact that may not be true?"
   ],
   "nextBestActions": ["action 1", "action 2"],
-  "dqWarnings": ["warning 1"]
+  "dqWarnings": ["warning 1"],
+  "missingCategories": ["classification types with no items — these are blind spots"],
+  "brutalTruth": "The most important uncomfortable truth this team is avoiding",
+  "weakestDQLink": "Which of the 6 DQ elements (frame/alternatives/information/values/reasoning/commitment) is most at risk given these issues"
 }`;
 }
 

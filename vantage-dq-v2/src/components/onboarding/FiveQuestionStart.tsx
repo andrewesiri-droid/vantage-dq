@@ -24,7 +24,7 @@ const QUESTIONS = [
     title: 'What decision are you trying to make?',
     subtitle: 'Capture the core decision, decision owner, and context.',
     placeholder: 'Describe the decision you need to make, who owns it, and what is driving it. Be as specific as you can.',
-    hint: 'e.g. "We need to decide whether to develop the Stark offshore lease independently or seek farm-in partners. The decision owner is the investment committee and we have 6 months before our drilling obligations expire."',
+    hint: 'e.g. "We need to decide whether to build this capability in-house or acquire it. The decision owner is the CEO and we have 4 months before the board review."',
     rows: 4,
   },
   {
@@ -33,7 +33,7 @@ const QUESTIONS = [
     title: 'Why does this decision matter now?',
     subtitle: 'Capture trigger, urgency, consequences, and business value.',
     placeholder: 'What is forcing this decision at this time? What happens if you delay? What is at stake?',
-    hint: 'e.g. "Our drilling obligation expires in Q3. If we miss it we lose the licence. The asset could be worth $200M+ if the Pepper prospect delivers — but we cannot fund development alone."',
+    hint: 'e.g. "Our exclusivity window closes in Q3. If we miss it we lose first-mover advantage. The opportunity could be worth $200M+ but we cannot execute alone."',
     rows: 4,
   },
   {
@@ -42,7 +42,7 @@ const QUESTIONS = [
     title: 'What options or strategies are being considered?',
     subtitle: 'Capture known alternatives, or note that they need to be generated.',
     placeholder: 'List the strategic options on the table. If you don\'t have clear options yet, describe the strategic space.',
-    hint: 'e.g. "Option 1: Develop independently with FPSO. Option 2: Farm down to 30% and bring in a major. Option 3: Appraise Pepper before committing to development. Option 4: Exit and sell the licence."',
+    hint: 'e.g. "Option 1: Build in-house. Option 2: Acquire a competitor. Option 3: Partner at 30% equity. Option 4: License from an external provider."',
     rows: 4,
   },
   {
@@ -51,7 +51,7 @@ const QUESTIONS = [
     title: 'What are the biggest uncertainties, risks, or disagreements?',
     subtitle: 'Capture key unknowns, risks, stakeholder tensions, and information gaps.',
     placeholder: 'What keeps you up at night? What could change the answer? Where is there disagreement on the team?',
-    hint: 'e.g. "We don\'t know if Pepper reservoir is commercial. Government take negotiations are uncertain (40-70%). The board disagrees on risk appetite. We need partners but the market is soft."',
+    hint: 'e.g. "We don\'t know if customer demand will be sufficient. Regulatory approval timing is uncertain (6-18 months). The board disagrees on risk appetite. We need partners but competition is intensifying."',
     rows: 4,
   },
   {

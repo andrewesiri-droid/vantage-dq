@@ -15,18 +15,22 @@ export interface ModuleReadinessMap {
 
 // Shape of the session data we need for readiness checks
 interface ReadinessInput {
-  session: Session | null;
-  problemFrame: any;
-  issues: any[];
-  hierarchyNodes: any[];
-  strategies: any[];
-  assessmentScores: any[];
-  dqScorecard: any[];
-  stakeholders: any[];
-  riskItems: any[];
-  influenceDiagram: any;
-  scenarios: any[];
-  voiItems: any[];
+  session?: Session | null;
+  problemFrame?: any;
+  // Support both naming conventions
+  issues?: any[];
+  issueItems?: any[];
+  raisedItems?: any[];
+  hierarchyNodes?: any[];
+  strategies?: any[];
+  assessmentScores?: any[];
+  dqScorecard?: any;
+  stakeholders?: any[];
+  riskItems?: any[];
+  influenceDiagram?: any;
+  scenarios?: any[];
+  voiItems?: any[];
+  structuringOutput?: any;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -53,20 +57,20 @@ function issuesReadiness(d: ReadinessInput): ModuleReadiness {
   if (!d.problemFrame?.decisionStatement) {
     return { state: 'missing_required_inputs', missingInputs: ['Problem Frame must be completed first'] };
   }
-  if (!d.issues.length) return { state: 'not_started' };
+  if (!(d.issues ?? d.issueItems ?? d.raisedItems ?? []).length) return { state: 'not_started' };
 
-  const drafts = d.issues.filter(i => i.reviewStatus !== 'user_validated');
+  const drafts = (d.issues ?? d.issueItems ?? d.raisedItems ?? []).filter(i => i.reviewStatus !== 'user_validated');
   if (drafts.length) return { state: 'needs_review', draftCount: drafts.length };
   return { state: 'validated' };
 }
 
 function hierarchyReadiness(d: ReadinessInput): ModuleReadiness {
-  if (!d.issues.length) {
+  if (!(d.issues ?? d.issueItems ?? d.raisedItems ?? []).length) {
     return { state: 'missing_required_inputs', missingInputs: ['Issues must be defined first'] };
   }
-  if (!d.hierarchyNodes.length) return { state: 'not_started' };
+  if (!(d.hierarchyNodes ?? []).length) return { state: 'not_started' };
 
-  const drafts = d.hierarchyNodes.filter(n => n.reviewStatus !== 'user_validated');
+  const drafts = (d.hierarchyNodes ?? []).filter(n => n.reviewStatus !== 'user_validated');
   if (drafts.length) return { state: 'needs_review', draftCount: drafts.length };
   return { state: 'validated' };
 }
@@ -75,25 +79,25 @@ function strategyReadiness(d: ReadinessInput): ModuleReadiness {
   if (!d.problemFrame?.decisionStatement) {
     return { state: 'missing_required_inputs', missingInputs: ['Problem Frame must be completed first'] };
   }
-  if (!d.strategies.length) return { state: 'not_started' };
-  if (d.strategies.length < 2) {
+  if (!(d.strategies ?? []).length) return { state: 'not_started' };
+  if ((d.strategies ?? []).length < 2) {
     return { state: 'draft_available', missingInputs: ['At least 2 strategies recommended for meaningful comparison'] };
   }
 
-  const drafts = d.strategies.filter(s => s.reviewStatus !== 'user_validated');
+  const drafts = (d.strategies ?? []).filter(s => s.reviewStatus !== 'user_validated');
   if (drafts.length) return { state: 'needs_review', draftCount: drafts.length };
   return { state: 'validated' };
 }
 
 function assessmentReadiness(d: ReadinessInput): ModuleReadiness {
-  if (!d.strategies.length) {
+  if (!(d.strategies ?? []).length) {
     return { state: 'missing_required_inputs', missingInputs: ['Strategies must be defined in Strategy Table first'] };
   }
-  if (!d.assessmentScores.length) return { state: 'not_started' };
+  if (!(d.assessmentScores ?? []).length) return { state: 'not_started' };
 
   // Check coverage: each strategy should have scores
-  const scoredStrategies = new Set(d.assessmentScores.map((s: any) => s.strategyId));
-  const unscored = d.strategies.filter((s: any) => !scoredStrategies.has(s.id));
+  const scoredStrategies = new Set((d.assessmentScores ?? []).map((s: any) => s.strategyId));
+  const unscored = (d.strategies ?? []).filter((s: any) => !scoredStrategies.has(s.id));
   if (unscored.length) {
     return { state: 'draft_available', missingInputs: [`${unscored.length} strateg${unscored.length === 1 ? 'y' : 'ies'} not yet scored`] };
   }
@@ -102,13 +106,13 @@ function assessmentReadiness(d: ReadinessInput): ModuleReadiness {
 }
 
 function scorecardReadiness(d: ReadinessInput): ModuleReadiness {
-  if (!d.strategies.length || !d.issues.length) {
+  if (!(d.strategies ?? []).length || !(d.issues ?? d.issueItems ?? d.raisedItems ?? []).length) {
     return { state: 'missing_required_inputs', missingInputs: ['Strategies and Issues required'] };
   }
-  if (!d.dqScorecard.length) return { state: 'draft_available' };
+  if (!(d.dqScorecard ?? []).length) return { state: 'draft_available' };
 
   const allDimensions = ['frame', 'alternatives', 'information', 'values', 'reasoning', 'commitment'];
-  const scored = new Set(d.dqScorecard.map((s: any) => s.dimension));
+  const scored = new Set((d.dqScorecard ?? []).map((s: any) => s.dimension));
   const missing = allDimensions.filter(d => !scored.has(d));
   if (missing.length) return { state: 'draft_available', missingInputs: [`Missing: ${missing.join(', ')}`] };
 
@@ -116,12 +120,12 @@ function scorecardReadiness(d: ReadinessInput): ModuleReadiness {
 }
 
 function stakeholdersReadiness(d: ReadinessInput): ModuleReadiness {
-  if (!d.strategies.length) {
+  if (!(d.strategies ?? []).length) {
     return { state: 'missing_required_inputs', missingInputs: ['Define strategies before mapping stakeholders'] };
   }
-  if (!d.stakeholders.length) return { state: 'not_started' };
+  if (!(d.stakeholders ?? []).length) return { state: 'not_started' };
 
-  const drafts = d.stakeholders.filter((s: any) => s.reviewStatus !== 'user_validated');
+  const drafts = (d.stakeholders ?? []).filter((s: any) => s.reviewStatus !== 'user_validated');
   if (drafts.length) return { state: 'needs_review', draftCount: drafts.length };
   return { state: 'validated' };
 }
@@ -129,8 +133,8 @@ function stakeholdersReadiness(d: ReadinessInput): ModuleReadiness {
 function exportReadiness(d: ReadinessInput): ModuleReadiness {
   const required = [
     d.problemFrame?.reviewStatus === 'user_validated',
-    d.strategies.length >= 2,
-    d.assessmentScores.length > 0,
+    (d.strategies ?? []).length >= 2,
+    (d.assessmentScores ?? []).length > 0,
   ];
   const missing: string[] = [];
   if (!required[0]) missing.push('Validate Problem Frame');
@@ -141,7 +145,7 @@ function exportReadiness(d: ReadinessInput): ModuleReadiness {
 }
 
 function influenceReadiness(d: ReadinessInput): ModuleReadiness {
-  if (!d.strategies.length || !d.issues.length) {
+  if (!(d.strategies ?? []).length || !(d.issues ?? d.issueItems ?? d.raisedItems ?? []).length) {
     return { state: 'missing_required_inputs', missingInputs: ['Complete Phase 1 modules first'] };
   }
   if (!d.influenceDiagram) return { state: 'not_started' };
@@ -149,27 +153,27 @@ function influenceReadiness(d: ReadinessInput): ModuleReadiness {
 }
 
 function scenarioReadiness(d: ReadinessInput): ModuleReadiness {
-  if (!d.strategies.length) {
+  if (!(d.strategies ?? []).length) {
     return { state: 'missing_required_inputs', missingInputs: ['Strategies required'] };
   }
-  if (!d.scenarios.length) return { state: 'not_started' };
+  if (!(d.scenarios ?? []).length) return { state: 'not_started' };
   return { state: 'ready' };
 }
 
 function voiReadiness(d: ReadinessInput): ModuleReadiness {
-  if (!d.issues.length) {
+  if (!(d.issues ?? d.issueItems ?? d.raisedItems ?? []).length) {
     return { state: 'missing_required_inputs', missingInputs: ['Issues required to calculate information value'] };
   }
-  if (!d.voiItems.length) return { state: 'not_started' };
+  if (!(d.voiItems ?? []).length) return { state: 'not_started' };
   return { state: 'ready' };
 }
 
 function riskTimelineReadiness(d: ReadinessInput): ModuleReadiness {
-  if (!d.strategies.length) {
+  if (!(d.strategies ?? []).length) {
     return { state: 'missing_required_inputs', missingInputs: ['Strategies required'] };
   }
-  if (!d.riskItems.length) return { state: 'not_started' };
-  const drafts = d.riskItems.filter((r: any) => r.reviewStatus !== 'user_validated');
+  if (!(d.riskItems ?? []).length) return { state: 'not_started' };
+  const drafts = (d.riskItems ?? []).filter((r: any) => r.reviewStatus !== 'user_validated');
   if (drafts.length) return { state: 'needs_review', draftCount: drafts.length };
   return { state: 'ready' };
 }

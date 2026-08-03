@@ -4,8 +4,8 @@ import { useModuleReadiness, getReadinessDot, getReadinessLabel } from '../../ho
 import ProblemFrame from '../modules/ProblemFrame';
 import IssueGeneration from '../modules/IssueGeneration';
 import DecisionStructuring from '../modules/DecisionStructuring';
-import StrategyFormation from '../modules/StrategyFormation';
-import StrategyEvaluation from '../modules/StrategyEvaluation';
+import { StrategyTable } from '../modules/StrategyTable';
+import { QualitativeAssessment } from '../modules/QualitativeAssessment';
 import DQScorecard from '../modules/DQScorecard';
 import StakeholderAlignment from '../modules/StakeholderAlignment';
 import ExecutiveRecommendation from '../modules/ExecutiveRecommendation';
@@ -28,8 +28,8 @@ const MODULES = [
   { id: 'problem',      label: 'Problem Frame',          sub: 'Frame the decision',        num: '01', phase: 1 },
   { id: 'issues',       label: 'Issue Raising',          sub: 'Extract intelligence',      num: '02', phase: 1 },
   { id: 'hierarchy',    label: 'Decision Structuring',   sub: 'Structure the decision',    num: '03', phase: 1 },
-  { id: 'strategy',     label: 'Strategy Formation',     sub: 'Design strategic paths',    num: '04', phase: 1 },
-  { id: 'assessment',   label: 'Strategy Evaluation',    sub: 'Score & compare',           num: '05', phase: 1 },
+  { id: 'strategy',     label: 'Strategy Table',         sub: 'Build alternatives',         num: '04', phase: 1 },
+  { id: 'assessment',   label: 'Qualitative Assessment', sub: 'Score & compare',           num: '05', phase: 1 },
   { id: 'scorecard',    label: 'DQ Scorecard',           sub: 'Audit decision quality',    num: '06', phase: 1 },
   { id: 'stakeholders', label: 'Stakeholder Alignment',  sub: 'Map alignment',             num: '07', phase: 1 },
   { id: 'lineage',      label: 'Decision Lineage',         sub: 'Traceable reasoning chain', num: '08', phase: 1 },
@@ -296,7 +296,47 @@ export default function SessionLayout({ sessionName, acceptedItems, onBack }: Se
   };
 
   // Build stub session data from accepted items
-  const sessionData = { ...buildSessionData(acceptedItems), structuringOutput, issueItems };
+  // Merge persisted Problem Frame data into sessionData so all modules can access it
+  const persistedProblemFrame = moduleStateRef.current['problem']?.frame ?? null;
+  const builtSession = buildSessionData(acceptedItems);
+  const resolvedFrame = persistedProblemFrame ?? builtSession.problemFrame;
+  const sessionData = {
+    ...builtSession,
+    structuringOutput,
+    issueItems,
+    raisedItems: issueItems,
+    problemFrame: resolvedFrame,
+    // V1-compatible session shape so StrategyTable/QualitativeAssessment work
+    session: {
+      decisionStatement: resolvedFrame?.decisionStatement ?? '',
+      context: resolvedFrame?.context ?? '',
+      background: resolvedFrame?.background ?? '',
+      trigger: resolvedFrame?.trigger ?? '',
+      scopeIn: resolvedFrame?.scopeIn ?? [],
+      scopeOut: resolvedFrame?.scopeOut ?? [],
+      constraints: resolvedFrame?.constraints ?? [],
+      assumptions: resolvedFrame?.assumptions ?? [],
+      successCriteria: resolvedFrame?.successCriteria ?? [],
+      failureConsequences: resolvedFrame?.failureConsequences ?? '',
+      decisionOwner: resolvedFrame?.decisionOwner ?? '',
+      deadline: resolvedFrame?.deadline ?? '',
+    },
+    // Criteria flow from Decision Structuring output
+    criteria: structuringOutput?.criteria ?? [],
+    // Persisted strategies from StrategyTable module
+    strategies: moduleStateRef.current['strategy']?.strategies?.filter((s: any) => s.reviewStatus === 'accepted') ?? builtSession.strategies,
+    // Wire focus decisions from Decision Structuring to Strategy Table
+    decisions: (structuringOutput?.focusDecisions ?? []).map((d: any) => ({
+      ...d,
+      tier: 'focus',
+      // Generate choices from the decision label if none exist
+      choices: d.choices?.length ? d.choices : [
+        'Option A — early commitment path',
+        'Option B — wait for more information',
+        'Option C — hybrid approach',
+      ],
+    })),
+  };
 
   // Compute readiness for all modules
   const readiness = useModuleReadiness({
@@ -316,6 +356,12 @@ export default function SessionLayout({ sessionName, acceptedItems, onBack }: Se
 
   // Compute overall DQ score from readiness
   const dqScore = computeDQScore(readiness);
+  // DQ weakest link: floor score determines commitment readiness
+  const dqScores = moduleStateRef.current['scorecard']?.scores ?? {};
+  const dqFloorScore = Object.keys(dqScores).length > 0
+    ? Math.min(...Object.values(dqScores) as number[])
+    : null;
+  const commitmentReady = dqFloorScore === null || dqFloorScore >= 40;
 
   const activeModuleMeta = MODULES.find(m => m.id === activeModule);
 
@@ -708,12 +754,11 @@ function ModuleContent({ moduleId, moduleMeta, readiness, sessionData, acceptedI
   if (moduleId === 'strategy') {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <StrategyFormation
-          acceptedItems={acceptedItems}
-          sessionData={sessionData}
+        <StrategyTable
+          data={sessionData}
+          hooks={{}}
           persistedState={persistedState}
           onPersistState={onPersistState}
-          onValidated={(strategies: any[]) => { console.log('Strategies validated', strategies); onNavigate?.('assessment'); }}
         />
       </div>
     );
@@ -721,12 +766,11 @@ function ModuleContent({ moduleId, moduleMeta, readiness, sessionData, acceptedI
   if (moduleId === 'assessment') {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <StrategyEvaluation
-          acceptedItems={acceptedItems}
-          sessionData={sessionData}
+        <QualitativeAssessment
+          data={sessionData}
+          hooks={{}}
           persistedState={persistedState}
           onPersistState={onPersistState}
-          onValidated={(output: any) => { console.log('Evaluation validated', output); onNavigate?.('scorecard'); }}
         />
       </div>
     );

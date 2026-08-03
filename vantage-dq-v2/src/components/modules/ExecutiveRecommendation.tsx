@@ -67,7 +67,7 @@ async function callAI(prompt: string): Promise<any> {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 5000,
       temperature: 0,
-      system: 'You are a Decision Quality advisor preparing an executive recommendation. Be direct, honest, and action-oriented. Respond ONLY with valid JSON.',
+      system: 'You are a Decision Quality advisor grounded in established Decision Analysis methodology preparing an executive recommendation. CRITICAL GUARDRAILS: (1) NEVER make a strong recommendation if any DQ element scores below 40 — commitment is premature. (2) WEAKEST LINK: the weakest DQ element sets the ceiling — state it explicitly. (3) PROCESS OVER OUTCOME: recommend based on decision quality, not predicted outcome. (4) HANDOFF RULE: end every recommendation naming what the human must own, what you cannot determine from data, and what would flip this recommendation. (5) Never invent data not in the session. If data is insufficient, say so and recommend what to fix before committing. Respond ONLY with valid JSON.',
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -105,6 +105,14 @@ function Section({ title, icon, items, color }: { title: string; icon: string; i
 }
 
 export default function ExecutiveRecommendation({ acceptedItems, sessionData, persistedState, onPersistState, onValidated }: Props) {
+  // DQ weakest link gate — warn if any DQ element below 40
+  const dqScores = sessionData?.dqScorecard ?? {};
+  const scoreValues = Object.values(dqScores) as number[];
+  const floorScore = scoreValues.length > 0 ? Math.min(...scoreValues) : null;
+  const commitmentPremature = floorScore !== null && floorScore < 40;
+  const weakestElement = scoreValues.length > 0
+    ? Object.entries(dqScores).sort(([,a],[,b]) => (a as number) - (b as number))[0]
+    : null;
   const [recommendation, setRecommendation] = useState<Recommendation | null>(() => persistedState?.recommendation ?? null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -191,6 +199,19 @@ Return ONLY valid JSON:
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden" style={{ background: DS.bg }}>
+      {commitmentPremature && (
+        <div style={{ margin: '16px', padding: '12px 16px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FCA5A5', display: 'flex', gap: 10, alignItems: 'flex-start', flexShrink: 0 }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>⚠️</span>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', margin: '0 0 4px' }}>
+              DQ Weakest Link Warning — Commitment May Be Premature
+            </p>
+            <p style={{ fontSize: 12, color: '#7F1D1D', margin: 0, lineHeight: 1.5 }}>
+              {weakestElement ? `"${weakestElement[0]}" scores ${weakestElement[1]}/100 — below the 40-point commitment threshold.` : 'A DQ element is below 40.'} Address this before finalizing the recommendation.
+            </p>
+          </div>
+        </div>
+      )}
 
       {frame?.decisionStatement && (
         <div className="shrink-0 px-6 py-3 flex items-start gap-3" style={{ background: DS.accentLight, borderBottom: `1px solid ${DS.accent}30` }}>

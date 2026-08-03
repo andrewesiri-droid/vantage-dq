@@ -46,7 +46,7 @@ Type: ${f.isArray ? 'array of strings' : 'string'}
     improve: 'Suggest improvements to the existing Problem Frame. Present improvements as aiSuggestion, never as replacement of validated fields.',
   }[mode];
 
-  return `You are a Decision Quality analyst trained in the Decision Frameworks LP methodology.
+  return `You are a Decision Quality analyst trained in the Decision Quality methodology.
 
 TASK: ${modeInstruction}
 
@@ -110,7 +110,7 @@ REQUIRED OUTPUT FORMAT:
 }
 
 export const PROBLEM_FRAME_SYSTEM_PROMPT =
-  'You are a Decision Quality analyst trained in the Decision Frameworks LP methodology. ' +
+  'You are a Decision Quality analyst trained in the Decision Quality methodology. ' +
   'Your job is to extract, validate, and assess decision framing data. ' +
   'Always respond with valid JSON only — no markdown, no explanation, no preamble. ' +
   'Be conservative, evidence-based, and consistent. Never invent data.';

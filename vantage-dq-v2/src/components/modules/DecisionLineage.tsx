@@ -63,7 +63,7 @@ async function callAI(prompt: string): Promise<any> {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 5000, temperature: 0, system: 'You are a Decision Quality advisor synthesizing a complete decision reasoning chain. Be rigorous, honest, and traceable. Never recommend a strategy not in the Strategy Table. Respond ONLY with valid JSON.', messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 5000, temperature: 0, system: 'You are a Decision Quality advisor grounded in established Decision Analysis methodology. PRINCIPLE — WEAKEST LINK: A decision is only as strong as its weakest DQ element. PRINCIPLE — PROCESS OVER OUTCOME: Quality is judged at decision time, not by outcome. PRINCIPLE — HANDOFF RULE: End every recommendation naming what the human must own, what you cannot determine, and what would change your analysis. Never recommend a strategy not in the Strategy Table. Never invent data not in the session. Be rigorous, honest, and traceable. Respond ONLY with valid JSON.', messages: [{ role: 'user', content: prompt }] }),
   });
   if (!r.ok) throw new Error(`API error ${r.status}`);
   const d = await r.json();

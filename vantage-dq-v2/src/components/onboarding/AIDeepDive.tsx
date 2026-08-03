@@ -4,6 +4,13 @@ import type {
   ReviewQueueItem,
   DQAIResult,
 } from '../../types/entities';
+import {
+  buildExtractionPrompt as buildStrictExtractionPrompt,
+  extractionToReviewItems,
+  DQ_EXTRACTION_SYSTEM_PROMPT,
+  getStatusBadge,
+  getConfidenceBadge,
+} from '../../lib/dq/dq-extraction-prompt';
 
 // ─────────────────────────────────────────────────────────────
 // RESPONSIVE STYLES
@@ -115,9 +122,9 @@ const MODULE_META: Record<string, { label: string; icon: string; color: string }
 // ─────────────────────────────────────────────────────────────
 
 function buildExtractionPrompt(document: string): string {
-  return `You are a Decision Quality (DQ) analyst trained in the Decision Frameworks methodology. Analyze the document below and extract ALL of the following into a single JSON object. Respond ONLY with valid JSON — no preamble, no markdown fences.
+  return `You are a Decision Quality (DQ) analyst trained in the Decision Quality methodology. Analyze the document below and extract ALL of the following into a single JSON object. Respond ONLY with valid JSON — no preamble, no markdown fences.
 
-RECOGNIZED FORMATS: You are trained to recognize Decision Frameworks LP templates. If the document uses any of these field labels, map them as follows:
+RECOGNIZED FORMATS: You are trained to recognize Decision Quality templates. If the document uses any of these field labels, map them as follows:
 - "Decision Statement" or "Decision Problem Statement" → decisionStatement
 - "Driver for a decision at this time" → trigger
 - "Values/Objectives to select the strategy" → successCriteria (as array)
@@ -169,6 +176,49 @@ RULES:
 - If something isn't in the doc, return [] or null — do not invent
 - humanReviewFlags = list items where human judgment is essential before proceeding
 - extractionNotes = 2-3 sentences on overall doc quality and extraction completeness
+
+DECISION STATEMENT RULES:
+- Must be a specific, board-ready open question — NOT a generic "what strategy should X use"
+- Include the specific context: company name, asset names, key constraints, key tensions
+- Good example: "How should [Company] sequence [specific activities] to optimize [specific outcome] given [specific constraint] and [specific tension]?"
+- Bad example: "What strategy should [Company] use to get maximum value?" — too generic, no context
+- If the document implies a decision but doesn't state it well, craft a precise board-ready question
+
+STRATEGY EXTRACTION RULES:
+- Only extract GENUINE strategic alternatives — distinct development or resource allocation paths
+- DO NOT include information-gathering actions as strategies (e.g. "conduct study", "gather more data", "run pilot", "commission research")
+- Information-gathering actions belong in uncertainties or issues, NOT strategies
+- A strategy must answer: "If we choose this, what are we committing to?" not "What should we learn first?"
+- Good strategy: a named development path, market move, or resource commitment with a clear direction
+- Bad strategy: "Conduct further study", "Gather more information", "Run analysis" — these are actions, not strategies
+
+SUCCESS CRITERIA RULES:
+- If no success criteria are explicitly stated, add to humanReviewFlags: "SUCCESS CRITERIA MISSING — human must define: what does a good outcome look like for this decision?"
+- Do NOT invent success criteria — flag them as missing
+
+DECISION OWNER EXTRACTION RULES:
+- Look for named individuals, job titles, boards, or organizational roles making decisions
+- "Management", "the board", "CEO", "commercial team lead" are all valid owners — extract them
+- If a group is divided, the owner is whoever must break the tie — name that role
+- If the document says "the board approved" or "management decided", use that as the owner
+- PARTIALLY_STATED if only a group is named — flag for human to name the specific person
+- Only leave blank if absolutely no organizational entity is referenced
+
+DECISION DEADLINE EXTRACTION RULES:  
+- Look for license expiry dates, regulatory deadlines, fiscal deadlines, partner commitments
+- "License expires in three years", "before next licensing round", "prior to FID" are valid deadlines
+- Extract relative timeframes as approximate dates — "three year license" → "~3 years from acquisition"
+- Always extract something if time pressure exists in the document
+- Only leave blank if absolutely no time pressure is mentioned anywhere
+
+BRUTAL TRUTH RULES:
+- Always look for the uncomfortable reality the document dances around but never states
+- In oil & gas decisions: is the primary asset actually commercially viable? Is the team avoiding this question?
+- Add the brutal truth to initialIssues with category "brutal_truth"
+
+FOCUS DECISION RULES:
+- Farm-down timing is ALWAYS a focus decision if it affects the primary strategy — not a tactical detail
+- Any decision that affects government negotiations, capital structure, or partner relationships is a focus decision
 
 DOCUMENT:
 ${document}`;
@@ -340,6 +390,7 @@ export default function AIDeepDive({ onComplete, onBack }: Props) {
   const [progress, setProgress] = useState('');
   const [aiMeta, setAiMeta] = useState<any>(null);
   const [humanFlags, setHumanFlags] = useState<string[]>([]);
+  const [missingFieldsList, setMissingFieldsList] = useState<{ field: string; humanTask: string }[]>([]);
   const [extractionNotes, setExtractionNotes] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -372,7 +423,7 @@ export default function AIDeepDive({ onComplete, onBack }: Props) {
           model: 'claude-sonnet-4-20250514',
           max_tokens: 4000,
           temperature: 0,
-          system: "You are a Decision Quality expert and facilitator. Your job is to extract structured decision intelligence from documents. Always respond with valid JSON only — no markdown, no explanation, no preamble. Be precise, consistent, and complete.",
+          system: DQ_EXTRACTION_SYSTEM_PROMPT,
           messages: [{ role: 'user', content: buildExtractionPrompt(documentText) }],
         }),
       });
@@ -403,7 +454,7 @@ export default function AIDeepDive({ onComplete, onBack }: Props) {
             model: 'claude-sonnet-4-20250514',
             max_tokens: 4000,
             temperature: 0,
-            system: "You are a Decision Quality expert. Respond ONLY with valid JSON. No markdown, no explanation.",
+            system: DQ_EXTRACTION_SYSTEM_PROMPT,
             messages: [{ role: 'user', content: buildExtractionPrompt(documentText) }],
           }),
         });
@@ -413,8 +464,13 @@ export default function AIDeepDive({ onComplete, onBack }: Props) {
         parsed = JSON.parse(retryClean);
       }
 
-      // Validate required fields
-      if (!parsed.decisionStatement) throw new Error('Extraction incomplete — no decision statement found. Try adding more context to your document.');
+      // For background documents, decision statement may not exist yet — that's OK
+      // Route it to human tasks instead of hard-failing
+      if (!parsed.decisionStatement && !parsed.decisionStatement?.value) {
+        // Add to human flags instead of throwing
+        if (!parsed.humanReviewFlags) parsed.humanReviewFlags = [];
+        parsed.humanReviewFlags.unshift('MISSING — Decision Statement: No decision statement found in document. You will need to write this yourself in the Problem Frame.');
+      }
 
       setSessionName(parsed.sessionName ?? 'New Decision Session');
       setHumanFlags(parsed.humanReviewFlags ?? []);
@@ -426,8 +482,25 @@ export default function AIDeepDive({ onComplete, onBack }: Props) {
         suggestedNextActions: parsed.suggestedNextActions ?? [],
       });
 
-      const reviewItems = extractionResultToReviewItems(parsed);
+      // Detect if Claude returned old flat shape vs new structured shape
+      // and handle both gracefully
+      const isNewShape = parsed.decisionStatement && typeof parsed.decisionStatement === 'object' && 'status' in parsed.decisionStatement;
+      
+      let reviewItems: any[];
+      let missingFields: { field: string; humanTask: string }[] = [];
+
+      if (isNewShape) {
+        const result = extractionToReviewItems(parsed);
+        reviewItems = result.items;
+        missingFields = result.missingFields;
+      } else {
+        // Fallback: old flat shape — use legacy converter
+        reviewItems = extractionResultToReviewItems(parsed);
+      }
       setItems(reviewItems);
+      if (missingFields.length > 0) {
+        setMissingFieldsList(missingFields);
+      }
       setPhase('review');
     } catch (err: any) {
       setError(err.message ?? 'Extraction failed. Please check your document and try again.');
@@ -696,18 +769,56 @@ export default function AIDeepDive({ onComplete, onBack }: Props) {
               </div>
             )}
 
-            {/* Human review flags */}
+            {/* Human Required — separate from review queue */}
+            {missingFieldsList.length > 0 && (
+              <div style={{
+                background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.25)',
+                borderRadius: 12, padding: '16px 18px', marginBottom: 20,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 16 }}>📋</span>
+                  <div>
+                    <div style={{ fontSize: 13, color: '#C9A84C', fontWeight: 700 }}>
+                      Human Required — {missingFieldsList.length} field{missingFieldsList.length !== 1 ? 's' : ''} not found in document
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                      These fields were not stated in your document. You must supply them in the Problem Frame module.
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {missingFieldsList.map((f, i) => (
+                    <div key={i} style={{
+                      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 8, padding: '10px 14px',
+                      display: 'flex', gap: 10, alignItems: 'flex-start',
+                    }}>
+                      <div style={{
+                        width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                        background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 10, color: '#FCA5A5', fontWeight: 700, marginTop: 1,
+                      }}>✗</div>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#E2E8F0', marginBottom: 2 }}>{f.field}</div>
+                        <div style={{ fontSize: 11, color: '#64748B', lineHeight: 1.5 }}>{f.humanTask}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* AI flags — contradictions or quality warnings */}
             {humanFlags.length > 0 && (
               <div style={{
-                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-                borderRadius: 12, padding: '14px 18px', marginBottom: 20,
+                background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)',
+                borderRadius: 12, padding: '12px 16px', marginBottom: 20,
               }}>
-                <div style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 600, marginBottom: 8 }}>⚠ Human Review Required</div>
-                <ul style={{ margin: 0, padding: '0 0 0 18px', listStyle: 'disc' }}>
-                  {humanFlags.map((flag, i) => (
-                    <li key={i} style={{ fontSize: 13, color: '#FCA5A5', marginBottom: 4, lineHeight: 1.5 }}>{flag}</li>
-                  ))}
-                </ul>
+                <div style={{ fontSize: 11, color: '#FCA5A5', fontWeight: 600, marginBottom: 6 }}>⚠ AI Quality Flags</div>
+                {humanFlags.map((flag, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#94A3B8', marginBottom: 3, lineHeight: 1.5 }}>· {flag}</div>
+                ))}
               </div>
             )}
 
@@ -823,6 +934,8 @@ export default function AIDeepDive({ onComplete, onBack }: Props) {
                 <div style={{ color: '#64748B', fontSize: 13, marginTop: 4 }}>
                   {pending > 0
                     ? `${pending} item${pending !== 1 ? 's' : ''} still pending — accept or reject before launching`
+                    : missingFieldsList.length > 0
+                    ? `All items reviewed. ${missingFieldsList.length} field${missingFieldsList.length !== 1 ? 's' : ''} will need to be completed in Problem Frame.`
                     : 'All items reviewed. Your session will be pre-loaded with your selections.'}
                 </div>
               </div>
@@ -925,6 +1038,16 @@ function ReviewCard({ item, onAccept, onReject, onEdit, onToggle }: {
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {(item as any).extractionStatus && (
+              <span style={{
+                borderRadius: 6, padding: '2px 8px', fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                background: (item as any).extractionStatus === 'EXPLICIT' ? 'rgba(16,185,129,0.15)' : (item as any).extractionStatus === 'PARTIALLY_STATED' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                color: (item as any).extractionStatus === 'EXPLICIT' ? '#10B981' : (item as any).extractionStatus === 'PARTIALLY_STATED' ? '#F59E0B' : '#EF4444',
+                border: `1px solid ${(item as any).extractionStatus === 'EXPLICIT' ? 'rgba(16,185,129,0.3)' : (item as any).extractionStatus === 'PARTIALLY_STATED' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'}`,
+              }}>
+                {(item as any).extractionStatus === 'EXPLICIT' ? '◆ EXPLICIT' : (item as any).extractionStatus === 'PARTIALLY_STATED' ? '◇ PARTIAL' : '△ MISSING'}
+              </span>
+            )}
             <span className="dq-confidence-badge" style={{
               background: conf.bg, color: conf.color,
               borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600,
